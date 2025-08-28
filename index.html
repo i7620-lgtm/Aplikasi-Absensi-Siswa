@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#4285F4">
+    <meta name="description" content="Aplikasi PWA untuk mencatat absensi siswa secara online, terintegrasi dengan Google Sheets." />
+    <title>Absensi Online Siswa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- Library Google Identity Services (GIS) untuk otentikasi modern -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Library GAPI untuk interaksi dengan API Drive/Sheets -->
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+    <link rel="manifest" href="./manifest.json">
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1"
+  }
+}
+</script>
+    <style>
+        /* CSS for the initial loading indicator */
+        #loader-wrapper {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #f1f5f9; /* bg-slate-100 */
+            z-index: 9999;
+            transition: opacity 0.3s ease;
+        }
+        .loader {
+            border: 4px solid #e2e8f0; /* bg-slate-200 */
+            border-top: 4px solid #3b82f6; /* blue-500 */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        .loader-text {
+            margin-top: 16px;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            color: #475569; /* slate-600 */
+            font-weight: 500;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-slate-100">
+    <div id="root">
+        <!-- This content will be shown while the React app is loading -->
+        <div id="loader-wrapper">
+            <div class="loader"></div>
+            <p class="loader-text">Memuat Aplikasi Absensi...</p>
+        </div>
+    </div>
+    <script type="module" src="./index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').then(registration => {
+            console.log('SW registered: ', registration);
+          }).catch(registrationError => {
+            console.log('SW registration failed: ', registrationError);
+          });
+        });
+      }
+    </script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
