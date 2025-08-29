@@ -551,8 +551,11 @@
                 headers: { 'Authorization': `Bearer ${gapi.client.getToken().access_token}` }
             });
             state.userProfile = await response.json();
-            await findOrCreateSpreadsheet();
+            
+            // Navigate to the setup screen first, THEN find the spreadsheet.
+            // This ensures UI elements exist before we try to update them.
             navigateTo('setup');
+            await findOrCreateSpreadsheet();
         };
         
         if (gapi.client.getToken() === null) {
