@@ -596,7 +596,16 @@
                 throw resp;
             }
 
+            // Provide immediate visual feedback after account selection
+            const loginBtn = document.getElementById('loginBtn');
+            const loginBtnText = document.getElementById('loginBtnText');
+            if (loginBtn) loginBtn.disabled = true;
+            if (loginBtnText) loginBtnText.textContent = 'Mengautentikasi...';
+
             try {
+                // FIX: This is the crucial missing step. Set the token for GAPI to use.
+                gapi.client.setToken(resp);
+
                 // Fetch user profile with robust error handling
                 const accessToken = gapi.client.getToken()?.access_token;
                 if (!accessToken) {
@@ -621,6 +630,8 @@
             } catch (error) {
                 console.error("Error after authentication:", error);
                 displayAuthError("Gagal mengambil data profil pengguna setelah login.", error);
+                // Reset button text on failure
+                if (loginBtnText) loginBtnText.textContent = 'Login dengan Google';
                 // Attempt a graceful sign out to reset the state
                 handleSignoutClick();
             }
