@@ -476,7 +476,7 @@
         }
 
         // Check if it's an initialization error to decide whether to show the origin helper
-        const isInitError = error && error.message && (error.message.toLowerCase().includes('gapi') || error.message.toLowerCase().includes('gis') || error.message.toLowerCase().includes('discovery'));
+        const isInitError = error && error.message && (error.message.toLowerCase().includes('gapi') || error.message.toLowerCase().includes('gis') || error.message.toLowerCase().includes('discovery') || error.message.toLowerCase().includes('waktu tunggu'));
         
         if (originHelper && isInitError) {
             originHelper.classList.remove('hidden');
@@ -535,56 +535,47 @@
     }
 
     async function initializeApis() {
-        const initGapiClient = async () => {
-            await gapi.client.init({
+        try {
+            // Step 1: Load both scripts in parallel.
+            await Promise.all([
+                loadScript('https://apis.google.com/js/api.js'),
+                loadScript('https://accounts.google.com/gsi/client')
+            ]);
+
+            // Step 2: Scripts are loaded. Globals 'gapi' and 'google' should exist.
+            // Initialize GAPI client module.
+            await new Promise((resolve, reject) => {
+                gapi.load('client', {
+                    callback: resolve,
+                    onerror: (err) => reject(new Error('Gagal memuat modul GAPI client.')),
+                    timeout: 5000,
+                    ontimeout: () => reject(new Error('Waktu tunggu habis saat memuat modul GAPI client.'))
+                });
+            });
+
+            // Step 3: Initialize the GAPI client with API key and discovery docs.
+            const initGapiClientFn = () => gapi.client.init({
                 apiKey: API_KEY,
                 discoveryDocs: [
                     'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest',
                     'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'
                 ],
             });
-        };
+            await retry(initGapiClientFn, 3, 1000, 'Gagal memuat konfigurasi API (discovery docs)');
 
-        const gapiPromise = (async () => {
-            try {
-                await loadScript('https://apis.google.com/js/api.js');
-                await new Promise((resolve, reject) => {
-                    gapi.load('client', {
-                        callback: resolve,
-                        onerror: (err) => reject(new Error('Gagal memuat modul GAPI client.')),
-                        timeout: 10000,
-                        ontimeout: () => reject(new Error('Waktu tunggu habis saat memuat GAPI.'))
-                    });
-                });
-                await retry(initGapiClient, 3, 1000, 'Gagal memuat konfigurasi API dari Google');
-            } catch (err) {
-                console.error("GAPI Initialization Failed:", err);
-                let detailMessage = err.message || 'Tidak diketahui.';
-                if (err.message && err.message.includes('missing required fields')) {
-                    detailMessage = 'Gagal memuat file konfigurasi API dari Google.';
-                }
-                const userSuggestion = 'Ini seringkali disebabkan oleh masalah jaringan, ad-blocker, atau firewall. Periksa koneksi Anda, nonaktifkan ad-blocker untuk situs ini, dan muat ulang halaman.';
-                throw new Error(`Gagal menginisialisasi Google API (GAPI). ${userSuggestion} Detail teknis: ${detailMessage}`);
-            }
-        })();
+            // Step 4: Initialize the GIS token client.
+            state.tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: '', // Handled manually by handleAuthClick
+            });
 
-        const gisPromise = (async () => {
-            try {
-                await loadScript('https://accounts.google.com/gsi/client');
-                state.tokenClient = google.accounts.oauth2.initTokenClient({
-                    client_id: CLIENT_ID,
-                    scope: SCOPES,
-                    callback: '', // Handled manually
-                });
-            } catch (err) {
-                console.error("GIS Initialization Failed:", err);
-                const detailMessage = err.message || JSON.stringify(err);
-                const userSuggestion = 'Periksa koneksi internet Anda dan pastikan tidak ada yang memblokir skrip Google.';
-                throw new Error(`Gagal menginisialisasi Google Sign-In (GIS). ${userSuggestion} Detail: ${detailMessage}`);
-            }
-        })();
-
-        return Promise.all([gapiPromise, gisPromise]);
+        } catch (error) {
+            console.error("Initialization failed:", error);
+            // Re-throw a more user-friendly error to be caught by main()
+            const userSuggestion = 'Ini seringkali disebabkan oleh masalah jaringan, ad-blocker, atau firewall. Periksa koneksi Anda, nonaktifkan ad-blocker untuk situs ini, dan muat ulang halaman.';
+            throw new Error(`Gagal menginisialisasi layanan Google. ${userSuggestion} Detail teknis: ${error.message}`);
+        }
     }
 
     function handleAuthClick() {
