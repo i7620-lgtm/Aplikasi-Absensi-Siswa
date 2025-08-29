@@ -27,7 +27,7 @@
             animation: spin 1s linear infinite;
         }
         .loader-text { margin-top: 16px; color: #475569; font-weight: 500; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(3त्वा0deg); } }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
         /* --- Animations for Success Screen --- */
         .checkmark-wrapper { width: 100px; height: 100px; }
@@ -117,25 +117,18 @@
                     </div>
                 </div>
             </div>`,
-        setup: (user) => {
-            // Gracefully handle missing user data and provide fallbacks
-            const name = user?.name || 'Nama Pengguna';
-            const email = user?.email || 'Email tidak ditemukan';
-            // Use a fallback avatar generator if the picture is missing
-            const picture = user?.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name.split(' ').join('+'))}&background=4285F4&color=fff&size=48`;
-
-            return `
+        setup: (user) => `
             <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
                 <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
-                    <div class="flex items-center justify-between mb-6 pb-6 border-b border-slate-200">
-                        <div class="flex items-center gap-4 overflow-hidden">
-                            <img src="${picture}" alt="Avatar Pengguna" class="w-12 h-12 rounded-full flex-shrink-0"/>
-                            <div class="overflow-hidden">
-                                <p class="font-semibold text-slate-800 truncate" title="${name}">${name}</p>
-                                <p class="text-sm text-slate-500 truncate" title="${email}">${email}</p>
+                    <div class="flex items-center justify-between mb-6 pb-4 border-b">
+                        <div class="flex items-center gap-3">
+                            <img src="${user.picture}" alt="User" class="w-12 h-12 rounded-full"/>
+                            <div>
+                                <p class="font-semibold text-slate-800">${user.name}</p>
+                                <p class="text-sm text-slate-500">${user.email}</p>
                             </div>
                         </div>
-                        <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 flex-shrink-0 ml-4" title="Logout">
+                        <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300" title="Logout">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                         </button>
                     </div>
@@ -156,8 +149,7 @@
                     </div>
                     <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5"></p>
                 </div>
-            </div>`;
-        },
+            </div>`,
         addStudents: (className) => `
             <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
                  <div class="bg-white p-8 rounded-2xl shadow-lg">
@@ -593,37 +585,22 @@
                 console.error("Authentication error:", resp);
                 const authError = new Error(resp.error_description || resp.error);
                 displayAuthError(`Otentikasi Gagal: ${resp.error}`, authError);
-                throw resp;
+                throw (resp);
             }
-
-            try {
-                // Fetch user profile with robust error handling
-                const accessToken = gapi.client.getToken()?.access_token;
-                if (!accessToken) {
-                    throw new Error("Token akses tidak ditemukan setelah otentikasi.");
-                }
-                const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                    headers: { 'Authorization': `Bearer ${accessToken}` }
-                });
-                if (!response.ok) {
-                    const errorBody = await response.text();
-                    throw new Error(`Gagal mengambil profil pengguna: ${response.status}. Detail: ${errorBody}`);
-                }
-                state.userProfile = await response.json();
-                
-                navigateTo('setup');
-                
-                // Defer spreadsheet logic until after the setup screen is rendered
-                setTimeout(() => {
-                    findOrCreateSpreadsheet();
-                }, 0);
-
-            } catch (error) {
-                console.error("Error after authentication:", error);
-                displayAuthError("Gagal mengambil data profil pengguna setelah login.", error);
-                // Attempt a graceful sign out to reset the state
-                handleSignoutClick();
-            }
+            // Fetch user profile
+            const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { 'Authorization': `Bearer ${gapi.client.getToken().access_token}` }
+            });
+            state.userProfile = await response.json();
+            
+            // Navigate to the setup screen first, THEN find the spreadsheet.
+            // This ensures UI elements exist before we try to update them.
+            navigateTo('setup');
+            // This needs to happen *after* render, so let's ensure the elements exist
+            // A simple timeout can defer execution until after the next paint cycle
+            setTimeout(() => {
+                findOrCreateSpreadsheet();
+            }, 0);
         };
         
         if (gapi.client.getToken() === null) {
