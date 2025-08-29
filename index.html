@@ -27,7 +27,7 @@
             animation: spin 1s linear infinite;
         }
         .loader-text { margin-top: 16px; color: #475569; font-weight: 500; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(3त्वा0deg); } }
         
         /* --- Animations for Success Screen --- */
         .checkmark-wrapper { width: 100px; height: 100px; }
@@ -388,7 +388,7 @@
         const container = document.getElementById('data-container');
 
         if (state.savedLogs.length === 0) {
-            container.innerHTML = `<p class="text-center text-slate-500">Data riwayat absensi tidak ditemukan.</p>`;
+            container.innerHTML = `<p class="text-center text-slate-500">Belum ada riwayat absensi yang tersimpan.</p>`;
             return;
         }
 
@@ -717,16 +717,6 @@
     async function handleStartAttendance() {
         state.selectedClass = document.getElementById('class-select').value;
         state.selectedDate = document.getElementById('date-input').value;
-
-        // Check if attendance for this class and date already exists
-        const attendanceExists = state.savedLogs.some(
-            log => log.date === state.selectedDate && log.class === state.selectedClass
-        );
-
-        if (attendanceExists) {
-            alert(`Data absensi untuk kelas ${state.selectedClass} pada tanggal ${state.selectedDate} sudah ada. Silakan periksa riwayat atau pilih tanggal/kelas lain.`);
-            return; // Stop execution to prevent duplicate entry
-        }
 
         // Fetch students for the selected class from 'Siswa' sheet
         const response = await gapi.client.sheets.spreadsheets.values.get({
