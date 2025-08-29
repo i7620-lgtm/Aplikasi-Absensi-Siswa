@@ -19,7 +19,10 @@
         #loader-wrapper {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background-color: #f1f5f9; z-index: 9999; transition: opacity 0.3s ease;
+            background-color: rgba(241, 245, 249, 0.8);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            transition: opacity 0.3s ease;
         }
         .loader {
             border: 4px solid #e2e8f0; border-top: 4px solid #3b82f6;
@@ -48,7 +51,7 @@
 </head>
 <body class="bg-slate-100">
     <div id="root">
-        <!-- Initial Loader -->
+        <!-- Initial Loader / Saving Loader -->
         <div id="loader-wrapper">
             <div class="loader"></div>
             <p class="loader-text">Memuat Aplikasi Absensi...</p>
@@ -79,6 +82,7 @@
         students: [], // students for the current class
         attendance: {}, // { studentName: status }
         savedLogs: [], // historical attendance logs
+        historyClassFilter: null, // to filter history view by class
         newStudents: [''], // for add-students screen
     };
 
@@ -87,21 +91,7 @@
     const appContainer = document.getElementById('app-container');
     const loaderWrapper = document.getElementById('loader-wrapper');
 
-    // --- TEMPLATES & UI HELPERS ---
-    const generateAvatar = (name) => {
-        const colors = ["#ef4444", "#f97316", "#84cc16", "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6", "#8b5cf6", "#d946ef", "#ec4899"];
-        const nameParts = (name || 'P').split(' ');
-        const initials = (nameParts.length > 1 ? nameParts[0][0] + nameParts[1][0] : nameParts[0][0]).toUpperCase();
-        const charCodeSum = [...initials].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-        const color = colors[charCodeSum % colors.length];
-        
-        return `
-            <div class="w-12 h-12 rounded-full flex items-center justify-center font-bold text-white text-xl" style="background-color: ${color};">
-                ${initials}
-            </div>
-        `;
-    };
-
+    // --- TEMPLATES ---
     const templates = {
         login: () => `
             <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
@@ -131,28 +121,25 @@
                     </div>
                 </div>
             </div>`,
-        setup: (user) => {
-            const userName = user?.name ?? 'Nama Pengguna';
-            const userEmail = user?.email ?? 'email@pengguna.com';
-            const userPicture = user?.picture;
-            const avatarHtml = userPicture ? `<img src="${userPicture}" alt="User" class="w-12 h-12 rounded-full"/>` : generateAvatar(userName);
-
-            return `
+        setup: (user) => `
             <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
                 <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
-                    <div class="flex items-center justify-between mb-6 pb-4 border-b">
-                        <div class="flex items-center gap-3">
-                            ${avatarHtml}
-                            <div>
-                                <p class="font-semibold text-slate-800">${userName}</p>
-                                <p class="text-sm text-slate-500">${userEmail}</p>
-                            </div>
-                        </div>
-                        <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300" title="Logout">
+                    <div class="flex items-center justify-between mb-6">
+                        <h1 class="text-xl font-bold text-slate-800">Absensi Online Siswa</h1>
+                        <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                         </button>
                     </div>
-                    <h2 class="text-xl font-bold text-slate-800 mb-4">Mulai Absensi Baru</h2>
+
+                    <div class="flex items-center gap-4 mb-8 p-4 bg-slate-50 rounded-lg">
+                        <img src="${user.picture}" alt="User" class="w-12 h-12 rounded-full"/>
+                        <div>
+                            <p class="font-semibold text-slate-800">${user.name}</p>
+                            <p class="text-sm text-slate-500">${user.email}</p>
+                        </div>
+                    </div>
+                    
+                    <h2 class="text-lg font-semibold text-slate-700 mb-4">Pilih Kelas & Tanggal</h2>
                     <div class="space-y-4">
                         <div>
                             <label for="class-select" class="block text-sm font-medium text-slate-700 mb-1">Pilih Kelas</label>
@@ -165,12 +152,11 @@
                     </div>
                     <div class="mt-6 space-y-3">
                          <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" disabled>Mulai Absensi</button>
-                         <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Riwayat Absensi</button>
+                         <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Riwayat Kelas Terpilih</button>
                     </div>
                     <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5"></p>
                 </div>
-            </div>`;
-        },
+            </div>`,
         addStudents: (className) => `
             <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
                  <div class="bg-white p-8 rounded-2xl shadow-lg">
@@ -241,7 +227,7 @@
                     <p class="text-slate-500 mb-10">Terima kasih, data absensi telah berhasil disimpan ke Google Sheet.</p>
                     <div class="space-y-4">
                          <button id="success-back-to-start-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Kembali ke Halaman Awal</button>
-                         <button id="success-view-data-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Riwayat Absensi</button>
+                         <button id="success-view-data-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Semua Riwayat</button>
                     </div>
                 </div>
             </div>`,
@@ -249,7 +235,7 @@
              <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
                  <div class="bg-white p-8 rounded-2xl shadow-lg">
                      <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
-                        <h1 class="text-2xl font-bold text-slate-800">Riwayat Data Absensi</h1>
+                        <h1 id="data-title" class="text-2xl font-bold text-slate-800">Riwayat Data Absensi</h1>
                         <button id="data-back-to-start-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
                     </div>
                     <div id="data-container" class="space-y-6"></div>
@@ -257,12 +243,12 @@
             </div>`,
         confirmation: (message) => `
             <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                 <div class="bg-white p-8 rounded-2xl shadow-lg max-w-sm w-full text-center">
+                 <div class="bg-white p-8 rounded-2xl shadow-lg max-w-sm w-full text-center animate-fade-in">
                     <h2 class="text-xl font-bold text-slate-800 mb-4">Konfirmasi</h2>
                     <p class="text-slate-600 mb-8">${message}</p>
                     <div class="flex justify-center gap-4">
                         <button id="confirm-no-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-8 rounded-lg transition">Tidak</button>
-                        <button id="confirm-yes-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-lg transition">Ya</button>
+                        <button id="confirm-yes-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition">Ya</button>
                     </div>
                 </div>
             </div>`
@@ -282,13 +268,13 @@
                 appContainer.innerHTML = templates.setup(state.userProfile);
                 document.getElementById('logoutBtn').addEventListener('click', handleSignoutClick);
                 document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
-                document.getElementById('historyBtn').addEventListener('click', handleViewHistory);
+                document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(true)); // View class-specific history
                 document.getElementById('class-select').value = state.selectedClass || CLASSES[0];
                 if (state.spreadsheetId) {
                     const startBtn = document.getElementById('startBtn');
                     if (startBtn) startBtn.disabled = false;
                     const statusEl = document.getElementById('setup-status');
-                    if (statusEl) statusEl.textContent = 'Data berhasil dimuat.';
+                    if (statusEl) statusEl.textContent = 'Spreadsheet siap digunakan.';
                 }
                 break;
             case 'add-students':
@@ -310,7 +296,7 @@
             case 'success':
                  appContainer.innerHTML = templates.success();
                  document.getElementById('success-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
-                 document.getElementById('success-view-data-btn').addEventListener('click', handleViewHistory);
+                 document.getElementById('success-view-data-btn').addEventListener('click', () => handleViewHistory(false)); // View all history
                  break;
             case 'data':
                 appContainer.innerHTML = templates.data();
@@ -319,10 +305,14 @@
                 break;
         }
 
+        // Show app and hide loader if not already done
         if (!appContainer.classList.contains('active')) {
              appContainer.classList.remove('hidden');
              loaderWrapper.style.opacity = '0';
-             setTimeout(() => loaderWrapper.style.display = 'none', 300);
+             setTimeout(() => {
+                loaderWrapper.style.display = 'none';
+                loaderWrapper.querySelector('.loader-text').textContent = 'Memuat Aplikasi Absensi...'; // Reset text
+             }, 300);
         }
     }
     
@@ -330,6 +320,45 @@
         state.currentScreen = screen;
         render();
     }
+    
+    // --- UI HELPERS ---
+    function showLoader(message) {
+        loaderWrapper.querySelector('.loader-text').textContent = message;
+        loaderWrapper.style.display = 'flex';
+        setTimeout(() => loaderWrapper.style.opacity = '1', 10);
+    }
+
+    function hideLoader() {
+        loaderWrapper.style.opacity = '0';
+        setTimeout(() => loaderWrapper.style.display = 'none', 300);
+    }
+    
+    function showConfirmation(message) {
+        return new Promise(resolve => {
+            const existingModal = document.getElementById('confirmation-modal');
+            if (existingModal) existingModal.parentElement.remove();
+            
+            const modalContainer = document.createElement('div');
+            modalContainer.innerHTML = templates.confirmation(message);
+            document.body.appendChild(modalContainer);
+
+            const cleanup = () => {
+                if(document.body.contains(modalContainer)){
+                    document.body.removeChild(modalContainer);
+                }
+            }
+
+            document.getElementById('confirm-yes-btn').onclick = () => {
+                cleanup();
+                resolve(true);
+            };
+            document.getElementById('confirm-no-btn').onclick = () => {
+                cleanup();
+                resolve(false);
+            };
+        });
+    }
+
 
     // --- SCREEN SPECIFIC RENDER LOGIC ---
     function renderStudentInputRows() {
@@ -340,7 +369,7 @@
             div.className = 'flex items-center gap-2';
             div.innerHTML = `
                 <input type="text" value="${name}" data-index="${index}" class="student-name-input w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Nama Siswa ${index + 1}">
-                <button data-index="${index}" class="remove-student-row-btn text-slate-400 hover:text-red-500">&times;</button>
+                <button data-index="${index}" class="remove-student-row-btn text-slate-400 hover:text-red-500 p-1 text-2xl font-bold leading-none">&times;</button>
             `;
             container.appendChild(div);
         });
@@ -359,6 +388,8 @@
     function addStudentInputRow() {
         state.newStudents.push('');
         renderStudentInputRows();
+        const inputs = document.querySelectorAll('.student-name-input');
+        inputs[inputs.length - 1].focus();
     }
     
     function removeStudentInputRow(index) {
@@ -381,7 +412,7 @@
                 <td class="p-3 font-medium text-slate-800">${student}</td>
                 ${['H', 'S', 'I', 'A'].map(s => `
                     <td class="p-3 text-center">
-                        <input type="radio" name="status-${index}" value="${s}" class="w-5 h-5" ${status === s ? 'checked' : ''} data-student="${student}">
+                        <input type="radio" name="status-${index}" value="${s}" class="w-5 h-5 accent-blue-500" ${status === s ? 'checked' : ''} data-student="${student}">
                     </td>
                 `).join('')}
             `;
@@ -397,20 +428,29 @@
 
     function renderDataScreen() {
         const container = document.getElementById('data-container');
+        const titleEl = document.getElementById('data-title');
+        
+        const logsToShow = state.historyClassFilter 
+            ? state.savedLogs.filter(log => log.class === state.historyClassFilter)
+            : state.savedLogs;
+            
+        if (state.historyClassFilter) {
+            titleEl.textContent = `Riwayat Absensi Kelas ${state.historyClassFilter}`;
+        }
 
-        if (state.savedLogs.length === 0) {
+        if (logsToShow.length === 0) {
             container.innerHTML = `<p class="text-center text-slate-500">Belum ada riwayat absensi yang tersimpan.</p>`;
             return;
         }
 
-        const groupedByDate = state.savedLogs.reduce((acc, log) => {
+        const groupedByDate = logsToShow.reduce((acc, log) => {
             const dateStr = new Date(log.date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             if (!acc[dateStr]) acc[dateStr] = [];
             acc[dateStr].push(log);
             return acc;
         }, {});
 
-        container.innerHTML = Object.entries(groupedByDate).map(([date, logs]) => `
+        container.innerHTML = Object.entries(groupedByDate).sort((a, b) => new Date(b[0]) - new Date(a[0])).map(([date, logs]) => `
             <div>
                 <h2 class="text-lg font-semibold text-slate-700 mb-3">${date}</h2>
                 <div class="space-y-4">
@@ -477,21 +517,15 @@
             loginBtnText.textContent = 'Gagal Memuat';
         }
 
-        if (errorContainer) {
-            errorContainer.classList.remove('hidden');
-        }
-        if (errorMessageEl) {
-            errorMessageEl.textContent = message;
-        }
+        if (errorContainer) errorContainer.classList.remove('hidden');
+        if (errorMessageEl) errorMessageEl.textContent = message;
 
         const isInitError = error && error.message && (error.message.toLowerCase().includes('gapi') || error.message.toLowerCase().includes('gis') || error.message.toLowerCase().includes('discovery'));
         
         if (originHelper && isInitError) {
             originHelper.classList.remove('hidden');
             const origin = window.location.origin;
-            if (errorOriginEl) {
-                errorOriginEl.textContent = origin;
-            }
+            if (errorOriginEl) errorOriginEl.textContent = origin;
             if (copyOriginBtn) {
                 copyOriginBtn.onclick = () => {
                     navigator.clipboard.writeText(origin).then(() => {
@@ -513,36 +547,86 @@
         console.error("Auth Error:", message, error);
     }
 
-    function loadScript(src, isAsync = true) {
+    function loadScript(src) {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = src;
-            script.async = isAsync;
-            script.defer = isAsync;
+            script.async = true;
+            script.defer = true;
             script.onload = resolve;
             script.onerror = () => reject(new Error(`Gagal memuat skrip: ${src}`));
             document.head.appendChild(script);
         });
     }
 
-    async function initializeApis() {
-        try {
-            const gisScriptLoaded = loadScript('https://accounts.google.com/gsi/client');
-            const gapiScriptLoaded = loadScript('https://apis.google.com/js/api.js');
-            await Promise.all([gisScriptLoaded, gapiScriptLoaded]);
+    const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-            await new Promise((resolve, reject) => gapi.load('client', { callback: resolve, onerror: reject }));
-            await gapi.client.init({ apiKey: API_KEY, discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4', 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
-            
-            state.tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
-                callback: '', // Will be handled dynamically
-            });
-        } catch (error) {
-            console.error("Initialization failed", error);
-            throw new Error(`Inisialisasi API Google gagal. ${error.message || 'Periksa koneksi internet Anda.'}`);
+    async function retry(fn, retries = 3, delay = 1000, finalErrorMessage = 'Gagal setelah beberapa kali percobaan') {
+        let lastError;
+        for (let i = 0; i < retries; i++) {
+            try {
+                return await fn();
+            } catch (error) {
+                lastError = error;
+                console.warn(`Percobaan inisialisasi API #${i + 1} gagal. Mencoba lagi dalam ${delay}ms...`, error);
+                await wait(delay);
+                delay *= 2; // Exponential backoff
+            }
         }
+        throw new Error(`${finalErrorMessage}. Error terakhir: ${lastError.message || String(lastError)}`);
+    }
+
+    async function initializeApis() {
+        const initGapiClient = async () => {
+            await gapi.client.init({
+                apiKey: API_KEY,
+                discoveryDocs: [
+                    'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest',
+                    'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'
+                ],
+            });
+        };
+
+        const gapiPromise = (async () => {
+            try {
+                await loadScript('https://apis.google.com/js/api.js');
+                await new Promise((resolve, reject) => {
+                    gapi.load('client', {
+                        callback: resolve,
+                        onerror: (err) => reject(new Error('Gagal memuat modul GAPI client.')),
+                        timeout: 10000,
+                        ontimeout: () => reject(new Error('Waktu tunggu habis saat memuat GAPI.'))
+                    });
+                });
+                await retry(initGapiClient, 3, 1000, 'Gagal memuat konfigurasi API dari Google');
+            } catch (err) {
+                console.error("GAPI Initialization Failed:", err);
+                let detailMessage = err.message || 'Tidak diketahui.';
+                if (err.message && err.message.includes('missing required fields')) {
+                    detailMessage = 'Gagal memuat file konfigurasi API dari Google.';
+                }
+                const userSuggestion = 'Ini seringkali disebabkan oleh masalah jaringan, ad-blocker, atau firewall. Periksa koneksi Anda, nonaktifkan ad-blocker untuk situs ini, dan muat ulang halaman.';
+                throw new Error(`Gagal menginisialisasi Google API (GAPI). ${userSuggestion} Detail teknis: ${detailMessage}`);
+            }
+        })();
+
+        const gisPromise = (async () => {
+            try {
+                await loadScript('https://accounts.google.com/gsi/client');
+                state.tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: CLIENT_ID,
+                    scope: SCOPES,
+                    callback: '', // Handled manually
+                });
+            } catch (err) {
+                console.error("GIS Initialization Failed:", err);
+                const detailMessage = err.message || JSON.stringify(err);
+                const userSuggestion = 'Periksa koneksi internet Anda dan pastikan tidak ada yang memblokir skrip Google.';
+                throw new Error(`Gagal menginisialisasi Google Sign-In (GIS). ${userSuggestion} Detail: ${detailMessage}`);
+            }
+        })();
+
+        return Promise.all([gapiPromise, gisPromise]);
     }
 
     function handleAuthClick() {
@@ -551,33 +635,20 @@
                 console.error("Authentication error:", resp);
                 const authError = new Error(resp.error_description || resp.error);
                 displayAuthError(`Otentikasi Gagal: ${resp.error}`, authError);
-                return;
+                throw (resp);
             }
-
-            try {
-                // CRITICAL FIX: Set the access token for the GAPI client
-                gapi.client.setToken({ access_token: resp.access_token });
-                
-                // Fetch user profile
-                const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                    headers: { 'Authorization': `Bearer ${resp.access_token}` }
-                });
-
-                if (!profileResponse.ok) throw new Error('Gagal mengambil data profil.');
-
-                state.userProfile = await profileResponse.json();
-                
-                navigateTo('setup');
-                setTimeout(() => findOrCreateSpreadsheet(), 0);
-
-            } catch (err) {
-                 console.error("Gagal mengambil profil atau melanjutkan:", err);
-                 displayAuthError("Gagal memuat profil pengguna.", err);
-                 handleSignoutClick(); // Reset state
-            }
+            const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { 'Authorization': `Bearer ${gapi.client.getToken().access_token}` }
+            });
+            state.userProfile = await response.json();
+            
+            navigateTo('setup');
+            setTimeout(() => {
+                findOrCreateSpreadsheet();
+            }, 0);
         };
         
-        if (!gapi.client.getToken()) {
+        if (gapi.client.getToken() === null) {
             state.tokenClient.requestAccessToken({ prompt: 'consent' });
         } else {
             state.tokenClient.requestAccessToken({ prompt: '' });
@@ -598,46 +669,44 @@
 
     async function findOrCreateSpreadsheet() {
         updateSetupStatus('Mencari spreadsheet...');
-        try {
-            const response = await gapi.client.drive.files.list({
-                q: `mimeType='application/vnd.google-apps.spreadsheet' and name='${SPREADSHEET_TITLE}' and trashed=false`,
-                fields: 'files(id, name)',
+        const response = await gapi.client.drive.files.list({
+            q: `mimeType='application/vnd.google-apps.spreadsheet' and name='${SPREADSHEET_TITLE}' and trashed=false`,
+            fields: 'files(id, name)',
+        });
+        
+        if (response.result.files && response.result.files.length > 0) {
+            state.spreadsheetId = response.result.files[0].id;
+            updateSetupStatus('Spreadsheet ditemukan.', true);
+            await loadAllDataFromSheet();
+        } else {
+            updateSetupStatus('Spreadsheet tidak ditemukan, membuat baru...');
+            const createResponse = await gapi.client.sheets.spreadsheets.create({
+                properties: { title: SPREADSHEET_TITLE },
+                sheets: [{ properties: { title: 'Siswa' } }, { properties: { title: 'Absensi' } }]
             });
-            
-            if (response.result.files && response.result.files.length > 0) {
-                state.spreadsheetId = response.result.files[0].id;
-                await loadAllDataFromSheet();
-                updateSetupStatus('Data berhasil dimuat.', true);
-            } else {
-                updateSetupStatus('Spreadsheet tidak ditemukan, membuat baru...');
-                const createResponse = await gapi.client.sheets.spreadsheets.create({
-                    properties: { title: SPREADSHEET_TITLE },
-                    sheets: [{ properties: { title: 'Siswa' } }, { properties: { title: 'Absensi' } }]
-                });
-                state.spreadsheetId = createResponse.result.spreadsheetId;
+            state.spreadsheetId = createResponse.result.spreadsheetId;
 
-                const headerRequests = [
-                    { range: 'Siswa!A1:B1', values: [['Kelas', 'Nama Siswa']]},
-                    { range: 'Absensi!A1:D1', values: [['Tanggal', 'Kelas', 'Nama Siswa', 'Status']] }
-                ];
-                await gapi.client.sheets.spreadsheets.values.batchUpdate({
-                    spreadsheetId: state.spreadsheetId,
-                    resource: { valueInputOption: 'USER_ENTERED', data: headerRequests }
-                });
-                updateSetupStatus('Spreadsheet baru berhasil dibuat.', true);
-            }
-        } catch (err) {
-            console.error("Error finding/creating spreadsheet:", err);
-            updateSetupStatus('Gagal mengakses Google Drive/Sheets.', false);
+            const headerRequests = [
+                { range: 'Siswa!A1:B1', values: [['Kelas', 'Nama Siswa']]},
+                { range: 'Absensi!A1:D1', values: [['Tanggal', 'Kelas', 'Nama Siswa', 'Status']] }
+            ];
+            await gapi.client.sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId: state.spreadsheetId,
+                resource: {
+                    valueInputOption: 'USER_ENTERED',
+                    data: headerRequests
+                }
+            });
+            updateSetupStatus('Spreadsheet baru berhasil dibuat.', true);
         }
     }
 
     async function loadAllDataFromSheet() {
+        updateSetupStatus('Memuat data dari Google Sheet...');
         const response = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: state.spreadsheetId,
             range: 'Absensi!A2:D'
         });
-        state.savedLogs = []; // Reset logs before loading
         if (response.result.values) {
             state.savedLogs = response.result.values.map(([date, className, studentName, status]) => ({
                 date, class: className, attendance: { [studentName]: status }
@@ -650,7 +719,10 @@
                 }
                 return acc;
             }, []);
+        } else {
+            state.savedLogs = [];
         }
+        updateSetupStatus('Data berhasil dimuat.', true);
     }
     
     function updateSetupStatus(message, success = false) {
@@ -660,20 +732,24 @@
         if (startBtn) startBtn.disabled = !success;
     }
 
+    // --- EVENT HANDLERS & LOGIC ---
+    
     async function handleStartAttendance() {
         state.selectedClass = document.getElementById('class-select').value;
         state.selectedDate = document.getElementById('date-input').value;
 
-        const existingRecord = state.savedLogs.find(log => log.date === state.selectedDate && log.class === state.selectedClass);
-        if (existingRecord) {
-            const message = `Data absensi untuk kelas ${state.selectedClass} pada tanggal ini sudah ada. Apakah Anda ingin mengisinya ulang? Data lama akan diganti.`;
-            showConfirmation(message, () => proceedToAttendance());
-        } else {
-            proceedToAttendance();
-        }
-    }
+        // Check for existing data for the same class and date
+        const existingLog = state.savedLogs.find(log => log.class === state.selectedClass && log.date === state.selectedDate);
 
-    async function proceedToAttendance() {
+        if (existingLog) {
+            const message = `Absensi untuk kelas ${state.selectedClass} pada tanggal ${state.selectedDate} sudah ada. Apakah Anda ingin mengisinya kembali? Data lama akan ditimpa saat menyimpan.`;
+            const confirmed = await showConfirmation(message);
+            if (!confirmed) {
+                return; // User cancelled
+            }
+        }
+
+        // Fetch students for the selected class from 'Siswa' sheet
         const response = await gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: state.spreadsheetId,
             range: 'Siswa!A2:B'
@@ -684,9 +760,10 @@
             .map(row => row[1]);
 
         if (state.students.length === 0) {
-            state.newStudents = [''];
+            state.newStudents = ['']; // Reset for new class
             navigateTo('add-students');
         } else {
+            // Reset attendance for new session
             state.attendance = {};
             state.students.forEach(s => state.attendance[s] = 'H');
             navigateTo('attendance');
@@ -703,8 +780,12 @@
         const rows = newStudentNames.map(name => [state.selectedClass, name]);
 
         await gapi.client.sheets.spreadsheets.values.append({
-            spreadsheetId: state.spreadsheetId, range: 'Siswa!A:B',
-            valueInputOption: 'USER_ENTERED', resource: { values: rows }
+            spreadsheetId: state.spreadsheetId,
+            range: 'Siswa!A:B',
+            valueInputOption: 'USER_ENTERED',
+            resource: {
+                values: rows
+            }
         });
 
         state.students = newStudentNames;
@@ -714,78 +795,82 @@
     }
 
     async function handleSaveAttendance() {
+        const message = `Anda akan menyimpan data absensi untuk kelas ${state.selectedClass} pada tanggal ${state.selectedDate}. Pastikan data sudah benar. Lanjutkan?`;
+        const confirmed = await showConfirmation(message);
+        if (!confirmed) return;
+
+        showLoader('Menyimpan data...');
+
         try {
-            // Step 1: Find existing data range to delete
-            const sheetData = await gapi.client.sheets.spreadsheets.values.get({
+            // 1. Get all existing attendance data
+            const allAttendanceResponse = await gapi.client.sheets.spreadsheets.values.get({
                 spreadsheetId: state.spreadsheetId,
-                range: 'Absensi!A:D',
-                majorDimension: 'ROWS'
+                range: 'Absensi!A2:D'
             });
+            const allAttendanceData = allAttendanceResponse.result.values || [];
 
-            const rowsToDelete = [];
-            (sheetData.result.values || []).forEach((row, index) => {
+            // 2. Filter out data for the current class and date to be replaced
+            const otherAttendanceData = allAttendanceData.filter(row => {
                 const [date, className] = row;
-                if (date === state.selectedDate && className === state.selectedClass) {
-                    rowsToDelete.push({
-                        deleteDimension: {
-                            range: {
-                                sheetId: await getSheetIdByName('Absensi'),
-                                dimension: 'ROWS',
-                                startIndex: index,
-                                endIndex: index + 1
-                            }
-                        }
-                    });
-                }
+                return !(date === state.selectedDate && className === state.selectedClass);
             });
 
-            // Step 2: If data exists, delete it.
-            if (rowsToDelete.length > 0) {
-                // Important: process deletions from bottom to top to not mess up indices
-                await gapi.client.sheets.spreadsheets.batchUpdate({
+            // 3. Prepare new data to be added
+            const newRows = Object.entries(state.attendance).map(([studentName, status]) => [
+                state.selectedDate,
+                state.selectedClass,
+                studentName,
+                status
+            ]);
+            
+            // 4. Combine old (filtered) and new data
+            const finalData = [...otherAttendanceData, ...newRows];
+
+            // 5. Clear the entire data range in the sheet
+            await gapi.client.sheets.spreadsheets.values.clear({
+                spreadsheetId: state.spreadsheetId,
+                range: 'Absensi!A2:D',
+            });
+
+            // 6. Write back the combined data if there is any
+            if (finalData.length > 0) {
+                await gapi.client.sheets.spreadsheets.values.update({
                     spreadsheetId: state.spreadsheetId,
-                    resource: { requests: rowsToDelete.reverse() }
+                    range: 'Absensi!A2',
+                    valueInputOption: 'USER_ENTERED',
+                    resource: {
+                        values: finalData
+                    }
                 });
             }
 
-            // Step 3: Append the new data
-            const newRows = Object.entries(state.attendance).map(([studentName, status]) => [
-                state.selectedDate, state.selectedClass, studentName, status
-            ]);
-            await gapi.client.sheets.spreadsheets.values.append({
-                spreadsheetId: state.spreadsheetId, range: 'Absensi!A:D',
-                valueInputOption: 'USER_ENTERED', resource: { values: newRows }
-            });
-
-            await loadAllDataFromSheet();
+            await loadAllDataFromSheet(); // Reload data
             navigateTo('success');
-        } catch (err) {
-            console.error("Gagal menyimpan absensi:", err);
-            alert(`Terjadi kesalahan: ${err.result?.error?.message || err.message}`);
+
+        } catch (error) {
+            console.error('Failed to save attendance:', error);
+            alert(`Gagal menyimpan data absensi. Silakan coba lagi. Error: ${error.result?.error?.message || error.message}`);
+        } finally {
+            hideLoader();
         }
     }
-
-    async function getSheetIdByName(sheetName) {
-        const response = await gapi.client.sheets.spreadsheets.get({
-            spreadsheetId: state.spreadsheetId
-        });
-        const sheet = response.result.sheets.find(s => s.properties.title === sheetName);
-        return sheet ? sheet.properties.sheetId : null;
-    }
     
-    function handleViewHistory() { navigateTo('data'); }
+    function handleViewHistory(isClassSpecific = false) {
+        if (isClassSpecific) {
+            const selectedClass = document.getElementById('class-select').value;
+            const classHistory = state.savedLogs.filter(log => log.class === selectedClass);
 
-    function showConfirmation(message, onConfirm) {
-        const modal = document.createElement('div');
-        modal.innerHTML = templates.confirmation(message);
-        document.body.appendChild(modal);
-        document.getElementById('confirm-yes-btn').onclick = () => {
-            document.body.removeChild(modal);
-            onConfirm();
-        };
-        document.getElementById('confirm-no-btn').onclick = () => document.body.removeChild(modal);
+            if (classHistory.length === 0) {
+                alert(`Data riwayat absensi untuk kelas ${selectedClass} tidak ditemukan.`);
+                return;
+            }
+            state.historyClassFilter = selectedClass;
+        } else {
+            state.historyClassFilter = null; // Show all
+        }
+        navigateTo('data');
     }
-    
+
     function handleDownloadTemplate() {
         const csvContent = "data:text/csv;charset=utf-8," + "Nama Siswa\nContoh Siswa 1\nContoh Siswa 2";
         const encodedUri = encodeURI(csvContent);
@@ -809,7 +894,10 @@
             const worksheet = workbook.Sheets[sheetName];
             const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
             
-            const studentNames = json.slice(1).map(row => row[0]).filter(name => typeof name === 'string' && name.trim() !== '');
+            const studentNames = json
+                .slice(1) // Skip header row
+                .map(row => row[0]) // Get first column
+                .filter(name => typeof name === 'string' && name.trim() !== '');
 
             if (studentNames.length > 0) {
                 state.newStudents = studentNames;
@@ -824,10 +912,9 @@
     
     // --- INITIALIZATION ---
     async function main() {
-        render();
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Waktu tunggu habis (15 detik).")), 15000));
+        render(); 
         try {
-            await Promise.race([initializeApis(), timeoutPromise]);
+            await initializeApis();
             const loginBtn = document.getElementById('loginBtn');
             const loginBtnText = document.getElementById('loginBtnText');
             if (loginBtn && loginBtnText) {
@@ -835,8 +922,7 @@
                 loginBtnText.textContent = 'Login dengan Google';
             }
         } catch (error) {
-            const userSuggestion = 'Ini seringkali disebabkan oleh masalah jaringan, ad-blocker, atau firewall. Periksa koneksi Anda dan coba muat ulang halaman.';
-            displayAuthError(`Gagal melakukan inisialisasi. ${userSuggestion}`, error);
+            displayAuthError('Gagal melakukan inisialisasi.', error);
         }
     }
     
