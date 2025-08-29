@@ -28,6 +28,22 @@
         }
         .loader-text { margin-top: 16px; color: #475569; font-weight: 500; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* --- Animations for Success Screen --- */
+        .checkmark-wrapper { width: 100px; height: 100px; }
+        .checkmark { width: 100px; height: 100px; border-radius: 50%; display: block; stroke-width: 4; stroke: #4CAF50; stroke-miterlimit: 10; margin: 0 auto; box-shadow: inset 0px 0px 0px #4CAF50; animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
+        .checkmark__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 3; stroke-miterlimit: 10; stroke: #4CAF50; fill: none; animation: stroke .6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
+        .checkmark__check { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; stroke-width: 4; animation: stroke .3s cubic-bezier(0.65, 0, 0.45, 1) .8s forwards; }
+        @keyframes stroke { 100% { stroke-dashoffset: 0; } }
+        @keyframes scale { 0%, 100% { transform: none; } 50% { transform: scale3d(1.1, 1.1, 1); } }
+        @keyframes fill { 100% { box-shadow: inset 0px 0px 0px 50px #4CAF50; } }
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.5s ease-out forwards;
+        }
     </style>
 </head>
 <body class="bg-slate-100">
@@ -193,13 +209,18 @@
             </div>`,
         success: () => `
             <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
-                 <div class="bg-white p-12 rounded-2xl shadow-lg max-w-md w-full">
-                    <img src="https://upload.wikimedia.org/wikipedia/commons/8/8b/Green_Checkmark.svg" alt="Success" class="w-20 h-20 mx-auto mb-6"/>
-                    <h1 class="text-3xl font-bold text-slate-800 mb-2">Absensi Tersimpan!</h1>
-                    <p class="text-slate-500 mb-8">Terima kasih, data absensi telah berhasil disimpan ke Google Sheet.</p>
-                    <div class="space-y-3">
-                         <button id="success-back-to-start-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Kembali ke Halaman Awal</button>
-                         <button id="success-view-data-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Riwayat Absensi</button>
+                <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
+                    <div class="checkmark-wrapper mx-auto mb-6">
+                        <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                            <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
+                            <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                        </svg>
+                    </div>
+                    <h1 class="text-3xl md:text-4xl font-bold text-slate-800 mb-3">Absensi Tersimpan!</h1>
+                    <p class="text-slate-500 mb-10">Terima kasih, data absensi telah berhasil disimpan ke Google Sheet.</p>
+                    <div class="space-y-4">
+                         <button id="success-back-to-start-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Kembali ke Halaman Awal</button>
+                         <button id="success-view-data-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Riwayat Absensi</button>
                     </div>
                 </div>
             </div>`,
@@ -242,6 +263,13 @@
                 document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
                 document.getElementById('historyBtn').addEventListener('click', handleViewHistory);
                 document.getElementById('class-select').value = state.selectedClass || CLASSES[0];
+                // BUG FIX: Re-enable start button if spreadsheet is ready when returning to this screen
+                if (state.spreadsheetId) {
+                    const startBtn = document.getElementById('startBtn');
+                    if (startBtn) startBtn.disabled = false;
+                    const statusEl = document.getElementById('setup-status');
+                    if (statusEl) statusEl.textContent = 'Spreadsheet siap digunakan.';
+                }
                 break;
             case 'add-students':
                 appContainer.innerHTML = templates.addStudents(state.selectedClass);
@@ -350,6 +378,7 @@
 
     function renderDataScreen() {
         const container = document.getElementById('data-container');
+
         if (state.savedLogs.length === 0) {
             container.innerHTML = `<p class="text-center text-slate-500">Belum ada riwayat absensi yang tersimpan.</p>`;
             return;
@@ -366,31 +395,43 @@
             <div>
                 <h2 class="text-lg font-semibold text-slate-700 mb-3">${date}</h2>
                 <div class="space-y-4">
-                ${logs.map(log => `
-                    <div class="bg-slate-50 p-4 rounded-lg">
-                        <h3 class="font-bold text-blue-600 mb-2">Kelas ${log.class}</h3>
-                        <div class="overflow-x-auto">
-                             <table class="w-full text-sm">
-                                <thead><tr class="text-left text-slate-500">
-                                    <th class="py-1 pr-4 font-medium">Nama Siswa</th>
-                                    <th class="py-1 px-2 font-medium">Status</th>
-                                </tr></thead>
-                                <tbody>
-                                ${Object.entries(log.attendance).map(([name, status]) => `
-                                    <tr class="border-t border-slate-200">
-                                        <td class="py-2 pr-4 text-slate-700">${name}</td>
-                                        <td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold 
-                                            ${status === 'H' ? 'bg-green-100 text-green-800' :
-                                              status === 'S' ? 'bg-yellow-100 text-yellow-800' :
-                                              status === 'I' ? 'bg-blue-100 text-blue-800' :
-                                              'bg-red-100 text-red-800'}">${status}</span></td>
-                                    </tr>
-                                `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                `).join('')}
+                ${logs.map(log => {
+                    const absentStudents = Object.entries(log.attendance)
+                        .filter(([_, status]) => status !== 'H');
+                    
+                    let contentHtml;
+                    if (absentStudents.length > 0) {
+                        const attendanceToShow = Object.fromEntries(absentStudents);
+                        contentHtml = `
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead><tr class="text-left text-slate-500">
+                                        <th class="py-1 pr-4 font-medium">Nama Siswa</th>
+                                        <th class="py-1 px-2 font-medium">Status</th>
+                                    </tr></thead>
+                                    <tbody>
+                                    ${Object.entries(attendanceToShow).map(([name, status]) => `
+                                        <tr class="border-t border-slate-200">
+                                            <td class="py-2 pr-4 text-slate-700">${name}</td>
+                                            <td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold 
+                                                ${status === 'S' ? 'bg-yellow-100 text-yellow-800' :
+                                                  status === 'I' ? 'bg-blue-100 text-blue-800' :
+                                                  'bg-red-100 text-red-800'}">${status}</span></td>
+                                        </tr>
+                                    `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>`;
+                    } else {
+                        contentHtml = `<p class="text-sm text-slate-500 italic px-1 py-2">Semua siswa hadir.</p>`;
+                    }
+
+                    return `
+                        <div class="bg-slate-50 p-4 rounded-lg">
+                            <h3 class="font-bold text-blue-600 mb-2">Kelas ${log.class}</h3>
+                            ${contentHtml}
+                        </div>`;
+                }).join('')}
                 </div>
             </div>
         `).join('');
@@ -555,7 +596,11 @@
             // Navigate to the setup screen first, THEN find the spreadsheet.
             // This ensures UI elements exist before we try to update them.
             navigateTo('setup');
-            await findOrCreateSpreadsheet();
+            // This needs to happen *after* render, so let's ensure the elements exist
+            // A simple timeout can defer execution until after the next paint cycle
+            setTimeout(() => {
+                findOrCreateSpreadsheet();
+            }, 0);
         };
         
         if (gapi.client.getToken() === null) {
