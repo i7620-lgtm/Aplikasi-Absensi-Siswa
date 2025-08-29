@@ -908,7 +908,14 @@
     async function main() {
         render(); // Initial render to show the login screen with "Loading..."
         try {
-            await initializeApis();
+            // GLOBAL TIMEOUT: Prevent the app from hanging indefinitely if Google's servers are unreachable.
+            const initPromise = initializeApis();
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Waktu tunggu habis. Periksa koneksi internet Anda atau coba muat ulang halaman.')), 15000) // 15 seconds
+            );
+
+            await Promise.race([initPromise, timeoutPromise]);
+            
             const loginBtn = document.getElementById('loginBtn');
             const loginBtnText = document.getElementById('loginBtnText');
             if (loginBtn && loginBtnText) {
