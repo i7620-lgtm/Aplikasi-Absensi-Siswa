@@ -10,8 +10,7 @@
     <title>Absensi Online Siswa</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script src="https://apis.google.com/js/api.js" async defer></script>
+    <!-- Scripts will be loaded dynamically by the module -->
     <style>
         body { font-family: 'Inter', sans-serif; }
         @import url('https://rsms.me/inter/inter.css');
@@ -55,8 +54,6 @@
     
     // --- APPLICATION STATE ---
     let state = {
-        isGapiReady: false,
-        isGisReady: false,
         tokenClient: null,
         userProfile: null,
         spreadsheetId: null,
@@ -86,6 +83,22 @@
                         <svg class="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.222,0-9.519-3.108-11.127-7.481l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,35.17,44,30.023,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>
                         <span id="loginBtnText">Memuat...</span>
                     </button>
+                    <div id="auth-error-container" class="text-left text-sm mt-4 hidden">
+                        <div class="bg-red-50 p-3 rounded-lg border border-red-200">
+                            <p id="auth-error-message" class="text-red-700 font-semibold mb-2"></p>
+                            <div id="origin-helper" class="hidden">
+                                <p class="text-slate-600 mb-2">Pastikan URL di bawah ini telah ditambahkan ke **Authorized JavaScript origins** di Google Cloud:</p>
+                                <div class="flex items-center gap-2 bg-slate-100 p-2 rounded">
+                                    <code id="auth-error-origin" class="text-blue-700 text-xs break-all"></code>
+                                    <button id="copy-origin-btn" title="Salin URL" class="text-slate-500 hover:text-slate-800 flex-shrink-0">
+                                        <svg id="copy-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                                        <svg id="check-icon" class="w-4 h-4 text-green-600 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <p id="auth-error-tech-details" class="text-slate-500 text-xs mt-2"></p>
+                        </div>
+                    </div>
                 </div>
             </div>`,
         setup: (user) => `
@@ -384,54 +397,153 @@
     }
 
     // --- GOOGLE API & AUTH LOGIC ---
-    function gapiLoaded() {
-        gapi.load('client', initializeGapiClient);
-    }
     
-    async function initializeGapiClient() {
-        if (!API_KEY || API_KEY === 'YOUR_API_KEY_HERE') {
-            alert('Kesalahan Konfigurasi: API Key belum diatur. Silakan isi di file index.html.');
-            return;
+    function displayAuthError(message, error = null) {
+        const loginBtn = document.getElementById('loginBtn');
+        const loginBtnText = document.getElementById('loginBtnText');
+        const errorContainer = document.getElementById('auth-error-container');
+        const errorMessageEl = document.getElementById('auth-error-message');
+        const originHelper = document.getElementById('origin-helper');
+        const errorOriginEl = document.getElementById('auth-error-origin');
+        const copyOriginBtn = document.getElementById('copy-origin-btn');
+        const techDetailsEl = document.getElementById('auth-error-tech-details');
+        
+        // Style the button to show an error state
+        if (loginBtn) {
+            loginBtn.disabled = true;
+            loginBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+            loginBtn.classList.add('bg-red-500');
         }
-        await gapi.client.init({
-            apiKey: API_KEY,
-            discoveryDocs: [
-                'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest',
-                'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'
-            ],
-        });
-        state.isGapiReady = true;
-        checkAuthReady();
-    }
-
-    function gisLoaded() {
-        if (!CLIENT_ID || CLIENT_ID.startsWith('YOUR_CLIENT_ID_HERE')) {
-            alert('Kesalahan Konfigurasi: Client ID belum diatur. Silakan isi di file index.html.');
-            return;
+        if (loginBtnText) {
+            loginBtnText.textContent = 'Gagal Memuat';
         }
-        state.tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: CLIENT_ID,
-            scope: SCOPES,
-            callback: '', // Manually handled
-        });
-        state.isGisReady = true;
-        checkAuthReady();
-    }
 
-    function checkAuthReady() {
-        if (state.isGapiReady && state.isGisReady) {
-            const loginBtn = document.getElementById('loginBtn');
-            const loginBtnText = document.getElementById('loginBtnText');
-            if (loginBtn && loginBtnText) {
-                loginBtn.disabled = false;
-                loginBtnText.textContent = 'Login dengan Google';
+        // Show the error container and populate messages
+        if (errorContainer) {
+            errorContainer.classList.remove('hidden');
+        }
+        if (errorMessageEl) {
+            errorMessageEl.textContent = message;
+        }
+
+        // Check if it's an initialization error to decide whether to show the origin helper
+        const isInitError = error && error.message && (error.message.toLowerCase().includes('gapi') || error.message.toLowerCase().includes('gis') || error.message.toLowerCase().includes('discovery'));
+        
+        if (originHelper && isInitError) {
+            originHelper.classList.remove('hidden');
+            const origin = window.location.origin;
+            if (errorOriginEl) {
+                errorOriginEl.textContent = origin;
+            }
+            if (copyOriginBtn) {
+                copyOriginBtn.onclick = () => {
+                    navigator.clipboard.writeText(origin).then(() => {
+                        document.getElementById('copy-icon').classList.add('hidden');
+                        const checkIcon = document.getElementById('check-icon');
+                        checkIcon.classList.remove('hidden');
+                        setTimeout(() => {
+                            checkIcon.classList.add('hidden');
+                            document.getElementById('copy-icon').classList.remove('hidden');
+                        }, 2000);
+                    });
+                };
             }
         }
+        
+        if (techDetailsEl && error) {
+            techDetailsEl.textContent = `Detail Teknis: ${error.message || String(error)}`;
+        }
+        console.error("Auth Error:", message, error);
+    }
+
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.async = true;
+            script.defer = true;
+            script.onload = resolve;
+            script.onerror = () => reject(new Error(`Gagal memuat skrip: ${src}`));
+            document.head.appendChild(script);
+        });
+    }
+
+    const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function retry(fn, retries = 3, delay = 1000, finalErrorMessage = 'Gagal setelah beberapa kali percobaan') {
+        let lastError;
+        for (let i = 0; i < retries; i++) {
+            try {
+                return await fn();
+            } catch (error) {
+                lastError = error;
+                console.warn(`Percobaan inisialisasi API #${i + 1} gagal. Mencoba lagi dalam ${delay}ms...`, error);
+                await wait(delay);
+                delay *= 2; // Exponential backoff
+            }
+        }
+        throw new Error(`${finalErrorMessage}. Error terakhir: ${lastError.message || String(lastError)}`);
+    }
+
+    async function initializeApis() {
+        const initGapiClient = async () => {
+            await gapi.client.init({
+                apiKey: API_KEY,
+                discoveryDocs: [
+                    'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest',
+                    'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'
+                ],
+            });
+        };
+
+        const gapiPromise = (async () => {
+            try {
+                await loadScript('https://apis.google.com/js/api.js');
+                await new Promise((resolve, reject) => {
+                    gapi.load('client', {
+                        callback: resolve,
+                        onerror: (err) => reject(new Error('Gagal memuat modul GAPI client.')),
+                        timeout: 10000,
+                        ontimeout: () => reject(new Error('Waktu tunggu habis saat memuat GAPI.'))
+                    });
+                });
+                await retry(initGapiClient, 3, 1000, 'Gagal memuat konfigurasi API dari Google');
+            } catch (err) {
+                console.error("GAPI Initialization Failed:", err);
+                let detailMessage = err.message || 'Tidak diketahui.';
+                if (err.message && err.message.includes('missing required fields')) {
+                    detailMessage = 'Gagal memuat file konfigurasi API dari Google.';
+                }
+                const userSuggestion = 'Ini seringkali disebabkan oleh masalah jaringan, ad-blocker, atau firewall. Periksa koneksi Anda, nonaktifkan ad-blocker untuk situs ini, dan muat ulang halaman.';
+                throw new Error(`Gagal menginisialisasi Google API (GAPI). ${userSuggestion} Detail teknis: ${detailMessage}`);
+            }
+        })();
+
+        const gisPromise = (async () => {
+            try {
+                await loadScript('https://accounts.google.com/gsi/client');
+                state.tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: CLIENT_ID,
+                    scope: SCOPES,
+                    callback: '', // Handled manually
+                });
+            } catch (err) {
+                console.error("GIS Initialization Failed:", err);
+                const detailMessage = err.message || JSON.stringify(err);
+                const userSuggestion = 'Periksa koneksi internet Anda dan pastikan tidak ada yang memblokir skrip Google.';
+                throw new Error(`Gagal menginisialisasi Google Sign-In (GIS). ${userSuggestion} Detail: ${detailMessage}`);
+            }
+        })();
+
+        return Promise.all([gapiPromise, gisPromise]);
     }
 
     function handleAuthClick() {
         state.tokenClient.callback = async (resp) => {
             if (resp.error !== undefined) {
+                console.error("Authentication error:", resp);
+                const authError = new Error(resp.error_description || resp.error);
+                displayAuthError(`Otentikasi Gagal: ${resp.error}`, authError);
                 throw (resp);
             }
             // Fetch user profile
@@ -666,11 +778,22 @@
     }
     
     // --- INITIALIZATION ---
-    window.gapiLoaded = gapiLoaded;
-    window.gisLoaded = gisLoaded;
-
-    // Initial render
-    render();
+    async function main() {
+        render(); // Initial render to show the login screen with "Loading..."
+        try {
+            await initializeApis();
+            const loginBtn = document.getElementById('loginBtn');
+            const loginBtnText = document.getElementById('loginBtnText');
+            if (loginBtn && loginBtnText) {
+                loginBtn.disabled = false;
+                loginBtnText.textContent = 'Login dengan Google';
+            }
+        } catch (error) {
+            displayAuthError('Gagal melakukan inisialisasi.', error);
+        }
+    }
+    
+    main();
 
 </script>
 
