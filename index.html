@@ -76,7 +76,7 @@
         tokenClient: null,
         userProfile: null,
         spreadsheetId: null,
-        currentScreen: 'login', // login, setup, add-students, attendance, success, data, confirmation
+        currentScreen: 'login', // login, setup, add-students, attendance, success, data, confirmation, privacy, terms
         selectedClass: '',
         selectedDate: new Date().toISOString().split('T')[0],
         students: [], // students for the current class
@@ -118,6 +118,11 @@
                             </div>
                             <p id="auth-error-tech-details" class="text-slate-500 text-xs mt-2"></p>
                         </div>
+                    </div>
+                     <div class="mt-6 text-xs text-slate-500">
+                        <p>Dengan melanjutkan, Anda menyetujui</p>
+                        <a href="#terms" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</a> &
+                        <a href="#privacy" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a>
                     </div>
                 </div>
             </div>`,
@@ -251,8 +256,58 @@
                         <button id="confirm-yes-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition">Ya</button>
                     </div>
                 </div>
-            </div>`
+            </div>`,
+        privacy: () => `
+            <div class="screen active p-4 md:p-8 max-w-3xl mx-auto">
+                <div class="bg-white p-8 rounded-2xl shadow-lg">
+                    <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
+                        <h1 class="text-2xl font-bold text-slate-800">Kebijakan Privasi</h1>
+                        <a href="#" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</a>
+                    </div>
+                    <div class="text-slate-600 leading-relaxed">${privacyPolicyContent}</div>
+                </div>
+            </div>`,
+        terms: () => `
+            <div class="screen active p-4 md:p-8 max-w-3xl mx-auto">
+                <div class="bg-white p-8 rounded-2xl shadow-lg">
+                    <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
+                        <h1 class="text-2xl font-bold text-slate-800">Ketentuan Layanan</h1>
+                        <a href="#" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</a>
+                    </div>
+                    <div class="text-slate-600 leading-relaxed">${termsOfServiceContent}</div>
+                </div>
+            </div>`,
     };
+
+    const privacyPolicyContent = `
+        <h3 class="text-lg font-semibold text-slate-700 mb-2">Pengumpulan dan Penggunaan Informasi</h3>
+        <p class="mb-4">Aplikasi ini berinteraksi dengan Google APIs untuk menyediakan fungsionalitas utamanya. Saat Anda login dengan akun Google, kami meminta izin untuk mengakses informasi dasar profil Anda (nama, email, foto profil) untuk personalisasi aplikasi. Kami juga meminta izin untuk mengelola file Google Sheets dan Google Drive yang dibuat secara khusus oleh aplikasi ini.</p>
+        <h3 class="text-lg font-semibold text-slate-700 mb-2">Penyimpanan Data</h3>
+        <p class="mb-4">Semua data absensi yang Anda masukkan disimpan langsung di dalam file Google Sheet di akun Google Drive Anda. Aplikasi ini tidak menyimpan data Anda di server kami sendiri. Keamanan data Anda bergantung pada keamanan akun Google Anda.</p>
+        <h3 class="text-lg font-semibold text-slate-700 mb-2">Penggunaan Data</h3>
+        <ul class="list-disc list-inside mb-4 space-y-1">
+            <li>Data profil Anda digunakan untuk menampilkan identitas Anda di dalam aplikasi.</li>
+            <li>Izin Google Sheets digunakan untuk membuat, membaca, dan menulis data absensi ke spreadsheet Anda.</li>
+            <li>Izin Google Drive digunakan untuk menemukan spreadsheet absensi yang relevan yang dibuat oleh aplikasi ini.</li>
+        </ul>
+        <h3 class="text-lg font-semibold text-slate-700 mb-2">Berbagi Data</h3>
+        <p class="mb-4">Kami tidak membagikan informasi pribadi atau data absensi Anda kepada pihak ketiga manapun. Data tersebut hanya dapat diakses oleh Anda melalui akun Google Anda.</p>
+    `;
+
+    const termsOfServiceContent = `
+        <h3 class="text-lg font-semibold text-slate-700 mb-2">Penerimaan Ketentuan</h3>
+        <p class="mb-4">Dengan menggunakan aplikasi Absensi Online Siswa ("Layanan"), Anda setuju untuk terikat oleh Ketentuan Layanan ini. Jika Anda tidak setuju dengan ketentuan ini, mohon untuk tidak menggunakan layanan ini.</p>
+        <h3 class="text-lg font-semibold text-slate-700 mb-2">Deskripsi Layanan</h3>
+        <p class="mb-4">Layanan ini adalah alat bantu untuk mencatat absensi siswa yang terintegrasi dengan akun Google Anda. Layanan ini memungkinkan Anda membuat dan mengelola data absensi dalam Google Sheet pribadi Anda.</p>
+        <h3 class="text-lg font-semibold text-slate-700 mb-2">Tanggung Jawab Pengguna</h3>
+        <ul class="list-disc list-inside mb-4 space-y-1">
+            <li>Anda bertanggung jawab penuh atas keamanan akun Google Anda.</li>
+            <li>Anda bertanggung jawab atas keakuratan data yang Anda masukkan ke dalam aplikasi.</li>
+            <li>Anda setuju untuk tidak menggunakan layanan ini untuk tujuan yang melanggar hukum.</li>
+        </ul>
+        <h3 class="text-lg font-semibold text-slate-700 mb-2">Batasan Tanggung Jawab</h3>
+        <p class="mb-4">Layanan ini disediakan "sebagaimana adanya". Pengembang tidak bertanggung jawab atas kehilangan data atau kerusakan apa pun yang timbul dari penggunaan aplikasi ini. Cadangkan data penting Anda secara teratur.</p>
+    `;
 
     // --- RENDER FUNCTION ---
     function render() {
@@ -302,6 +357,12 @@
                 appContainer.innerHTML = templates.data();
                 renderDataScreen();
                 document.getElementById('data-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
+                break;
+            case 'privacy':
+                appContainer.innerHTML = templates.privacy();
+                break;
+            case 'terms':
+                appContainer.innerHTML = templates.terms();
                 break;
         }
 
@@ -358,7 +419,6 @@
             };
         });
     }
-
 
     // --- SCREEN SPECIFIC RENDER LOGIC ---
     function renderStudentInputRows() {
@@ -917,6 +977,39 @@
         reader.readAsArrayBuffer(file);
     }
     
+    // --- ROUTING ---
+    function handleHashChange() {
+        const hash = window.location.hash.substring(1);
+
+        const routes = {
+            'privacy': 'privacy',
+            'terms': 'terms',
+        };
+
+        const targetScreen = routes[hash];
+        
+        // If we have a valid hash route, navigate if not already there.
+        if (targetScreen) {
+            if (state.currentScreen !== targetScreen) {
+                navigateTo(targetScreen);
+            }
+            return;
+        }
+
+        // If hash is empty or invalid...
+        if (!state.userProfile) {
+            // ...and user is not logged in, go to login screen if not already there.
+            if (state.currentScreen !== 'login') {
+                navigateTo('login');
+            }
+        } else {
+            // ...and user is logged in, go to main setup screen if they are on a non-primary screen.
+            if (!['setup', 'attendance', 'add-students', 'data', 'success'].includes(state.currentScreen)) {
+                navigateTo('setup');
+            }
+        }
+    }
+
     // --- INITIALIZATION ---
     async function main() {
         render(); 
@@ -931,6 +1024,9 @@
         } catch (error) {
             displayAuthError('Gagal melakukan inisialisasi.', error);
         }
+        
+        window.addEventListener('hashchange', handleHashChange);
+        handleHashChange(); // Handle initial page load with hash
     }
     
     main();
