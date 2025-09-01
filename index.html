@@ -444,17 +444,18 @@
         }
 
         const groupedByDate = logsToShow.reduce((acc, log) => {
-            const dateStr = new Date(log.date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const dateStr = log.date; // Use the reliable YYYY-MM-DD string for grouping
             if (!acc[dateStr]) acc[dateStr] = [];
             acc[dateStr].push(log);
             return acc;
         }, {});
 
-        container.innerHTML = Object.entries(groupedByDate).sort((a, b) => new Date(b[0]) - new Date(a[0])).map(([date, logs]) => `
-            <div>
-                <h2 class="text-lg font-semibold text-slate-700 mb-3">${date}</h2>
-                <div class="space-y-4">
-                ${logs.map(log => {
+        container.innerHTML = Object.entries(groupedByDate)
+            .sort((a, b) => new Date(b[0]) - new Date(a[0])) // Sort by the YYYY-MM-DD key
+            .map(([date, logs]) => {
+                // Format the date for display inside the map
+                const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                const logsHtml = logs.map(log => {
                     const absentStudents = Object.entries(log.attendance)
                         .filter(([_, status]) => status !== 'H');
                     
@@ -490,10 +491,16 @@
                             <h3 class="font-bold text-blue-600 mb-2">Kelas ${log.class}</h3>
                             ${contentHtml}
                         </div>`;
-                }).join('')}
-                </div>
-            </div>
-        `).join('');
+                }).join('');
+
+                return `
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-700 mb-3">${displayDate}</h2>
+                    <div class="space-y-4">
+                        ${logsHtml}
+                    </div>
+                </div>`;
+            }).join('');
     }
 
     // --- GOOGLE API & AUTH LOGIC ---
