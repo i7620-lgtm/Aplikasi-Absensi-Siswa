@@ -148,8 +148,8 @@
                     </div>
                     <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.spreadsheetId ? 'Tersinkronisasi dengan Google Sheets.' : ''}</p>
                     <div class="mt-6 text-xs text-slate-500 text-center">
-                        <a href="#terms" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</a> &
-                        <a href="#privacy" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a>
+                        <a href="terms.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</a> &
+                        <a href="privacy.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a>
                     </div>
                 </div>
             </div>`,
@@ -262,104 +262,8 @@
                         <button id="confirm-yes-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition">Ya</button>
                     </div>
                 </div>
-            </div>`,
-        infoModal: (title, content) => `
-            <div id="info-modal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-                 <div class="bg-white p-6 md:p-8 rounded-2xl shadow-lg max-w-2xl w-full flex flex-col animate-fade-in">
-                    <div class="flex justify-between items-center mb-4 pb-4 border-b border-slate-200">
-                        <h2 class="text-xl font-bold text-slate-800">${title}</h2>
-                        <button id="info-modal-close-btn" class="text-slate-400 hover:text-slate-600 text-3xl">&times;</button>
-                    </div>
-                    <div class="text-slate-600 text-sm leading-relaxed max-h-[70vh] overflow-y-auto pr-2">${content}</div>
-                    <div class="mt-6 pt-4 border-t border-slate-200 text-right">
-                        <button id="info-modal-ok-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg transition">Tutup</button>
-                    </div>
-                </div>
             </div>`
     };
-
-    const privacyPolicyContent = `
-        <p class="mb-4"><strong>Tanggal Efektif: 23 Mei 2024</strong></p>
-        <p class="mb-4">Aplikasi Absensi Siswa ("kami") berkomitmen untuk melindungi privasi Anda. Kebijakan Privasi ini menjelaskan bagaimana kami mengumpulkan, menggunakan, mengungkapkan, dan menjaga informasi Anda saat Anda menggunakan aplikasi kami ("Layanan").</p>
-        
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Informasi yang Kami Kumpulkan</h3>
-        <p class="mb-4">Kami mengumpulkan jenis informasi berikut:</p>
-        <ul class="list-disc list-inside mb-4 space-y-2">
-            <li><strong>Informasi Profil Pengguna:</strong> Saat Anda memilih untuk masuk dengan akun Google Anda, kami mengumpulkan nama, alamat email, dan foto profil Anda. Informasi ini digunakan semata-mata untuk mengidentifikasi Anda di dalam aplikasi dan tidak dibagikan dengan pihak ketiga mana pun.</li>
-            <li><strong>Data Aplikasi:</strong> Semua data yang Anda masukkan ke dalam aplikasi, termasuk nama siswa, daftar kelas, dan catatan kehadiran, akan disimpan. Data ini penting untuk fungsionalitas inti aplikasi.</li>
-        </ul>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Bagaimana Kami Menggunakan Informasi Anda</h3>
-        <p class="mb-4">Kami menggunakan informasi yang kami kumpulkan untuk:</p>
-        <ul class="list-disc list-inside mb-4 space-y-2">
-            <li><strong>Menyediakan dan memelihara Layanan:</strong> Data Anda digunakan untuk mengoperasikan aplikasi, memungkinkan Anda mengelola daftar siswa dan melacak kehadiran.</li>
-            <li><strong>Mengaktifkan pencadangan dan sinkronisasi data:</strong> Jika Anda masuk dengan Google, aplikasi akan membuat Google Sheet di Google Drive pribadi Anda untuk mencadangkan dan menyinkronkan data Anda. Ini memungkinkan Anda mengakses data Anda di berbagai perangkat dan memulihkannya jika Anda membersihkan data browser Anda. Aplikasi hanya mengakses file spesifik ini dan tidak mengakses file lain di Google Drive Anda.</li>
-        </ul>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Penyimpanan dan Keamanan Data</h3>
-        <ul class="list-disc list-inside mb-4 space-y-2">
-            <li><strong>Penyimpanan Lokal:</strong> Secara default, semua data aplikasi disimpan secara lokal di perangkat Anda dalam penyimpanan browser web Anda. Data ini bersifat pribadi bagi Anda dan tidak dikirimkan ke server kami.</li>
-            <li><strong>Google Drive dan Google Sheets:</strong> Saat Anda menghubungkan akun Google Anda, sebuah spreadsheet bernama "${SPREADSHEET_TITLE}" akan dibuat di Google Drive Anda. Semua data siswa dan kehadiran Anda disimpan di sheet ini. Anda memiliki kontrol penuh atas file ini, termasuk kemampuan untuk melihat, mengedit, atau menghapusnya kapan saja. Kami tidak memiliki akses ke Google Drive Anda atau file ini.</li>
-        </ul>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Berbagi Data</h3>
-        <p class="mb-4">Kami tidak membagikan, menjual, atau menyewakan informasi pribadi atau data aplikasi Anda kepada pihak ketiga mana pun untuk tujuan apa pun.</p>
-        
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Hak Data Anda</h3>
-        <ul class="list-disc list-inside mb-4 space-y-2">
-            <li><strong>Akses dan Koreksi:</strong> Anda dapat mengakses dan mengubah data Anda kapan saja melalui antarmuka aplikasi.</li>
-            <li><strong>Penghapusan Data:</strong> Anda dapat menghapus data Anda dengan membersihkan cache dan data situs browser Anda. Jika Anda menggunakan fitur sinkronisasi Google, Anda juga dapat menghapus spreadsheet dari Google Drive Anda untuk menghapus cadangan cloud Anda secara permanen.</li>
-        </ul>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Privasi Anak</h3>
-        <p class="mb-4">Layanan ini tidak ditujukan untuk digunakan oleh individu di bawah usia 13 tahun. Kami tidak dengan sengaja mengumpulkan informasi pribadi dari anak-anak di bawah 13 tahun.</p>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Perubahan pada Kebijakan Privasi Ini</h3>
-        <p class="mb-4">Kami dapat memperbarui Kebijakan Privasi ini dari waktu ke waktu. Kami akan memberitahu Anda tentang perubahan apa pun dengan memposting Kebijakan Privasi baru di dalam aplikasi. Anda disarankan untuk meninjau Kebijakan Privasi ini secara berkala untuk setiap perubahan.</p>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Hubungi Kami</h3>
-        <p class="mb-4">Jika Anda memiliki pertanyaan tentang Kebijakan Privasi ini, silakan hubungi kami di dev.arstory@gmail.com.</p>
-    `;
-
-    const termsOfServiceContent = `
-        <p class="mb-4"><strong>Tanggal Efektif: 23 Mei 2024</strong></p>
-        <p class="mb-4">Harap baca Ketentuan Layanan ("Ketentuan") ini dengan saksama sebelum menggunakan aplikasi Aplikasi Absensi Siswa ("Layanan"). Akses dan penggunaan Layanan oleh Anda bergantung pada penerimaan dan kepatuhan Anda terhadap Ketentuan ini. Ketentuan ini berlaku untuk semua pengunjung, pengguna, dan pihak lain yang mengakses atau menggunakan Layanan.</p>
-        
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">1. Penerimaan Ketentuan</h3>
-        <p class="mb-4">Dengan mengakses atau menggunakan Layanan, Anda setuju untuk terikat oleh Ketentuan ini. Jika Anda tidak setuju dengan bagian mana pun dari ketentuan ini, maka Anda tidak boleh mengakses Layanan.</p>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">2. Deskripsi Layanan</h3>
-        <p class="mb-4">Layanan ini adalah alat pelacak kehadiran siswa yang dirancang untuk membantu guru dan administrator mengelola catatan kehadiran. Ini berfungsi secara luring dengan menyimpan data secara lokal di perangkat Anda dan menawarkan fitur opsional untuk menyinkronkan data dengan Google Sheet di akun Google Drive pribadi Anda.</p>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">3. Tanggung Jawab Pengguna</h3>
-        <ul class="list-disc list-inside mb-4 space-y-2">
-            <li><strong>Keamanan Akun:</strong> Jika Anda memilih untuk menghubungkan akun Google Anda, Anda bertanggung jawab untuk menjaga keamanan akun Anda dan untuk semua aktivitas yang terjadi di bawah akun tersebut.</li>
-            <li><strong>Akurasi Data:</strong> Anda sepenuhnya bertanggung jawab atas keakuratan data yang Anda masukkan ke dalam Layanan.</li>
-            <li><strong>Kepatuhan terhadap Hukum:</strong> Anda setuju untuk menggunakan Layanan sesuai dengan semua hukum lokal, nasional, dan internasional yang berlaku, termasuk undang-undang privasi data (misalnya, GDPR, FERPA) yang relevan dengan data siswa yang Anda kelola.</li>
-        </ul>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">4. Kepemilikan dan Penyimpanan Data</h3>
-        <p class="mb-4">Anda memegang kepemilikan penuh atas semua data yang Anda masukkan ke dalam Layanan. Kami tidak mengklaim hak kepemilikan apa pun atas data Anda. Data disimpan baik secara lokal di perangkat Anda atau di Google Sheet dalam Google Drive pribadi Anda, di mana Anda memiliki kendali penuh.</p>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">5. Sangkalan dan Batasan Tanggung Jawab</h3>
-        <ul class="list-disc list-inside mb-4 space-y-2">
-            <li><strong>Layanan "Apa Adanya":</strong> Layanan ini disediakan "SEBAGAIMANA ADANYA" dan "SEBAGAIMANA TERSEDIA" tanpa jaminan apa pun, baik tersurat maupun tersirat. Kami tidak menjamin bahwa layanan akan tidak terganggu atau bebas dari kesalahan.</li>
-            <li><strong>Tanpa Jaminan:</strong> Kami tidak memberikan jaminan dan menolak semua tanggung jawab dan kewajiban atas kelengkapan, keakuratan, ketersediaan, ketepatan waktu, keamanan, atau keandalan Layanan atau konten apa pun di dalamnya.</li>
-            <li><strong>Batasan Tanggung Jawab:</strong> Dalam keadaan apa pun kami tidak akan bertanggung jawab atas kerusakan tidak langsung, insidental, khusus, konsekuensial, atau hukuman, termasuk namun tidak terbatas pada, kehilangan keuntungan, data, penggunaan, nama baik, atau kerugian tidak berwujud lainnya, yang diakibatkan dari akses Anda ke atau penggunaan atau ketidakmampuan untuk mengakses atau menggunakan Layanan.</li>
-        </ul>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">6. Penghentian</h3>
-        <p class="mb-4">Anda dapat berhenti menggunakan Layanan kapan saja. Jika Anda ingin menghentikan akun Anda, Anda dapat memutuskan sambungan aplikasi dari pengaturan akun Google Anda dan menghapus data terkait dari perangkat Anda dan Google Drive.</p>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">7. Perubahan pada Ketentuan</h3>
-        <p class="mb-4">Kami berhak, atas kebijakan kami sendiri, untuk mengubah atau mengganti Ketentuan ini kapan saja. Kami akan memberikan pemberitahuan tentang perubahan apa pun dengan memposting Ketentuan baru di dalam aplikasi. Penggunaan Layanan oleh Anda secara berkelanjutan setelah perubahan tersebut merupakan penerimaan Anda terhadap Ketentuan yang baru.</p>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">8. Hukum yang Mengatur</h3>
-        <p class="mb-4">Ketentuan ini akan diatur dan ditafsirkan sesuai dengan hukum negara Indonesia, tanpa memperhatikan pertentangan ketentuan hukumnya.</p>
-
-        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">9. Hubungi Kami</h3>
-        <p class="mb-4">Jika Anda memiliki pertanyaan tentang Ketentuan ini, silakan hubungi kami di dev.arstory@gmail.com.</p>
-    `;
 
     // --- RENDER FUNCTION ---
     function render() {
@@ -503,55 +407,6 @@
             };
         });
     }
-
-    function showInfoModal(title, content) {
-        const existingModal = document.getElementById('info-modal');
-        if (existingModal) existingModal.parentElement.remove();
-        
-        const modalContainer = document.createElement('div');
-        modalContainer.innerHTML = templates.infoModal(title, content);
-        document.body.appendChild(modalContainer);
-
-        const cleanup = () => {
-            if (document.body.contains(modalContainer)) {
-                document.body.removeChild(modalContainer);
-            }
-            // Clear the hash from the URL without reloading the page
-            if (window.location.hash) {
-                history.pushState("", document.title, window.location.pathname + window.location.search);
-            }
-        };
-
-        document.getElementById('info-modal-close-btn').onclick = cleanup;
-        document.getElementById('info-modal-ok-btn').onclick = cleanup;
-        modalContainer.querySelector('#info-modal').onclick = (e) => {
-             if (e.target === e.currentTarget) {
-                cleanup();
-            }
-        };
-    }
-
-    // --- HASH ROUTING FOR MODALS ---
-    function handleHashChange() {
-        const hash = window.location.hash;
-        const existingModal = document.getElementById('info-modal');
-
-        switch (hash) {
-            case '#terms':
-                showInfoModal('Ketentuan Layanan', termsOfServiceContent);
-                break;
-            case '#privacy':
-                showInfoModal('Kebijakan Privasi', privacyPolicyContent);
-                break;
-            default:
-                // If there's a modal open but the hash doesn't match, close it.
-                if (existingModal) {
-                    existingModal.parentElement.remove();
-                }
-                break;
-        }
-    }
-
 
     // --- SCREEN SPECIFIC RENDER LOGIC ---
     function renderStudentInputRows() {
@@ -1105,11 +960,9 @@
     
     // --- INITIALIZATION ---
     async function main() {
-        window.addEventListener('hashchange', handleHashChange);
         loadStateFromLocal();
         render(); 
         await initializeApis();
-        handleHashChange(); // Handle initial hash on page load
     }
     
     main();
