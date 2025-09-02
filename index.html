@@ -7,6 +7,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#4285F4">
     <meta name="description" content="Aplikasi PWA untuk mencatat absensi siswa secara online, terintegrasi dengan Google Sheets." />
+    <!-- TODO: Ganti content di bawah ini dengan kode verifikasi dari Google Search Console -->
+    <meta name="google-site-verification" content="google-site-verification=h6Nuc31yX3QNTvvRdCU_yIMxFtULcSPrsHPULY04wM8" />
     <title>Absensi Online Siswa</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
@@ -148,8 +150,8 @@
                     </div>
                     <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.spreadsheetId ? 'Tersinkronisasi dengan Google Sheets.' : ''}</p>
                     <div class="mt-6 text-xs text-slate-500 text-center">
-                        <a href="/terms.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</a> &
-                        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a>
+                        <a href="./terms.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</a> &
+                        <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a>
                     </div>
                 </div>
             </div>`,
