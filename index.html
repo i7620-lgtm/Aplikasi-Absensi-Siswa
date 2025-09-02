@@ -50,8 +50,8 @@
         }
     </style>
 </head>
-<body class="bg-slate-100">
-    <div id="root">
+<body class="bg-slate-100 flex flex-col min-h-screen">
+    <div id="root" class="flex-grow">
         <!-- Initial Loader / Saving Loader -->
         <div id="loader-wrapper" style="display: flex;">
             <div class="loader"></div>
@@ -63,6 +63,11 @@
             <!-- All screen templates will be injected here by JavaScript -->
         </div>
     </div>
+
+    <footer class="text-center py-4 px-4 text-xs text-slate-500">
+        <a href="./terms.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</a> &
+        <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a>
+    </footer>
 
 <script type="module">
     // --- CONFIGURATION ---
@@ -148,10 +153,6 @@
                          <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Rekap Absensi Siswa</button>
                     </div>
                     <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.spreadsheetId ? 'Tersinkronisasi dengan Google Sheets.' : ''}</p>
-                    <div class="mt-6 text-xs text-slate-500 text-center">
-                        <a href="./terms.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</a> &
-                        <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a>
-                    </div>
                 </div>
             </div>`,
         addStudents: (className) => `
