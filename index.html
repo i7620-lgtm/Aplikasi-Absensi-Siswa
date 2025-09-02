@@ -85,6 +85,7 @@
         savedLogs: [], // historical attendance logs
         historyClassFilter: null, // to filter history view by class
         newStudents: [''], // for add-students screen
+        recapSortOrder: 'total', // 'total' or 'absen'
     };
 
     // --- DOM ELEMENTS ---
@@ -143,11 +144,12 @@
                     <div class="mt-6 space-y-3">
                          <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Mulai Absensi</button>
                          <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Riwayat Kelas Terpilih</button>
+                         <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Rekap Absensi Siswa</button>
                     </div>
                     <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.spreadsheetId ? 'Tersinkronisasi dengan Google Sheets.' : ''}</p>
                     <div class="mt-6 text-xs text-slate-500 text-center">
-                        <button id="terms-of-service-link" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</button> &
-                        <button id="privacy-policy-link" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</button>
+                        <a href="#terms" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</a> &
+                        <a href="#privacy" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a>
                     </div>
                 </div>
             </div>`,
@@ -235,6 +237,21 @@
                     <div id="data-container" class="space-y-6"></div>
                  </div>
             </div>`,
+        recap: () => `
+             <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
+                 <div class="bg-white p-8 rounded-2xl shadow-lg">
+                     <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
+                        <h1 class="text-2xl font-bold text-slate-800">Rekapitulasi Absensi Siswa</h1>
+                        <button id="recap-back-to-start-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
+                    </div>
+                    <div class="mb-4 flex items-center gap-2">
+                        <label class="text-sm font-medium text-slate-600">Urutkan:</label>
+                        <button id="sort-by-total-btn" class="${state.recapSortOrder === 'total' ? 'bg-blue-500 text-white' : 'bg-white text-blue-700 border border-blue-500 hover:bg-blue-50'} font-semibold py-1 px-3 rounded-lg text-sm transition">Total Terbanyak</button>
+                        <button id="sort-by-absen-btn" class="${state.recapSortOrder === 'absen' ? 'bg-blue-500 text-white' : 'bg-white text-blue-700 border border-blue-500 hover:bg-blue-50'} font-semibold py-1 px-3 rounded-lg text-sm transition">No. Absen</button>
+                    </div>
+                    <div id="recap-container" class="overflow-x-auto"></div>
+                 </div>
+            </div>`,
         confirmation: (message) => `
             <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                  <div class="bg-white p-8 rounded-2xl shadow-lg max-w-sm w-full text-center animate-fade-in">
@@ -262,31 +279,86 @@
     };
 
     const privacyPolicyContent = `
-        <h3 class="text-lg font-semibold text-slate-700 mb-2">Penyimpanan Data Lokal</h3>
-        <p class="mb-4">Aplikasi ini dirancang untuk berfungsi secara offline. Semua data absensi dan daftar siswa yang Anda masukkan disimpan langsung di dalam penyimpanan lokal browser di perangkat Anda. Data ini tetap ada bahkan setelah Anda menutup browser, memungkinkan Anda untuk melanjutkan pekerjaan Anda kapan saja tanpa koneksi internet.</p>
-        <h3 class="text-lg font-semibold text-slate-700 mb-2">Cadangan dan Sinkronisasi Opsional dengan Google</h3>
-        <p class="mb-4">Kami menyediakan fitur opsional untuk login dengan akun Google Anda. Jika Anda memilih untuk login, aplikasi akan meminta izin untuk mengakses Google Drive dan Google Sheets Anda. Izin ini HANYA digunakan untuk tujuan berikut:</p>
-        <ul class="list-disc list-inside mb-4 space-y-1">
-            <li>Membuat satu file Google Sheet dengan nama "${SPREADSHEET_TITLE}" di Google Drive Anda sebagai lokasi cadangan.</li>
-            <li>Membaca dan menulis data absensi dan siswa ke file tersebut untuk tujuan sinkronisasi.</li>
-            <li>Mengakses informasi profil dasar Anda (nama, email, foto) untuk ditampilkan di dalam aplikasi.</li>
+        <p class="mb-4"><strong>Tanggal Efektif: 23 Mei 2024</strong></p>
+        <p class="mb-4">Aplikasi Absensi Siswa ("kami") berkomitmen untuk melindungi privasi Anda. Kebijakan Privasi ini menjelaskan bagaimana kami mengumpulkan, menggunakan, mengungkapkan, dan menjaga informasi Anda saat Anda menggunakan aplikasi kami ("Layanan").</p>
+        
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Informasi yang Kami Kumpulkan</h3>
+        <p class="mb-4">Kami mengumpulkan jenis informasi berikut:</p>
+        <ul class="list-disc list-inside mb-4 space-y-2">
+            <li><strong>Informasi Profil Pengguna:</strong> Saat Anda memilih untuk masuk dengan akun Google Anda, kami mengumpulkan nama, alamat email, dan foto profil Anda. Informasi ini digunakan semata-mata untuk mengidentifikasi Anda di dalam aplikasi dan tidak dibagikan dengan pihak ketiga mana pun.</li>
+            <li><strong>Data Aplikasi:</strong> Semua data yang Anda masukkan ke dalam aplikasi, termasuk nama siswa, daftar kelas, dan catatan kehadiran, akan disimpan. Data ini penting untuk fungsionalitas inti aplikasi.</li>
         </ul>
-        <p class="mb-4">Kami tidak menyimpan data Anda di server kami sendiri. Keamanan data Anda bergantung pada keamanan perangkat dan akun Google Anda. Kami tidak membagikan informasi pribadi atau data absensi Anda kepada pihak ketiga manapun.</p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Bagaimana Kami Menggunakan Informasi Anda</h3>
+        <p class="mb-4">Kami menggunakan informasi yang kami kumpulkan untuk:</p>
+        <ul class="list-disc list-inside mb-4 space-y-2">
+            <li><strong>Menyediakan dan memelihara Layanan:</strong> Data Anda digunakan untuk mengoperasikan aplikasi, memungkinkan Anda mengelola daftar siswa dan melacak kehadiran.</li>
+            <li><strong>Mengaktifkan pencadangan dan sinkronisasi data:</strong> Jika Anda masuk dengan Google, aplikasi akan membuat Google Sheet di Google Drive pribadi Anda untuk mencadangkan dan menyinkronkan data Anda. Ini memungkinkan Anda mengakses data Anda di berbagai perangkat dan memulihkannya jika Anda membersihkan data browser Anda. Aplikasi hanya mengakses file spesifik ini dan tidak mengakses file lain di Google Drive Anda.</li>
+        </ul>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Penyimpanan dan Keamanan Data</h3>
+        <ul class="list-disc list-inside mb-4 space-y-2">
+            <li><strong>Penyimpanan Lokal:</strong> Secara default, semua data aplikasi disimpan secara lokal di perangkat Anda dalam penyimpanan browser web Anda. Data ini bersifat pribadi bagi Anda dan tidak dikirimkan ke server kami.</li>
+            <li><strong>Google Drive dan Google Sheets:</strong> Saat Anda menghubungkan akun Google Anda, sebuah spreadsheet bernama "${SPREADSHEET_TITLE}" akan dibuat di Google Drive Anda. Semua data siswa dan kehadiran Anda disimpan di sheet ini. Anda memiliki kontrol penuh atas file ini, termasuk kemampuan untuk melihat, mengedit, atau menghapusnya kapan saja. Kami tidak memiliki akses ke Google Drive Anda atau file ini.</li>
+        </ul>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Berbagi Data</h3>
+        <p class="mb-4">Kami tidak membagikan, menjual, atau menyewakan informasi pribadi atau data aplikasi Anda kepada pihak ketiga mana pun untuk tujuan apa pun.</p>
+        
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Hak Data Anda</h3>
+        <ul class="list-disc list-inside mb-4 space-y-2">
+            <li><strong>Akses dan Koreksi:</strong> Anda dapat mengakses dan mengubah data Anda kapan saja melalui antarmuka aplikasi.</li>
+            <li><strong>Penghapusan Data:</strong> Anda dapat menghapus data Anda dengan membersihkan cache dan data situs browser Anda. Jika Anda menggunakan fitur sinkronisasi Google, Anda juga dapat menghapus spreadsheet dari Google Drive Anda untuk menghapus cadangan cloud Anda secara permanen.</li>
+        </ul>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Privasi Anak</h3>
+        <p class="mb-4">Layanan ini tidak ditujukan untuk digunakan oleh individu di bawah usia 13 tahun. Kami tidak dengan sengaja mengumpulkan informasi pribadi dari anak-anak di bawah 13 tahun.</p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Perubahan pada Kebijakan Privasi Ini</h3>
+        <p class="mb-4">Kami dapat memperbarui Kebijakan Privasi ini dari waktu ke waktu. Kami akan memberitahu Anda tentang perubahan apa pun dengan memposting Kebijakan Privasi baru di dalam aplikasi. Anda disarankan untuk meninjau Kebijakan Privasi ini secara berkala untuk setiap perubahan.</p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">Hubungi Kami</h3>
+        <p class="mb-4">Jika Anda memiliki pertanyaan tentang Kebijakan Privasi ini, silakan hubungi kami di dev.arstory@gmail.com.</p>
     `;
 
     const termsOfServiceContent = `
-        <h3 class="text-lg font-semibold text-slate-700 mb-2">Penerimaan Ketentuan</h3>
-        <p class="mb-4">Dengan menggunakan aplikasi Absensi Online Siswa ("Layanan"), Anda setuju untuk terikat oleh Ketentuan Layanan ini. Jika Anda tidak setuju dengan ketentuan ini, mohon untuk tidak menggunakan layanan ini.</p>
-        <h3 class="text-lg font-semibold text-slate-700 mb-2">Deskripsi Layanan</h3>
-        <p class="mb-4">Layanan ini adalah alat bantu untuk mencatat absensi siswa yang menyimpan data secara lokal di perangkat Anda. Layanan ini juga menyediakan fitur opsional untuk mencadangkan dan menyinkronkan data Anda ke dalam file Google Sheet pribadi di akun Google Anda.</p>
-        <h3 class="text-lg font-semibold text-slate-700 mb-2">Tanggung Jawab Pengguna</h3>
-        <ul class="list-disc list-inside mb-4 space-y-1">
-            <li>Anda bertanggung jawab atas keamanan perangkat tempat data disimpan.</li>
-            <li>Jika menggunakan fitur sinkronisasi, Anda bertanggung jawab penuh atas keamanan akun Google Anda.</li>
-            <li>Anda bertanggung jawab atas keakuratan data yang Anda masukkan ke dalam aplikasi.</li>
+        <p class="mb-4"><strong>Tanggal Efektif: 23 Mei 2024</strong></p>
+        <p class="mb-4">Harap baca Ketentuan Layanan ("Ketentuan") ini dengan saksama sebelum menggunakan aplikasi Aplikasi Absensi Siswa ("Layanan"). Akses dan penggunaan Layanan oleh Anda bergantung pada penerimaan dan kepatuhan Anda terhadap Ketentuan ini. Ketentuan ini berlaku untuk semua pengunjung, pengguna, dan pihak lain yang mengakses atau menggunakan Layanan.</p>
+        
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">1. Penerimaan Ketentuan</h3>
+        <p class="mb-4">Dengan mengakses atau menggunakan Layanan, Anda setuju untuk terikat oleh Ketentuan ini. Jika Anda tidak setuju dengan bagian mana pun dari ketentuan ini, maka Anda tidak boleh mengakses Layanan.</p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">2. Deskripsi Layanan</h3>
+        <p class="mb-4">Layanan ini adalah alat pelacak kehadiran siswa yang dirancang untuk membantu guru dan administrator mengelola catatan kehadiran. Ini berfungsi secara luring dengan menyimpan data secara lokal di perangkat Anda dan menawarkan fitur opsional untuk menyinkronkan data dengan Google Sheet di akun Google Drive pribadi Anda.</p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">3. Tanggung Jawab Pengguna</h3>
+        <ul class="list-disc list-inside mb-4 space-y-2">
+            <li><strong>Keamanan Akun:</strong> Jika Anda memilih untuk menghubungkan akun Google Anda, Anda bertanggung jawab untuk menjaga keamanan akun Anda dan untuk semua aktivitas yang terjadi di bawah akun tersebut.</li>
+            <li><strong>Akurasi Data:</strong> Anda sepenuhnya bertanggung jawab atas keakuratan data yang Anda masukkan ke dalam Layanan.</li>
+            <li><strong>Kepatuhan terhadap Hukum:</strong> Anda setuju untuk menggunakan Layanan sesuai dengan semua hukum lokal, nasional, dan internasional yang berlaku, termasuk undang-undang privasi data (misalnya, GDPR, FERPA) yang relevan dengan data siswa yang Anda kelola.</li>
         </ul>
-        <h3 class="text-lg font-semibold text-slate-700 mb-2">Batasan Tanggung Jawab</h3>
-        <p class="mb-4">Layanan ini disediakan "sebagaimana adanya". Pengembang tidak bertanggung jawab atas kehilangan data atau kerusakan apa pun yang timbul dari penggunaan aplikasi ini, baik data yang disimpan secara lokal maupun yang disinkronkan ke Google. Cadangkan data penting Anda secara teratur.</p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">4. Kepemilikan dan Penyimpanan Data</h3>
+        <p class="mb-4">Anda memegang kepemilikan penuh atas semua data yang Anda masukkan ke dalam Layanan. Kami tidak mengklaim hak kepemilikan apa pun atas data Anda. Data disimpan baik secara lokal di perangkat Anda atau di Google Sheet dalam Google Drive pribadi Anda, di mana Anda memiliki kendali penuh.</p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">5. Sangkalan dan Batasan Tanggung Jawab</h3>
+        <ul class="list-disc list-inside mb-4 space-y-2">
+            <li><strong>Layanan "Apa Adanya":</strong> Layanan ini disediakan "SEBAGAIMANA ADANYA" dan "SEBAGAIMANA TERSEDIA" tanpa jaminan apa pun, baik tersurat maupun tersirat. Kami tidak menjamin bahwa layanan akan tidak terganggu atau bebas dari kesalahan.</li>
+            <li><strong>Tanpa Jaminan:</strong> Kami tidak memberikan jaminan dan menolak semua tanggung jawab dan kewajiban atas kelengkapan, keakuratan, ketersediaan, ketepatan waktu, keamanan, atau keandalan Layanan atau konten apa pun di dalamnya.</li>
+            <li><strong>Batasan Tanggung Jawab:</strong> Dalam keadaan apa pun kami tidak akan bertanggung jawab atas kerusakan tidak langsung, insidental, khusus, konsekuensial, atau hukuman, termasuk namun tidak terbatas pada, kehilangan keuntungan, data, penggunaan, nama baik, atau kerugian tidak berwujud lainnya, yang diakibatkan dari akses Anda ke atau penggunaan atau ketidakmampuan untuk mengakses atau menggunakan Layanan.</li>
+        </ul>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">6. Penghentian</h3>
+        <p class="mb-4">Anda dapat berhenti menggunakan Layanan kapan saja. Jika Anda ingin menghentikan akun Anda, Anda dapat memutuskan sambungan aplikasi dari pengaturan akun Google Anda dan menghapus data terkait dari perangkat Anda dan Google Drive.</p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">7. Perubahan pada Ketentuan</h3>
+        <p class="mb-4">Kami berhak, atas kebijakan kami sendiri, untuk mengubah atau mengganti Ketentuan ini kapan saja. Kami akan memberikan pemberitahuan tentang perubahan apa pun dengan memposting Ketentuan baru di dalam aplikasi. Penggunaan Layanan oleh Anda secara berkelanjutan setelah perubahan tersebut merupakan penerimaan Anda terhadap Ketentuan yang baru.</p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">8. Hukum yang Mengatur</h3>
+        <p class="mb-4">Ketentuan ini akan diatur dan ditafsirkan sesuai dengan hukum negara Indonesia, tanpa memperhatikan pertentangan ketentuan hukumnya.</p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4 mb-2">9. Hubungi Kami</h3>
+        <p class="mb-4">Jika Anda memiliki pertanyaan tentang Ketentuan ini, silakan hubungi kami di dev.arstory@gmail.com.</p>
     `;
 
     // --- RENDER FUNCTION ---
@@ -303,9 +375,8 @@
                 }
                 document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
                 document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(true));
+                document.getElementById('recapBtn').addEventListener('click', () => navigateTo('recap'));
                 document.getElementById('class-select').value = state.selectedClass || CLASSES[0];
-                document.getElementById('privacy-policy-link').addEventListener('click', () => showInfoModal('Kebijakan Privasi', privacyPolicyContent));
-                document.getElementById('terms-of-service-link').addEventListener('click', () => showInfoModal('Ketentuan Layanan', termsOfServiceContent));
                 updateLoginButtonState();
                 break;
             case 'add-students':
@@ -333,6 +404,19 @@
                 appContainer.innerHTML = templates.data();
                 renderDataScreen();
                 document.getElementById('data-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
+                break;
+            case 'recap':
+                appContainer.innerHTML = templates.recap();
+                renderRecapScreen();
+                document.getElementById('recap-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
+                document.getElementById('sort-by-total-btn').addEventListener('click', () => {
+                    state.recapSortOrder = 'total';
+                    navigateTo('recap');
+                });
+                document.getElementById('sort-by-absen-btn').addEventListener('click', () => {
+                    state.recapSortOrder = 'absen';
+                    navigateTo('recap');
+                });
                 break;
         }
 
@@ -429,8 +513,12 @@
         document.body.appendChild(modalContainer);
 
         const cleanup = () => {
-            if(document.body.contains(modalContainer)){
+            if (document.body.contains(modalContainer)) {
                 document.body.removeChild(modalContainer);
+            }
+            // Clear the hash from the URL without reloading the page
+            if (window.location.hash) {
+                history.pushState("", document.title, window.location.pathname + window.location.search);
             }
         };
 
@@ -442,6 +530,28 @@
             }
         };
     }
+
+    // --- HASH ROUTING FOR MODALS ---
+    function handleHashChange() {
+        const hash = window.location.hash;
+        const existingModal = document.getElementById('info-modal');
+
+        switch (hash) {
+            case '#terms':
+                showInfoModal('Ketentuan Layanan', termsOfServiceContent);
+                break;
+            case '#privacy':
+                showInfoModal('Kebijakan Privasi', privacyPolicyContent);
+                break;
+            default:
+                // If there's a modal open but the hash doesn't match, close it.
+                if (existingModal) {
+                    existingModal.parentElement.remove();
+                }
+                break;
+        }
+    }
+
 
     // --- SCREEN SPECIFIC RENDER LOGIC ---
     function renderStudentInputRows() {
@@ -555,6 +665,107 @@
             }).join('');
     }
 
+    function renderRecapScreen() {
+        const container = document.getElementById('recap-container');
+
+        if (!state.savedLogs || state.savedLogs.length === 0) {
+            container.innerHTML = `<p class="text-center text-slate-500">Belum ada data absensi untuk ditampilkan.</p>`;
+            return;
+        }
+
+        const studentToClassMap = {};
+        for (const className in state.studentsByClass) {
+            state.studentsByClass[className].forEach(studentName => {
+                studentToClassMap[studentName] = className;
+            });
+        }
+
+        const recapData = {};
+        state.savedLogs.forEach(log => {
+            Object.entries(log.attendance).forEach(([studentName, status]) => {
+                if (status !== 'H') {
+                    if (!recapData[studentName]) {
+                        recapData[studentName] = { S: 0, I: 0, A: 0 };
+                    }
+                    if (recapData[studentName][status] !== undefined) {
+                        recapData[studentName][status]++;
+                    }
+                }
+            });
+        });
+
+        const recapArray = Object.keys(recapData).map(name => {
+            const data = recapData[name];
+            const total = data.S + data.I + data.A;
+            return {
+                name,
+                class: studentToClassMap[name] || 'N/A', // Add class info
+                ...data,
+                total
+            };
+        }).filter(item => item.total > 0); // Only show students with absences
+
+        if (recapArray.length === 0) {
+            container.innerHTML = `<p class="text-center text-slate-500">Tidak ada catatan ketidakhadiran yang ditemukan.</p>`;
+            return;
+        }
+
+        // Sort based on the state
+        recapArray.sort((a, b) => {
+            if (state.recapSortOrder === 'total') {
+                if (b.total !== a.total) {
+                    return b.total - a.total; // Primary sort: total descending
+                }
+                return a.name.localeCompare(b.name); // Secondary sort: name ascending
+            } else { // 'absen'
+                // Primary sort by class name
+                const classCompare = a.class.localeCompare(b.class);
+                if (classCompare !== 0) {
+                    return classCompare;
+                }
+                // Secondary sort by original index in student list
+                const classStudents = state.studentsByClass[a.class];
+                if (classStudents) {
+                    const indexA = classStudents.indexOf(a.name);
+                    const indexB = classStudents.indexOf(b.name);
+                    return indexA - indexB;
+                }
+                return 0; // Fallback if class not found (shouldn't happen)
+            }
+        });
+
+        const tableHtml = `
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="border-b bg-slate-50">
+                        <th class="p-3 text-sm font-semibold text-slate-600">No.</th>
+                        <th class="p-3 text-sm font-semibold text-slate-600">Nama Siswa</th>
+                        <th class="p-3 text-sm font-semibold text-slate-600">Kelas</th>
+                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Sakit (S)</th>
+                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Izin (I)</th>
+                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Alfa (A)</th>
+                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${recapArray.map((item, index) => `
+                        <tr class="border-b hover:bg-slate-50 transition">
+                            <td class="p-3 text-sm text-slate-500">${index + 1}</td>
+                            <td class="p-3 font-medium text-slate-800">${item.name}</td>
+                            <td class="p-3 text-sm text-slate-500">${item.class}</td>
+                            <td class="p-3 text-sm text-slate-700 text-center">${item.S}</td>
+                            <td class="p-3 text-sm text-slate-700 text-center">${item.I}</td>
+                            <td class="p-3 text-sm text-slate-700 text-center">${item.A}</td>
+                            <td class="p-3 text-sm font-bold text-slate-800 text-center">${item.total}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        
+        container.innerHTML = tableHtml;
+    }
+
     // --- GOOGLE API & AUTH LOGIC ---
     function displayAuthError(message, error = null) {
         const errorContainer = document.getElementById('auth-error-container');
@@ -621,6 +832,7 @@
                 displayAuthError(`Otentikasi Gagal: ${resp.error}`, new Error(resp.error_description || ''));
                 throw (resp);
             }
+            gapi.client.setToken(resp);
             showLoader('Login berhasil, menyinkronkan data...');
             const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                 headers: { 'Authorization': `Bearer ${gapi.client.getToken().access_token}` }
@@ -872,7 +1084,7 @@
 
         const reader = new FileReader();
         reader.onload = (e) => {
-            const data = new Uint8Array(e.target.result);
+            const data = new UintArray(e.target.result);
             const workbook = XLSX.read(data, {type: 'array'});
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
@@ -893,9 +1105,11 @@
     
     // --- INITIALIZATION ---
     async function main() {
+        window.addEventListener('hashchange', handleHashChange);
         loadStateFromLocal();
         render(); 
         await initializeApis();
+        handleHashChange(); // Handle initial hash on page load
     }
     
     main();
