@@ -525,32 +525,34 @@
     function renderRecapScreen() {
         const container = document.getElementById('recap-container');
 
-        if (!state.savedLogs || state.savedLogs.length === 0) {
-            container.innerHTML = `<p class="text-center text-slate-500">Belum ada data absensi untuk ditampilkan.</p>`;
+        if (!state.studentsByClass || Object.keys(state.studentsByClass).length === 0) {
+            container.innerHTML = `<p class="text-center text-slate-500">Belum ada data siswa untuk ditampilkan.</p>`;
             return;
         }
 
+        const recapData = {};
         const studentToClassMap = {};
+
+        // Initialize recapData for ALL students with 0 counts
         for (const className in state.studentsByClass) {
             state.studentsByClass[className].forEach(studentName => {
+                recapData[studentName] = { S: 0, I: 0, A: 0 };
                 studentToClassMap[studentName] = className;
             });
         }
 
-        const recapData = {};
+        // Populate the absence counts from savedLogs
         state.savedLogs.forEach(log => {
             Object.entries(log.attendance).forEach(([studentName, status]) => {
-                if (status !== 'H') {
-                    if (!recapData[studentName]) {
-                        recapData[studentName] = { S: 0, I: 0, A: 0 };
-                    }
+                if (recapData[studentName] && status !== 'H') {
                     if (recapData[studentName][status] !== undefined) {
                         recapData[studentName][status]++;
                     }
                 }
             });
         });
-
+        
+        // Create an array for rendering, including students with zero absences
         const recapArray = Object.keys(recapData).map(name => {
             const data = recapData[name];
             const total = data.S + data.I + data.A;
@@ -560,12 +562,7 @@
                 ...data,
                 total
             };
-        }).filter(item => item.total > 0); // Only show students with absences
-
-        if (recapArray.length === 0) {
-            container.innerHTML = `<p class="text-center text-slate-500">Tidak ada catatan ketidakhadiran yang ditemukan.</p>`;
-            return;
-        }
+        });
 
         // Sort based on the state
         recapArray.sort((a, b) => {
@@ -724,15 +721,24 @@
     }
     
     function handleSignoutClick() {
+        // First, always clear the local state to log the user out of the app's UI.
+        state.userProfile = null;
+        state.spreadsheetId = null;
+        saveStateToLocal();
+
+        // Then, attempt to revoke the Google token if it exists.
         const token = gapi.client.getToken();
         if (token !== null) {
             google.accounts.oauth2.revoke(token.access_token, () => {
+                // This callback runs after revocation.
                 gapi.client.setToken('');
-                state.userProfile = null;
-                state.spreadsheetId = null;
-                saveStateToLocal();
+                // The state is already cleared, just re-render.
                 navigateTo('setup');
             });
+        } else {
+            // If there's no token, we've already cleared the local state.
+            // Just re-render the UI.
+            navigateTo('setup');
         }
     }
     
