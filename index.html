@@ -53,10 +53,22 @@
 </head>
 <body class="bg-slate-100 flex flex-col min-h-screen">
     <!-- Static Fallback for Verification Bots -->
-    <div id="static-fallback" class="p-8 max-w-4xl mx-auto">
-        <h1 class="text-2xl font-bold text-slate-800 mb-2">Aplikasi Absensi Siswa</h1>
-        <p class="text-slate-600 mb-6">Aplikasi web progresif untuk mencatat absensi siswa secara online, terintegrasi dengan Google Sheets.</p>
-        <p class="text-sm font-medium text-slate-700">Dokumen Penting:</p>
+    <div id="static-fallback" class="p-8 max-w-4xl mx-auto prose prose-slate">
+        <h1 class="text-2xl font-bold text-slate-800 mb-2">Aplikasi Absensi Siswa Online</h1>
+        <p class="text-slate-600">Selamat datang di Aplikasi Absensi Siswa, sebuah Progressive Web Application (PWA) modern yang dirancang untuk memudahkan guru dalam mencatat dan mengelola absensi siswa secara efisien. Lupakan pencatatan manual yang memakan waktu, aplikasi kami menawarkan solusi digital yang cepat, intuitif, dan andal.</p>
+        
+        <h2 class="text-xl font-semibold text-slate-700 mt-4">Fitur Utama</h2>
+        <ul class="text-slate-600 list-disc list-inside space-y-1">
+            <li><strong>Bekerja Offline:</strong> Catat absensi kapan saja, di mana saja, bahkan tanpa koneksi internet. Data akan tersimpan aman di perangkat Anda.</li>
+            <li><strong>Sinkronisasi Google Sheets:</strong> Secara opsional, login dengan akun Google Anda untuk secara otomatis mencadangkan dan menyinkronkan semua data absensi ke Google Sheet pribadi Anda. Aman dan mudah diakses.</li>
+            <li><strong>Manajemen Kelas & Siswa:</strong> Tambahkan daftar kelas dan siswa dengan mudah, baik secara manual maupun dengan mengimpor dari file Excel.</li>
+            <li><strong>Pencatatan Cepat:</strong> Pilih kelas dan tanggal, lalu tandai status kehadiran setiap siswa (Hadir, Sakit, Izin, Alfa) dengan sekali klik.</li>
+            <li><strong>Riwayat & Rekapitulasi:</strong> Lihat riwayat absensi per tanggal atau per kelas, dan dapatkan rekapitulasi total ketidakhadiran setiap siswa untuk evaluasi.</li>
+        </ul>
+
+        <p class="text-slate-600 mt-4">Aplikasi ini dibangun untuk menjadi solusi praktis bagi para pendidik yang membutuhkan alat bantu modern dalam administrasi kelas. Untuk memulai, aplikasi akan dimuat secara interaktif.</p>
+
+        <p class="text-sm font-medium text-slate-700 mt-6">Dokumen Penting:</p>
         <ul class="text-sm list-disc list-inside mt-2 space-y-1">
             <li><a href="./privacy.html" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a></li>
             <li><a href="./terms.html" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</a></li>
@@ -165,6 +177,11 @@
                          <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Rekap Absensi Siswa</button>
                     </div>
                     <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.spreadsheetId ? 'Tersinkronisasi dengan Google Sheets.' : ''}</p>
+                    <div class="text-center text-xs text-slate-500 mt-6 border-t border-slate-200 pt-4">
+                        <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="hover:underline">Kebijakan Privasi</a>
+                        &bull;
+                        <a href="./terms.html" target="_blank" rel="noopener noreferrer" class="hover:underline">Ketentuan Layanan</a>
+                    </div>
                 </div>
             </div>`,
         addStudents: (className) => `
