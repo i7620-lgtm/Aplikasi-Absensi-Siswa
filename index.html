@@ -49,6 +49,25 @@
         .animate-fade-in {
             animation: fade-in 0.5s ease-out forwards;
         }
+
+        /* --- Custom Notification --- */
+        #notification {
+            position: fixed;
+            top: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            color: white;
+            z-index: 10002;
+            transition: top 0.5s ease-in-out;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #notification.show {
+            top: 20px;
+        }
+        #notification.error { background-color: #ef4444; }
+        #notification.success { background-color: #22c55e; }
     </style>
 </head>
 <body class="bg-slate-100 flex flex-col min-h-screen">
@@ -76,6 +95,9 @@
     </div>
     
     <div id="root" class="flex-grow hidden"> <!-- This is hidden for users until JS loads -->
+        <!-- Custom Notification element -->
+        <div id="notification"></div>
+
         <!-- Initial Loader / Saving Loader -->
         <div id="loader-wrapper" style="display: flex;">
             <div class="loader"></div>
@@ -97,7 +119,8 @@
     // --- CONFIGURATION ---
     const API_KEY = 'AIzaSyAoriBT31QhnPKAVH-t2-ANV7AiYdKjfsE';
     const CLIENT_ID = '584511730006-avkntpukucstgnf7c0otn3dt0lajtu43.apps.googleusercontent.com';
-    const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
+    const INITIAL_SCOPES = 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
+    const DRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets';
     const SPREADSHEET_TITLE = 'Data Absensi Siswa';
     const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5B", "6A", "6B"];
     
@@ -106,7 +129,8 @@
         userProfile: null,
         spreadsheetId: null,
         currentScreen: 'setup', // Default to setup screen
-        isGapiReady: false,
+        isGsiReady: false,
+        isGapiClientReady: false,
         selectedClass: '',
         selectedDate: new Date().toISOString().split('T')[0],
         students: [], // students for the current class
@@ -121,9 +145,7 @@
     // --- DOM ELEMENTS ---
     const appContainer = document.getElementById('app-container');
     const loaderWrapper = document.getElementById('loader-wrapper');
-
-    // --- GOOGLE API & AUTH VARS ---
-    let tokenClient;
+    const notificationEl = document.getElementById('notification');
 
     // --- TEMPLATES ---
     const templates = {
@@ -139,12 +161,18 @@
                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                                 </button>
                             </div>
-                            <div class="flex items-center gap-4 mb-8 p-4 bg-slate-50 rounded-lg">
+                            <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
                                 <img src="${state.userProfile.picture}" alt="User" class="w-12 h-12 rounded-full"/>
                                 <div>
                                     <p class="font-semibold text-slate-800">${state.userProfile.name}</p>
                                     <p class="text-sm text-slate-500">${state.userProfile.email}</p>
                                 </div>
+                            </div>
+                            <div class="mb-6">
+                                <button id="sync-data-btn" class="w-full flex items-center justify-center gap-2 bg-green-100 hover:bg-green-200 text-green-700 font-semibold py-3 px-4 rounded-lg transition" ${!state.isGapiClientReady ? 'disabled' : ''}>
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M4 4l16 16"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 4h-5v5M4 20h5v-5"></path></svg>
+                                    ${state.isGapiClientReady ? 'Sinkronkan Ulang Data' : 'Menyiapkan Sinkronisasi...'}
+                                </button>
                             </div>
                         `
                         : `
@@ -175,6 +203,7 @@
                          <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Mulai Absensi</button>
                          <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Riwayat Kelas Terpilih</button>
                          <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Rekap Absensi Siswa</button>
+                         <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Tambah/Kurangi Data Siswa</button>
                     </div>
                     <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.spreadsheetId ? 'Tersinkronisasi dengan Google Sheets.' : ''}</p>
                     <div class="text-center text-xs text-slate-500 mt-6 border-t border-slate-200 pt-4">
@@ -184,22 +213,27 @@
                     </div>
                 </div>
             </div>`,
-        addStudents: (className) => `
+        addStudents: (className) => {
+            const isEditing = (state.students && state.students.length > 0);
+            const message = isEditing
+                ? `Ubah daftar siswa untuk kelas <span class="font-semibold text-blue-600">${className}</span>. Hapus nama atau baris untuk mengurangi siswa.`
+                : `Data siswa untuk <span class="font-semibold text-blue-600">${className}</span> belum ada. Silakan tambahkan di bawah ini.`;
+            return `
             <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
                  <div class="bg-white p-8 rounded-2xl shadow-lg">
-                    <h1 class="text-2xl font-bold text-slate-800 mb-2">Tambah Data Siswa</h1>
-                    <p class="text-slate-500 mb-6">Data siswa untuk <span class="font-semibold text-blue-600">${className}</span> belum ada. Silakan tambahkan di bawah ini.</p>
+                    <h1 class="text-2xl font-bold text-slate-800 mb-2">Tambah/Kurangi Data Siswa</h1>
+                    <p class="text-slate-500 mb-6">${message}</p>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <!-- Manual Input -->
                         <div class="border-r-0 md:border-r md:pr-8 border-slate-200">
-                             <h2 class="text-lg font-semibold text-slate-700 mb-4">Tambah Manual</h2>
+                             <h2 class="text-lg font-semibold text-slate-700 mb-4">Daftar Siswa</h2>
                              <div id="manual-input-container" class="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2"></div>
                              <button id="add-student-row-btn" class="w-full text-sm bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold py-2 px-4 rounded-lg transition">+ Tambah Baris</button>
                         </div>
                         <!-- Excel Import -->
                         <div>
                             <h2 class="text-lg font-semibold text-slate-700 mb-4">Impor dari File</h2>
-                            <p class="text-sm text-slate-500 mb-4">Unggah file .xlsx dengan satu kolom berisi nama siswa.</p>
+                            <p class="text-sm text-slate-500 mb-4">Unggah file .xlsx untuk <span class="font-bold">menimpa</span> daftar saat ini.</p>
                             <button id="download-template-btn" class="w-full mb-3 text-sm bg-green-100 hover:bg-green-200 text-green-700 font-semibold py-2 px-4 rounded-lg transition">Unduh Template (.csv)</button>
                             <input type="file" id="excel-upload" class="hidden" accept=".xlsx, .xls, .csv"/>
                             <button id="import-excel-btn" class="w-full text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg transition">Pilih File Excel untuk Diimpor</button>
@@ -207,10 +241,11 @@
                     </div>
                     <div class="mt-8 pt-6 border-t border-slate-200 flex justify-end gap-4">
                         <button id="cancel-add-students-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Batal</button>
-                        <button id="save-students-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition">Simpan & Mulai Absensi</button>
+                        <button id="save-students-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition">Simpan Data Siswa</button>
                     </div>
                 </div>
-            </div>`,
+            </div>`;
+        },
         attendance: (className, date) => `
             <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
                  <div class="bg-white p-8 rounded-2xl shadow-lg">
@@ -304,13 +339,15 @@
             case 'setup':
                 appContainer.innerHTML = templates.setup();
                 if (state.userProfile) {
-                    document.getElementById('logoutBtn').addEventListener('click', handleSignoutClick);
+                    document.getElementById('logoutBtn').addEventListener('click', gapiService.signOut);
+                    document.getElementById('sync-data-btn').addEventListener('click', handleManualSync);
                 } else {
-                    document.getElementById('loginBtn').addEventListener('click', handleAuthClick);
+                    document.getElementById('loginBtn').addEventListener('click', gapiService.signIn);
                 }
                 document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
                 document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(true));
                 document.getElementById('recapBtn').addEventListener('click', () => navigateTo('recap'));
+                document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
                 document.getElementById('class-select').value = state.selectedClass || CLASSES[0];
                 updateLoginButtonState();
                 break;
@@ -378,6 +415,7 @@
             localStorage.setItem('attendanceApp', JSON.stringify(dataToSave));
         } catch (e) {
             console.error("Failed to save state to local storage:", e);
+            showNotification('Gagal menyimpan data ke perangkat.', 'error');
         }
     }
 
@@ -392,7 +430,6 @@
             }
         } catch (e) {
             console.error("Failed to load state from local storage:", e);
-            // If parsing fails, clear corrupted data
             localStorage.removeItem('attendanceApp');
         }
     }
@@ -413,10 +450,19 @@
         }, 300);
     }
     
+    function showNotification(message, type = 'success') {
+        notificationEl.textContent = message;
+        notificationEl.className = type === 'error' ? 'error' : 'success';
+        notificationEl.classList.add('show');
+        setTimeout(() => {
+            notificationEl.classList.remove('show');
+        }, 4000);
+    }
+
     function showConfirmation(message) {
         return new Promise(resolve => {
             const existingModal = document.getElementById('confirmation-modal');
-            if (existingModal) existingModal.parentElement.remove();
+            if (existingModal) existingModal.remove();
             
             const modalContainer = document.createElement('div');
             modalContainer.innerHTML = templates.confirmation(message);
@@ -437,6 +483,32 @@
                 resolve(false);
             };
         });
+    }
+
+    function updateLoginButtonState() {
+        const loginBtn = document.getElementById('loginBtn');
+        const loginBtnText = document.getElementById('loginBtnText');
+        if (loginBtn && loginBtnText) {
+            if (state.isGsiReady) {
+                loginBtn.disabled = false;
+                loginBtnText.textContent = 'Login & Cadangkan Data';
+            } else {
+                loginBtn.disabled = true;
+                loginBtnText.textContent = 'Opsi Login Gagal Dimuat';
+            }
+        }
+    }
+
+    function updateSetupStatus(message, success = false) {
+        const statusEl = document.getElementById('setup-status');
+        if (statusEl) statusEl.textContent = message;
+    }
+
+    function displayAuthError(message, error = null) {
+        const errorContainer = document.getElementById('auth-error-container');
+        if (!errorContainer) return;
+        errorContainer.classList.remove('hidden');
+        errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${message}</p><p class="text-slate-500 text-xs mt-2">${error ? error.message : ''}</p></div>`;
     }
 
     // --- SCREEN SPECIFIC RENDER LOGIC ---
@@ -562,7 +634,6 @@
         const recapData = {};
         const studentToClassMap = {};
 
-        // Initialize recapData for ALL students with 0 counts
         for (const className in state.studentsByClass) {
             state.studentsByClass[className].forEach(studentName => {
                 recapData[studentName] = { S: 0, I: 0, A: 0 };
@@ -570,7 +641,6 @@
             });
         }
 
-        // Populate the absence counts from savedLogs
         state.savedLogs.forEach(log => {
             Object.entries(log.attendance).forEach(([studentName, status]) => {
                 if (recapData[studentName] && status !== 'H') {
@@ -581,39 +651,21 @@
             });
         });
         
-        // Create an array for rendering, including students with zero absences
         const recapArray = Object.keys(recapData).map(name => {
             const data = recapData[name];
             const total = data.S + data.I + data.A;
-            return {
-                name,
-                class: studentToClassMap[name] || 'N/A', // Add class info
-                ...data,
-                total
-            };
+            return { name, class: studentToClassMap[name] || 'N/A', ...data, total };
         });
 
-        // Sort based on the state
         recapArray.sort((a, b) => {
             if (state.recapSortOrder === 'total') {
-                if (b.total !== a.total) {
-                    return b.total - a.total; // Primary sort: total descending
-                }
-                return a.name.localeCompare(b.name); // Secondary sort: name ascending
+                if (b.total !== a.total) return b.total - a.total;
+                return a.name.localeCompare(b.name);
             } else { // 'absen'
-                // Primary sort by class name
                 const classCompare = a.class.localeCompare(b.class);
-                if (classCompare !== 0) {
-                    return classCompare;
-                }
-                // Secondary sort by original index in student list
+                if (classCompare !== 0) return classCompare;
                 const classStudents = state.studentsByClass[a.class];
-                if (classStudents) {
-                    const indexA = classStudents.indexOf(a.name);
-                    const indexB = classStudents.indexOf(b.name);
-                    return indexA - indexB;
-                }
-                return 0; // Fallback if class not found (shouldn't happen)
+                return classStudents ? classStudents.indexOf(a.name) - classStudents.indexOf(b.name) : 0;
             }
         });
 
@@ -643,235 +695,264 @@
                         </tr>
                     `).join('')}
                 </tbody>
-            </table>
-        `;
-        
+            </table>`;
         container.innerHTML = tableHtml;
     }
 
-    // --- GOOGLE API & AUTH LOGIC ---
-    function displayAuthError(message, error = null) {
-        const errorContainer = document.getElementById('auth-error-container');
-        if (!errorContainer) return;
-        errorContainer.classList.remove('hidden');
-        errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${message}</p><p class="text-slate-500 text-xs mt-2">${error ? error.message : ''}</p></div>`;
-    }
+    // --- GOOGLE API SERVICE MODULE (ROBUST DECOUPLED IMPLEMENTATION) ---
+    const gapiService = (() => {
+        let gsiClient;
+        let gsiInitPromise = null;
+        let gapiClientInitPromise = null;
 
-    function loadScript(src) {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = src;
-            script.async = true;
-            script.defer = true;
-            script.onload = resolve;
-            script.onerror = () => reject(new Error(`Gagal memuat skrip: ${src}`));
-            document.head.appendChild(script);
-        });
-    }
-
-    async function initializeApis() {
-        try {
-            await loadScript('https://apis.google.com/js/api.js');
-            await new Promise((resolve, reject) => gapi.load('client', { callback: resolve, onerror: reject }));
-            await gapi.client.init({
-                apiKey: API_KEY,
-                discoveryDocs: [
-                    'https://www.googleapis.com/discovery/v1/apis/sheets/v4/rest',
-                    'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'
-                ],
+        const loadScript = (src) => {
+            return new Promise((resolve, reject) => {
+                if (document.querySelector(`script[src="${src}"]`)) return resolve();
+                const script = document.createElement('script');
+                script.src = src;
+                script.async = true;
+                script.defer = true;
+                script.onload = resolve;
+                script.onerror = () => reject(new Error(`Gagal memuat skrip: ${src}`));
+                document.head.appendChild(script);
             });
-
-            await loadScript('https://accounts.google.com/gsi/client');
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
-                callback: '',
-            });
-            state.isGapiReady = true;
-        } catch (err) {
-            console.error("API Initialization Failed:", err);
-            state.isGapiReady = false;
-        }
-        render(); // Re-render to update login button state
-    }
-    
-    function updateLoginButtonState() {
-        const loginBtn = document.getElementById('loginBtn');
-        const loginBtnText = document.getElementById('loginBtnText');
-        if (loginBtn && loginBtnText) {
-            if (state.isGapiReady) {
-                loginBtn.disabled = false;
-                loginBtnText.textContent = 'Login & Cadangkan Data';
-            } else {
-                loginBtn.disabled = true;
-                loginBtnText.textContent = 'Opsi Login Gagal Dimuat';
-            }
-        }
-    }
-
-    function handleAuthClick() {
-        tokenClient.callback = async (resp) => {
-            if (resp.error !== undefined) {
-                displayAuthError(`Otentikasi Gagal: ${resp.error}`, new Error(resp.error_description || ''));
-                throw (resp);
-            }
-            gapi.client.setToken(resp);
-            showLoader('Login berhasil, menyinkronkan data...');
-            const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                headers: { 'Authorization': `Bearer ${gapi.client.getToken().access_token}` }
-            });
-            state.userProfile = await userInfoResponse.json();
-            
-            await findOrCreateSpreadsheet();
-
-            const localDataStr = localStorage.getItem('attendanceApp');
-            const hasLocalData = localDataStr && (JSON.parse(localDataStr).savedLogs?.length > 0 || Object.keys(JSON.parse(localDataStr).studentsByClass || {}).length > 0);
-
-            if (hasLocalData) {
-                const confirmed = await showConfirmation("Anda memiliki data di perangkat ini. Apakah Anda ingin mengganti data di Google Sheets dengan data lokal ini?");
-                if (confirmed) {
-                    showLoader('Mengunggah data lokal ke Google Sheets...');
-                    await uploadLocalDataToSheets(JSON.parse(localDataStr));
-                }
-            }
-            
-            showLoader('Memuat data dari Google Sheets...');
-            await loadAllDataFromSheet();
-            saveStateToLocal();
-            hideLoader();
-            navigateTo('setup');
         };
         
-        if (gapi.client.getToken() === null) {
-            tokenClient.requestAccessToken({ prompt: 'consent' });
-        } else {
-            tokenClient.requestAccessToken({ prompt: '' });
-        }
-    }
-    
-    function handleSignoutClick() {
-        // First, always clear the local state to log the user out of the app's UI.
-        state.userProfile = null;
-        state.spreadsheetId = null;
-        saveStateToLocal();
-
-        // Then, attempt to revoke the Google token if it exists.
-        const token = gapi.client.getToken();
-        if (token !== null) {
-            google.accounts.oauth2.revoke(token.access_token, () => {
-                // This callback runs after revocation.
-                gapi.client.setToken('');
-                // The state is already cleared, just re-render.
-                navigateTo('setup');
-            });
-        } else {
-            // If there's no token, we've already cleared the local state.
-            // Just re-render the UI.
-            navigateTo('setup');
-        }
-    }
-    
-    async function uploadLocalDataToSheets(localData) {
-        const studentRows = Object.entries(localData.studentsByClass || {}).flatMap(([className, names]) => names.map(name => [className, name]));
-        const attendanceRows = (localData.savedLogs || []).flatMap(log => Object.entries(log.attendance).map(([name, status]) => [log.date, log.class, name, status]));
-
-        // Clear existing data
-        await gapi.client.sheets.spreadsheets.values.batchClear({
-            spreadsheetId: state.spreadsheetId,
-            resource: { ranges: ['Siswa!A2:B', 'Absensi!A2:D'] }
-        });
-
-        // Write new data if it exists
-        if (studentRows.length > 0) {
-            await gapi.client.sheets.spreadsheets.values.update({
-                spreadsheetId: state.spreadsheetId,
-                range: 'Siswa!A2', valueInputOption: 'USER_ENTERED',
-                resource: { values: studentRows }
-            });
-        }
-        if (attendanceRows.length > 0) {
-            await gapi.client.sheets.spreadsheets.values.update({
-                spreadsheetId: state.spreadsheetId,
-                range: 'Absensi!A2', valueInputOption: 'USER_ENTERED',
-                resource: { values: attendanceRows }
-            });
-        }
-    }
-
-    async function findOrCreateSpreadsheet() {
-        updateSetupStatus('Mencari spreadsheet...');
-        const response = await gapi.client.drive.files.list({
-            q: `mimeType='application/vnd.google-apps.spreadsheet' and name='${SPREADSHEET_TITLE}' and trashed=false`,
-            fields: 'files(id, name)',
-        });
-        
-        if (response.result.files && response.result.files.length > 0) {
-            state.spreadsheetId = response.result.files[0].id;
-        } else {
-            updateSetupStatus('Membuat spreadsheet baru...');
-            const createResponse = await gapi.client.sheets.spreadsheets.create({
-                properties: { title: SPREADSHEET_TITLE },
-                sheets: [{ properties: { title: 'Siswa' } }, { properties: { title: 'Absensi' } }]
-            });
-            state.spreadsheetId = createResponse.result.spreadsheetId;
-            await gapi.client.sheets.spreadsheets.values.batchUpdate({
-                spreadsheetId: state.spreadsheetId,
-                resource: {
-                    valueInputOption: 'USER_ENTERED',
-                    data: [
-                        { range: 'Siswa!A1:B1', values: [['Kelas', 'Nama Siswa']]},
-                        { range: 'Absensi!A1:D1', values: [['Tanggal', 'Kelas', 'Nama Siswa', 'Status']] }
-                    ]
+        // Phase 1: Initialize GSI (Login) on page load
+        const initializeGsi = () => {
+            if (gsiInitPromise) return gsiInitPromise;
+            gsiInitPromise = new Promise(async (resolve, reject) => {
+                try {
+                    await loadScript('https://accounts.google.com/gsi/client');
+                    gsiClient = google.accounts.oauth2.initTokenClient({
+                        client_id: CLIENT_ID,
+                        scope: INITIAL_SCOPES,
+                        callback: '', // Will be set dynamically in signIn
+                    });
+                    console.log('Google Sign-In (GSI) service initialized.');
+                    resolve(true);
+                } catch (err) {
+                    console.error("GSI Initialization Failed:", err);
+                    reject(new Error('Gagal memuat layanan login Google.'));
                 }
             });
-        }
-        saveStateToLocal();
-    }
-
-    async function loadAllDataFromSheet() {
-        if (!state.spreadsheetId) return;
-        updateSetupStatus('Memuat data dari Google Sheet...');
-        const response = await gapi.client.sheets.spreadsheets.values.batchGet({
-            spreadsheetId: state.spreadsheetId,
-            ranges: ['Absensi!A2:D', 'Siswa!A2:B']
-        });
-        const [attendanceResult, studentsResult] = response.result.valueRanges;
+            return gsiInitPromise;
+        };
         
-        if (attendanceResult.values) {
-             state.savedLogs = attendanceResult.values.map(([date, className, studentName, status]) => ({ date, class: className, attendance: { [studentName]: status } })).reduce((acc, log) => {
-                const existing = acc.find(item => item.date === log.date && item.class === log.class);
-                if (existing) { Object.assign(existing.attendance, log.attendance); } else { acc.push(log); }
-                return acc;
-            }, []);
-        } else { state.savedLogs = []; }
-        
-        state.studentsByClass = {};
-        if (studentsResult.values) {
-            studentsResult.values.forEach(([className, studentName]) => {
-                if (!state.studentsByClass[className]) state.studentsByClass[className] = [];
-                state.studentsByClass[className].push(studentName);
+        // Phase 2: Initialize GAPI Client (Drive/Sheets) *after* successful login
+        const initializeGapiClient = () => {
+            if (gapiClientInitPromise) return gapiClientInitPromise;
+            gapiClientInitPromise = new Promise(async (resolve, reject) => {
+                try {
+                    await loadScript('https://apis.google.com/js/api.js');
+                    await new Promise((res, rej) => gapi.load('client', { callback: res, onerror: rej }));
+                    
+                    await gapi.client.init({
+                        apiKey: API_KEY,
+                        discoveryDocs: [
+                            'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
+                            'https://sheets.googleapis.com/$discovery/rest?version=v4',
+                        ],
+                    });
+                    console.log('Google API Client (GAPI) for Drive/Sheets initialized.');
+                    resolve(true);
+                } catch (err) {
+                    console.error("GAPI Client Initialization Failed:", err);
+                    reject(new Error('Gagal memuat API Google Drive/Sheets.'));
+                }
             });
+            return gapiClientInitPromise;
         }
-        updateSetupStatus('Sinkronisasi selesai.', true);
-    }
-    
-    function updateSetupStatus(message, success = false) {
-        const statusEl = document.getElementById('setup-status');
-        if (statusEl) statusEl.textContent = message;
-    }
+
+        const ensureGapiClientInitialized = async () => {
+            if (!state.isGapiClientReady) {
+                 throw new Error("GAPI client belum siap.");
+            }
+            return gapiClientInitPromise;
+        }
+        
+        const signIn = async () => {
+            try {
+                await initializeGsi();
+                gsiClient.callback = async (tokenResponse) => {
+                    if (tokenResponse.error) {
+                        displayAuthError(`Otentikasi Gagal: ${tokenResponse.error}`, new Error(tokenResponse.error_description || ''));
+                        return;
+                    }
+                    showLoader('Login berhasil, menyiapkan API...');
+                    
+                    // Set token for future GAPI calls
+                    gapi.client.setToken(tokenResponse);
+
+                    // NOW, initialize the GAPI client
+                    try {
+                        await initializeGapiClient();
+                        state.isGapiClientReady = true;
+
+                        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                            headers: { 'Authorization': `Bearer ${tokenResponse.access_token}` }
+                        });
+                        state.userProfile = await userInfoResponse.json();
+                        
+                        await loadAllDataFromSheet(); // This will now work
+                        
+                        saveStateToLocal();
+                        hideLoader();
+                        navigateTo('setup');
+                    } catch (gapiError) {
+                        hideLoader();
+                        showNotification(gapiError.message, 'error');
+                        // Sign out to prevent inconsistent state
+                        signOut();
+                    }
+                };
+
+                if (gapi.client && gapi.client.getToken()) {
+                     gsiClient.requestAccessToken({ prompt: '' });
+                } else {
+                     gsiClient.requestAccessToken({ prompt: 'consent' });
+                }
+
+            } catch (error) {
+                showNotification("Gagal memulai proses login.", "error");
+            }
+        };
+
+        const signOut = () => {
+             const token = gapi.client && gapi.client.getToken();
+             if (token) {
+                 google.accounts.oauth2.revoke(token.access_token, () => {
+                     gapi.client.setToken('');
+                 });
+             }
+             // Reset state regardless of token revocation success
+             state.userProfile = null;
+             state.spreadsheetId = null;
+             state.isGapiClientReady = false;
+             gapiClientInitPromise = null; // Reset GAPI init promise
+             saveStateToLocal();
+             navigateTo('setup');
+        };
+
+        const hasDriveScopes = () => {
+            try {
+                const token = gapi.client.getToken();
+                return token ? google.accounts.oauth2.hasGrantedAllScopes(token, DRIVE_SCOPES) : false;
+            } catch (e) { return false; }
+        };
+        
+        const requestDriveScopes = (onSuccess) => {
+            showLoader('Meminta izin tambahan...');
+            const driveTokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID, scope: DRIVE_SCOPES,
+                callback: (resp) => {
+                    if (resp.error) {
+                        showNotification('Izin untuk Google Drive & Sheets diperlukan.', 'error');
+                        hideLoader();
+                        return;
+                    }
+                    gapi.client.setToken(resp);
+                    onSuccess();
+                },
+            });
+            driveTokenClient.requestAccessToken({ prompt: 'consent' });
+        };
+        
+        const ensureDriveAccess = async (callback) => {
+            await ensureGapiClientInitialized();
+            if (hasDriveScopes()) {
+                await callback();
+            } else {
+                await new Promise(resolve => requestDriveScopes(() => callback().then(resolve)));
+            }
+        };
+
+        const findOrCreateSpreadsheet = async () => {
+            await ensureDriveAccess(async () => {
+                if (state.spreadsheetId) return;
+                updateSetupStatus('Mencari spreadsheet...');
+                try {
+                    const response = await gapi.client.drive.files.list({
+                        q: `mimeType='application/vnd.google-apps.spreadsheet' and name='${SPREADSHEET_TITLE}' and trashed=false`,
+                        fields: 'files(id, name)',
+                    });
+                    
+                    if (response.result.files && response.result.files.length > 0) {
+                        state.spreadsheetId = response.result.files[0].id;
+                    } else {
+                        updateSetupStatus('Membuat spreadsheet baru...');
+                        const createResponse = await gapi.client.sheets.spreadsheets.create({
+                            properties: { title: SPREADSHEET_TITLE },
+                            sheets: [{ properties: { title: 'Siswa' } }, { properties: { title: 'Absensi' } }]
+                        });
+                        state.spreadsheetId = createResponse.result.spreadsheetId;
+                        await gapi.client.sheets.spreadsheets.values.batchUpdate({
+                            spreadsheetId: state.spreadsheetId,
+                            resource: { valueInputOption: 'USER_ENTERED', data: [
+                                { range: 'Siswa!A1:B1', values: [['Kelas', 'Nama Siswa']]},
+                                { range: 'Absensi!A1:D1', values: [['Tanggal', 'Kelas', 'Nama Siswa', 'Status']] }
+                            ]}
+                        });
+                    }
+                    saveStateToLocal();
+                } catch (error) {
+                    showNotification('Gagal mengakses Google Drive/Sheets.', 'error');
+                    signOut();
+                    throw error;
+                }
+            });
+        };
+
+        const loadAllDataFromSheet = async () => {
+            await ensureDriveAccess(async () => {
+                await findOrCreateSpreadsheet();
+                if (!state.spreadsheetId) return;
+
+                updateSetupStatus('Memuat data dari Google Sheet...');
+                try {
+                    const response = await gapi.client.sheets.spreadsheets.values.batchGet({
+                        spreadsheetId: state.spreadsheetId, ranges: ['Absensi!A2:D', 'Siswa!A2:B']
+                    });
+                    const [attendanceResult, studentsResult] = response.result.valueRanges;
+                    
+                    if (attendanceResult.values) {
+                         state.savedLogs = attendanceResult.values.map(([date, className, studentName, status]) => ({ date, class: className, attendance: { [studentName]: status } })).reduce((acc, log) => {
+                            const existing = acc.find(item => item.date === log.date && item.class === log.class);
+                            if (existing) { Object.assign(existing.attendance, log.attendance); } else { acc.push(log); }
+                            return acc;
+                        }, []);
+                    } else { state.savedLogs = []; }
+                    
+                    state.studentsByClass = {};
+                    if (studentsResult.values) {
+                        studentsResult.values.forEach(([className, studentName]) => {
+                            if (!state.studentsByClass[className]) state.studentsByClass[className] = [];
+                            state.studentsByClass[className].push(studentName);
+                        });
+                    }
+                    updateSetupStatus('Sinkronisasi selesai.', true);
+                    saveStateToLocal();
+                    showNotification('Data berhasil disinkronkan dari Google Sheets.');
+                } catch (error) {
+                     showNotification('Gagal memuat data dari Google Sheets.', 'error');
+                }
+            });
+        };
+
+        return { initializeGsi, signIn, signOut, findOrCreateSpreadsheet, loadAllDataFromSheet, ensureDriveAccess };
+    })();
+
 
     // --- EVENT HANDLERS & LOGIC ---
     
     async function handleStartAttendance() {
         state.selectedClass = document.getElementById('class-select').value;
         state.selectedDate = document.getElementById('date-input').value;
-
         state.students = state.studentsByClass[state.selectedClass] || [];
         
         const existingLog = state.savedLogs.find(log => log.class === state.selectedClass && log.date === state.selectedDate);
         if (existingLog) {
-            const message = `Absensi untuk kelas ${state.selectedClass} pada tanggal ${state.selectedDate} sudah ada. Apakah Anda ingin mengisinya kembali? Data lama akan ditimpa.`;
-            const confirmed = await showConfirmation(message);
+            const confirmed = await showConfirmation(`Absensi untuk kelas ${state.selectedClass} pada tanggal ini sudah ada. Ingin mengeditnya?`);
             if (!confirmed) return;
         }
 
@@ -879,70 +960,109 @@
             state.newStudents = [''];
             navigateTo('add-students');
         } else {
-            state.attendance = {};
-            if (existingLog) {
-                 state.attendance = existingLog.attendance;
-            } else {
+            state.attendance = existingLog ? { ...existingLog.attendance } : {};
+            if (!existingLog) {
                 state.students.forEach(s => state.attendance[s] = 'H');
             }
             navigateTo('attendance');
         }
     }
+    
+    function handleManageStudents() {
+        state.selectedClass = document.getElementById('class-select').value;
+        state.students = state.studentsByClass[state.selectedClass] || [];
+        
+        // Populate state.newStudents with a copy of existing students.
+        // If empty, start with one blank input for convenience.
+        state.newStudents = state.students.length > 0 ? [...state.students] : [''];
+        
+        navigateTo('add-students');
+    }
 
     async function handleSaveNewStudents() {
-        const newStudentNames = state.newStudents.map(s => s.trim()).filter(s => s);
-        if (newStudentNames.length === 0) return;
+        // Get the final list of students from the input fields.
+        const finalStudentList = state.newStudents.map(s => s.trim()).filter(s => s);
 
-        state.studentsByClass[state.selectedClass] = [...(state.studentsByClass[state.selectedClass] || []), ...newStudentNames].filter((v,i,a)=>a.indexOf(v)===i); // Add and dedupe
-        state.students = state.studentsByClass[state.selectedClass];
+        showLoader('Menyimpan data siswa...');
+        
+        // Update local state by replacing the student list for the class
+        state.studentsByClass[state.selectedClass] = finalStudentList;
         saveStateToLocal();
+        showNotification('Data siswa diperbarui di perangkat.');
 
-        if (state.spreadsheetId) {
-            showLoader('Menyimpan data siswa ke Google Sheets...');
+        if (state.userProfile) {
             try {
-                // simple append, assuming new students are not duplicates
-                const rows = newStudentNames.map(name => [state.selectedClass, name]);
-                await gapi.client.sheets.spreadsheets.values.append({
-                    spreadsheetId: state.spreadsheetId, range: 'Siswa!A:B',
-                    valueInputOption: 'USER_ENTERED', resource: { values: rows }
+                await gapiService.ensureDriveAccess(async () => {
+                    await gapiService.findOrCreateSpreadsheet();
+                    showLoader('Menyinkronkan data siswa ke Google Sheets...');
+                    
+                    // Fetch all students, filter out the ones from the current class, add the new ones, and rewrite the whole sheet.
+                    const allStudentsResponse = await gapi.client.sheets.spreadsheets.values.get({
+                        spreadsheetId: state.spreadsheetId,
+                        range: 'Siswa!A2:B'
+                    });
+                    const otherClassStudents = (allStudentsResponse.result.values || []).filter(row => row[0] !== state.selectedClass);
+                    const thisClassStudents = finalStudentList.map(name => [state.selectedClass, name]);
+                    const finalSheetData = [...otherClassStudents, ...thisClassStudents];
+                    
+                    // Clear and update the sheet
+                    await gapi.client.sheets.spreadsheets.values.clear({
+                        spreadsheetId: state.spreadsheetId,
+                        range: 'Siswa!A2:B'
+                    });
+
+                    if (finalSheetData.length > 0) {
+                        await gapi.client.sheets.spreadsheets.values.update({
+                            spreadsheetId: state.spreadsheetId,
+                            range: 'Siswa!A2',
+                            valueInputOption: 'USER_ENTERED',
+                            resource: { values: finalSheetData }
+                        });
+                    }
+                    
+                    showNotification('Data siswa berhasil disinkronkan.');
                 });
             } catch (e) {
-                alert('Gagal menyimpan ke Google Sheets, tapi data disimpan lokal.');
+                console.error('Failed to sync students:', e);
+                showNotification('Gagal sinkronisasi. Data aman di perangkat.', 'error');
             }
-            hideLoader();
         }
-
-        state.attendance = {};
-        state.students.forEach(s => state.attendance[s] = 'H');
-        navigateTo('attendance');
+        hideLoader();
+        navigateTo('setup');
     }
 
     async function handleSaveAttendance() {
-        const message = `Anda akan menyimpan data absensi untuk kelas ${state.selectedClass}. Lanjutkan?`;
-        const confirmed = await showConfirmation(message);
+        const confirmed = await showConfirmation(`Anda akan menyimpan data absensi untuk kelas ${state.selectedClass}. Lanjutkan?`);
         if (!confirmed) return;
 
-        showLoader('Menyimpan data...');
+        showLoader('Menyimpan ke perangkat...');
 
         const existingLogIndex = state.savedLogs.findIndex(log => log.class === state.selectedClass && log.date === state.selectedDate);
         const newLog = { date: state.selectedDate, class: state.selectedClass, attendance: { ...state.attendance }};
         if (existingLogIndex > -1) { state.savedLogs[existingLogIndex] = newLog; } else { state.savedLogs.push(newLog); }
         saveStateToLocal();
 
-        if (state.spreadsheetId) {
+        if (state.userProfile) {
             try {
-                const allAttendanceResponse = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: state.spreadsheetId, range: 'Absensi!A2:D' });
-                const otherAttendanceData = (allAttendanceResponse.result.values || []).filter(row => !(row[0] === state.selectedDate && row[1] === state.selectedClass));
-                const newRows = Object.entries(state.attendance).map(([studentName, status]) => [state.selectedDate, state.selectedClass, studentName, status]);
-                const finalData = [...otherAttendanceData, ...newRows];
-                
-                await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId: state.spreadsheetId, range: 'Absensi!A2:D' });
-                if (finalData.length > 0) {
-                    await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: state.spreadsheetId, range: 'Absensi!A2', valueInputOption: 'USER_ENTERED', resource: { values: finalData }});
-                }
+                await gapiService.ensureDriveAccess(async () => {
+                    await gapiService.findOrCreateSpreadsheet();
+                    showLoader('Menyinkronkan ke Google Sheets...');
+                    const allAttendanceResponse = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: state.spreadsheetId, range: 'Absensi!A2:D' });
+                    const otherAttendanceData = (allAttendanceResponse.result.values || []).filter(row => !(row[0] === state.selectedDate && row[1] === state.selectedClass));
+                    const newRows = Object.entries(state.attendance).map(([studentName, status]) => [state.selectedDate, state.selectedClass, studentName, status]);
+                    const finalData = [...otherAttendanceData, ...newRows];
+                    
+                    await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId: state.spreadsheetId, range: 'Absensi!A2:D' });
+                    if (finalData.length > 0) {
+                        await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: state.spreadsheetId, range: 'Absensi!A2', valueInputOption: 'USER_ENTERED', resource: { values: finalData }});
+                    }
+                });
             } catch (error) {
                 console.error('Failed to save attendance to sheet:', error);
-                alert(`Gagal sinkronisasi ke Google Sheets, tapi data sudah disimpan di perangkat ini.`);
+                showNotification('Gagal sinkronisasi. Data aman di perangkat.', 'error');
+                hideLoader();
+                navigateTo('success');
+                return;
             }
         }
         
@@ -950,12 +1070,36 @@
         navigateTo('success');
     }
     
-    function handleViewHistory(isClassSpecific = false) {
-        if (isClassSpecific) {
-            state.historyClassFilter = document.getElementById('class-select').value;
-        } else {
-            state.historyClassFilter = null;
+    async function handleManualSync() {
+        if (!state.userProfile) {
+            showNotification('Anda belum login dengan Google.', 'error');
+            return;
         }
+
+        const localData = JSON.parse(localStorage.getItem('attendanceApp') || '{}');
+        const hasLocalData = (localData.savedLogs?.length > 0 || Object.keys(localData.studentsByClass || {}).length > 0);
+        
+        showLoader('Menyiapkan sinkronisasi...');
+        
+        try {
+            if (hasLocalData) {
+                const confirmed = await showConfirmation("Anda memiliki data lokal. Apakah Anda ingin menimpanya dengan data dari Google Sheets (jika ada)?");
+                if (!confirmed) {
+                    hideLoader();
+                    return;
+                }
+            }
+            await gapiService.loadAllDataFromSheet();
+        } catch (error) {
+            showNotification('Gagal melakukan sinkronisasi.', 'error');
+        } finally {
+            hideLoader();
+            render();
+        }
+    }
+    
+    function handleViewHistory(isClassSpecific = false) {
+        state.historyClassFilter = isClassSpecific ? document.getElementById('class-select').value : null;
         navigateTo('data');
     }
 
@@ -976,34 +1120,52 @@
 
         const reader = new FileReader();
         reader.onload = (e) => {
-            const data = new UintArray(e.target.result);
-            const workbook = XLSX.read(data, {type: 'array'});
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-            
-            const studentNames = json.slice(1).map(row => row[0]).filter(name => typeof name === 'string' && name.trim() !== '');
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                const studentNames = json.slice(1).map(row => String(row[0] || '').trim()).filter(Boolean);
 
-            if (studentNames.length > 0) {
-                state.newStudents = studentNames;
-                renderStudentInputRows();
-                alert(`${studentNames.length} siswa berhasil diimpor.`);
-            } else {
-                alert('Tidak ada nama siswa yang ditemukan di file.');
+                if (studentNames.length > 0) {
+                    // Replace the current list with the imported one
+                    state.newStudents = studentNames;
+                    renderStudentInputRows();
+                    showNotification(`${studentNames.length} siswa berhasil diimpor & akan menggantikan daftar saat ini.`);
+                } else {
+                    showNotification('Tidak ada nama siswa yang ditemukan di file.', 'error');
+                }
+            } catch (error) {
+                showNotification('Gagal membaca file. Pastikan formatnya benar.', 'error');
+                console.error("Excel import error:", error);
             }
         };
         reader.readAsArrayBuffer(file);
+        event.target.value = ''; // Reset input
     }
     
     // --- INITIALIZATION ---
-    async function main() {
-        // Hide static content and show the dynamic app container for real users
+    function main() {
         document.getElementById('static-fallback').style.display = 'none';
         document.getElementById('root').classList.remove('hidden');
 
         loadStateFromLocal();
         render(); 
-        await initializeApis();
+        
+        gapiService.initializeGsi()
+            .then(() => {
+                state.isGsiReady = true;
+            })
+            .catch(error => {
+                state.isGsiReady = false;
+                showNotification(error.message || 'Gagal memuat layanan Google.', 'error');
+            })
+            .finally(() => {
+                if (state.currentScreen === 'setup') {
+                    render();
+                }
+            });
     }
     
     main();
