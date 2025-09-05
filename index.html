@@ -118,8 +118,7 @@
     // --- CONFIGURATION ---
     const API_KEY = 'AIzaSyAoriBT31QhnPKAVH-t2-ANV7AiYdKjfsE';
     const CLIENT_ID = '584511730006-avkntpukucstgnf7c0otn3dt0lajtu43.apps.googleusercontent.com';
-    const INITIAL_SCOPES = 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
-    const DRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets';
+    const SCOPES = 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets';
     const SPREADSHEET_TITLE = 'Data Absensi Siswa';
     const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5B", "6A", "6B"];
     
@@ -729,7 +728,7 @@
                     await loadScript('https://accounts.google.com/gsi/client');
                     gsiClient = google.accounts.oauth2.initTokenClient({
                         client_id: CLIENT_ID,
-                        scope: INITIAL_SCOPES,
+                        scope: SCOPES,
                         callback: '', // Will be set dynamically in signIn
                     });
                     console.log('Google Sign-In (GSI) service initialized.');
@@ -871,38 +870,11 @@
              saveStateToLocal();
              navigateTo('setup');
         };
-
-        const hasDriveScopes = () => {
-            try {
-                const token = gapi.client.getToken();
-                return token ? google.accounts.oauth2.hasGrantedAllScopes(token, DRIVE_SCOPES) : false;
-            } catch (e) { return false; }
-        };
-        
-        const requestDriveScopes = (onSuccess) => {
-            showLoader('Meminta izin tambahan...');
-            const driveTokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID, scope: DRIVE_SCOPES,
-                callback: (resp) => {
-                    hideLoader();
-                    if (resp.error) {
-                        showNotification('Izin untuk Google Drive & Sheets diperlukan.', 'error');
-                        return;
-                    }
-                    gapi.client.setToken(resp);
-                    onSuccess();
-                },
-            });
-            driveTokenClient.requestAccessToken({ prompt: 'consent' });
-        };
         
         const ensureDriveAccess = async (callback) => {
             await ensureGapiClientInitialized();
-            if (hasDriveScopes()) {
-                await callback();
-            } else {
-                await new Promise(resolve => requestDriveScopes(() => callback().then(resolve)));
-            }
+            // Since all scopes are requested on login, we can assume access is granted.
+            await callback();
         };
 
         const findOrCreateSpreadsheet = async () => {
