@@ -508,8 +508,12 @@
         const errorContainer = document.getElementById('auth-error-container');
         if (!errorContainer) return;
         errorContainer.classList.remove('hidden');
-        errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${message}</p><p class="text-slate-500 text-xs mt-2">${error ? error.message : ''}</p></div>`;
+        let details = error ? (error.message || (typeof error === 'string' ? error : '')) : '';
+        // Sanitize details to prevent HTML injection if error messages are weird.
+        details = details.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${message}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
     }
+
 
     // --- SCREEN SPECIFIC RENDER LOGIC ---
     function renderStudentInputRows() {
@@ -733,7 +737,7 @@
                     resolve(true);
                 } catch (err) {
                     console.error("GSI Initialization Failed:", err);
-                    reject(new Error('Gagal memuat layanan login Google.'));
+                    reject(new Error('Gagal memuat layanan login Google. Periksa koneksi internet dan coba lagi.'));
                 }
             });
             return gsiInitPromise;
@@ -775,45 +779,79 @@
             try {
                 await initializeGsi();
                 gsiClient.callback = async (tokenResponse) => {
+                    console.log('Token response received from Google:', tokenResponse);
                     if (tokenResponse.error) {
-                        displayAuthError(`Otentikasi Gagal: ${tokenResponse.error}`, new Error(tokenResponse.error_description || ''));
+                        console.error('Authentication failed in token response:', tokenResponse);
+                        let friendlyMessage = 'Proses otentikasi gagal.';
+                        let errorDetails = tokenResponse.error_description || 'Detail tidak tersedia.';
+
+                        if (tokenResponse.error === 'popup_closed_by_user' || tokenResponse.error === 'access_denied') {
+                            showNotification('Proses login dibatalkan oleh pengguna.', 'error');
+                            hideLoader();
+                            return;
+                        } else if (tokenResponse.error === 'idpiframe_initialization_failed') {
+                            friendlyMessage = 'Gagal memulai otentikasi.';
+                            errorDetails = 'Ini mungkin karena cookie pihak ketiga diblokir. Coba aktifkan atau gunakan jendela samaran (incognito).';
+                        } else if (tokenResponse.error_subtype === 'origin_mismatch' || tokenResponse.error === 'invalid_request') {
+                            friendlyMessage = 'Kesalahan Konfigurasi Aplikasi.';
+                            errorDetails = 'Pastikan URL aplikasi Anda (termasuk http/https dan port) telah ditambahkan ke "Authorized JavaScript origins" di Google Cloud Console untuk Client ID Anda.';
+                        } else {
+                            friendlyMessage = `Otentikasi Gagal: ${tokenResponse.error}`;
+                        }
+                        
+                        displayAuthError(friendlyMessage, new Error(errorDetails));
+                        hideLoader();
                         return;
                     }
-                    showLoader('Login berhasil, menyiapkan API...');
-                    
-                    // Set token for future GAPI calls
-                    gapi.client.setToken(tokenResponse);
-
-                    // NOW, initialize the GAPI client
+        
                     try {
+                        showLoader('Login berhasil, menyiapkan API...');
+                        console.log('Step 1: Setting GAPI token.');
+                        gapi.client.setToken(tokenResponse);
+        
+                        console.log('Step 2: Initializing GAPI client (for Drive/Sheets)...');
                         await initializeGapiClient();
                         state.isGapiClientReady = true;
-
+                        console.log('Step 2 SUCCESS: GAPI client ready.');
+        
+                        console.log('Step 3: Fetching user info...');
                         const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                             headers: { 'Authorization': `Bearer ${tokenResponse.access_token}` }
                         });
+                        if (!userInfoResponse.ok) {
+                            throw new Error(`Gagal mengambil info pengguna: ${userInfoResponse.statusText}`);
+                        }
                         state.userProfile = await userInfoResponse.json();
+                        console.log('Step 3 SUCCESS: User info fetched for', state.userProfile.email);
+        
+                        console.log('Step 4: Loading all data from Google Sheet...');
+                        await loadAllDataFromSheet();
+                        console.log('Step 4 SUCCESS: Data loaded from Sheet.');
                         
-                        await loadAllDataFromSheet(); // This will now work
-                        
+                        console.log('Step 5: Finalizing login and saving state.');
                         saveStateToLocal();
                         hideLoader();
                         navigateTo('setup');
-                    } catch (gapiError) {
+                        console.log('Login process complete.');
+        
+                    } catch (error) {
+                        console.error('A critical error occurred after receiving the token:', error);
                         hideLoader();
-                        showNotification(gapiError.message, 'error');
-                        // Sign out to prevent inconsistent state
-                        signOut();
+                        showNotification(error.message || 'Terjadi kesalahan saat sinkronisasi.', 'error');
+                        displayAuthError('Terjadi kesalahan setelah login berhasil.', error);
+                        signOut(); // Sign out to prevent an inconsistent state.
                     }
                 };
 
-                if (gapi.client && gapi.client.getToken()) {
-                     gsiClient.requestAccessToken({ prompt: '' });
-                } else {
-                     gsiClient.requestAccessToken({ prompt: 'consent' });
-                }
+                showLoader('Membuka jendela login Google...');
+                // Always prompt for consent when the user clicks the login button.
+                // This resolves the "gapi is not defined" error and simplifies the flow.
+                gsiClient.requestAccessToken({ prompt: 'consent' });
 
             } catch (error) {
+                console.error("Failed to initiate sign-in:", error);
+                hideLoader();
+                displayAuthError("Gagal memulai proses login.", error);
                 showNotification("Gagal memulai proses login.", "error");
             }
         };
@@ -846,9 +884,9 @@
             const driveTokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID, scope: DRIVE_SCOPES,
                 callback: (resp) => {
+                    hideLoader();
                     if (resp.error) {
                         showNotification('Izin untuk Google Drive & Sheets diperlukan.', 'error');
-                        hideLoader();
                         return;
                     }
                     gapi.client.setToken(resp);
@@ -1159,6 +1197,7 @@
             })
             .catch(error => {
                 state.isGsiReady = false;
+                displayAuthError('Gagal Memuat Layanan Login Google.', error);
                 showNotification(error.message || 'Gagal memuat layanan Google.', 'error');
             })
             .finally(() => {
