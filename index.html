@@ -78,7 +78,7 @@
         <h2 class="text-xl font-semibold text-slate-700 mt-4">Fitur Utama</h2>
         <ul class="text-slate-600 list-disc list-inside space-y-1">
             <li><strong>Bekerja Offline:</strong> Catat absensi kapan saja, di mana saja, bahkan tanpa koneksi internet. Data akan tersimpan aman di perangkat Anda.</li>
-            <li><strong>Sinkronisasi Google Sheets:</strong> Secara opsional, login dengan akun Google Anda untuk secara otomatis mencadangkan dan menyinkronkan semua data absensi ke Google Sheet pribadi Anda. Aman dan mudah diakses.</li>
+            <li><strong>Sinkronisasi Google Drive:</strong> Secara opsional, login dengan akun Google Anda untuk secara otomatis mencadangkan dan menyinkronkan semua data absensi ke sebuah file JSON pribadi di Google Drive Anda. Aman dan mudah diakses.</li>
             <li><strong>Manajemen Kelas & Siswa:</strong> Tambahkan daftar kelas dan siswa dengan mudah, baik secara manual maupun dengan mengimpor dari file Excel.</li>
             <li><strong>Pencatatan Cepat:</strong> Pilih kelas dan tanggal, lalu tandai status kehadiran setiap siswa (Hadir, Sakit, Izin, Alfa) dengan sekali klik.</li>
             <li><strong>Riwayat & Rekapitulasi:</strong> Lihat riwayat absensi per tanggal atau per kelas, dan dapatkan rekapitulasi total ketidakhadiran setiap siswa untuk evaluasi.</li>
@@ -118,14 +118,14 @@
     // --- CONFIGURATION ---
     const API_KEY = 'AIzaSyAoriBT31QhnPKAVH-t2-ANV7AiYdKjfsE';
     const CLIENT_ID = '584511730006-avkntpukucstgnf7c0otn3dt0lajtu43.apps.googleusercontent.com';
-    const SCOPES = 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets';
-    const SPREADSHEET_TITLE = 'Data Absensi Siswa';
+    const SCOPES = 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file';
+    const DATA_FILENAME = 'absensi_app_data.json';
     const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5B", "6A", "6B"];
     
     // --- APPLICATION STATE ---
     let state = {
         userProfile: null,
-        spreadsheetId: null,
+        fileId: null, // ID for the JSON data file in Google Drive
         currentScreen: 'setup', // Default to setup screen
         isGsiReady: false,
         isGapiClientReady: false,
@@ -177,7 +177,7 @@
                             <h1 class="text-xl font-bold text-slate-800 mb-4">Absensi Online Siswa</h1>
                             <div id="backup-notice" class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6 text-sm text-blue-800">
                                 <p class="font-semibold mb-2">Aplikasi ini bekerja offline!</p>
-                                <p class="mb-3">Data Anda disimpan di perangkat ini. Login dengan Google untuk mencadangkan dan menyinkronkan data Anda dengan aman di Google Sheets.</p>
+                                <p class="mb-3">Data Anda disimpan di perangkat ini. Login dengan Google untuk mencadangkan dan menyinkronkan data Anda dengan aman di Google Drive.</p>
                                 <button id="loginBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg w-full transition duration-300 flex items-center justify-center gap-2" disabled>
                                     <svg class="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.222,0-9.519-3.108-11.127-7.481l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,35.17,44,30.023,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>
                                     <span id="loginBtnText">Memuat Opsi Login...</span>
@@ -203,7 +203,7 @@
                          <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Rekap Absensi Siswa</button>
                          <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Tambah/Kurangi Data Siswa</button>
                     </div>
-                    <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.spreadsheetId ? 'Tersinkronisasi dengan Google Sheets.' : ''}</p>
+                    <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.fileId ? 'Tersinkronisasi dengan Google Drive.' : ''}</p>
                     <div class="text-center text-xs text-slate-500 mt-6 border-t border-slate-200 pt-4">
                         <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="hover:underline">Kebijakan Privasi</a>
                         &bull;
@@ -284,7 +284,7 @@
                         </svg>
                     </div>
                     <h1 class="text-3xl md:text-4xl font-bold text-slate-800 mb-3">Absensi Tersimpan!</h1>
-                    <p class="text-slate-500 mb-10">Data absensi telah berhasil disimpan di perangkat ini. ${state.spreadsheetId ? 'Data juga telah disinkronkan ke Google Sheet.' : ''}</p>
+                    <p class="text-slate-500 mb-10">Data absensi telah berhasil disimpan di perangkat ini. ${state.fileId ? 'Data juga telah disinkronkan ke Google Drive.' : ''}</p>
                     <div class="space-y-4">
                          <button id="success-back-to-start-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Kembali ke Halaman Awal</button>
                          <button id="success-view-data-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Semua Riwayat</button>
@@ -408,7 +408,7 @@
                 savedLogs: state.savedLogs,
                 studentsByClass: state.studentsByClass,
                 userProfile: state.userProfile,
-                spreadsheetId: state.spreadsheetId,
+                fileId: state.fileId,
             };
             localStorage.setItem('attendanceApp', JSON.stringify(dataToSave));
         } catch (e) {
@@ -424,7 +424,7 @@
                 state.savedLogs = savedData.savedLogs || [];
                 state.studentsByClass = savedData.studentsByClass || {};
                 state.userProfile = savedData.userProfile || null;
-                state.spreadsheetId = savedData.spreadsheetId || null;
+                state.fileId = savedData.fileId || null;
             }
         } catch (e) {
             console.error("Failed to load state from local storage:", e);
@@ -720,7 +720,6 @@
             });
         };
         
-        // Phase 1: Initialize GSI (Login) on page load
         const initializeGsi = () => {
             if (gsiInitPromise) return gsiInitPromise;
             gsiInitPromise = new Promise(async (resolve, reject) => {
@@ -741,7 +740,6 @@
             return gsiInitPromise;
         };
         
-        // Phase 2: Initialize GAPI Client (Drive/Sheets) *after* successful login
         const initializeGapiClient = () => {
             if (gapiClientInitPromise) return gapiClientInitPromise;
             gapiClientInitPromise = new Promise(async (resolve, reject) => {
@@ -751,16 +749,13 @@
                     
                     await gapi.client.init({
                         apiKey: API_KEY,
-                        discoveryDocs: [
-                            'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
-                            'https://sheets.googleapis.com/$discovery/rest?version=v4',
-                        ],
+                        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
                     });
-                    console.log('Google API Client (GAPI) for Drive/Sheets initialized.');
+                    console.log('Google API Client (GAPI) for Drive initialized.');
                     resolve(true);
                 } catch (err) {
                     console.error("GAPI Client Initialization Failed:", err);
-                    reject(new Error('Gagal memuat API Google Drive/Sheets.'));
+                    reject(new Error('Gagal memuat API Google Drive.'));
                 }
             });
             return gapiClientInitPromise;
@@ -805,7 +800,7 @@
                     try {
                         showLoader('Login berhasil, menyiapkan API...');
 
-                        console.log('Step 1: Initializing GAPI client for Drive/Sheets...');
+                        console.log('Step 1: Initializing GAPI client for Drive...');
                         await initializeGapiClient();
                         state.isGapiClientReady = true;
                         console.log('Step 1 SUCCESS: GAPI client ready.');
@@ -824,9 +819,9 @@
                         state.userProfile = await userInfoResponse.json();
                         console.log('Step 3 SUCCESS: User info fetched for', state.userProfile.email);
         
-                        console.log('Step 4: Loading all data from Google Sheet...');
-                        await loadAllDataFromSheet();
-                        console.log('Step 4 SUCCESS: Data loaded from Sheet.');
+                        console.log('Step 4: Loading all data from Google Drive file...');
+                        await loadAllDataFromFile();
+                        console.log('Step 4 SUCCESS: Data loaded from file.');
                         
                         console.log('Step 5: Finalizing login and saving state.');
                         saveStateToLocal();
@@ -839,12 +834,11 @@
                         hideLoader();
                         showNotification(error.message || 'Terjadi kesalahan saat sinkronisasi.', 'error');
                         displayAuthError('Terjadi kesalahan setelah login berhasil.', error);
-                        signOut(); // Sign out to prevent an inconsistent state.
+                        signOut();
                     }
                 };
 
                 showLoader('Membuka jendela login Google...');
-                // Always prompt for consent when the user clicks the login button.
                 gsiClient.requestAccessToken({ prompt: 'consent' });
 
             } catch (error) {
@@ -862,94 +856,118 @@
                      gapi.client.setToken('');
                  });
              }
-             // Reset state regardless of token revocation success
              state.userProfile = null;
-             state.spreadsheetId = null;
+             state.fileId = null;
              state.isGapiClientReady = false;
-             gapiClientInitPromise = null; // Reset GAPI init promise
+             gapiClientInitPromise = null;
              saveStateToLocal();
              navigateTo('setup');
         };
         
         const ensureDriveAccess = async (callback) => {
             await ensureGapiClientInitialized();
-            // Since all scopes are requested on login, we can assume access is granted.
             await callback();
         };
-
-        const findOrCreateSpreadsheet = async () => {
+        
+        const findOrCreateDataFile = async () => {
             await ensureDriveAccess(async () => {
-                if (state.spreadsheetId) return;
-                updateSetupStatus('Mencari spreadsheet...');
+                if (state.fileId) return;
+                updateSetupStatus('Mencari file data...');
                 try {
                     const response = await gapi.client.drive.files.list({
-                        q: `mimeType='application/vnd.google-apps.spreadsheet' and name='${SPREADSHEET_TITLE}' and trashed=false`,
+                        q: `name='${DATA_FILENAME}' and mimeType='application/json' and trashed=false`,
                         fields: 'files(id, name)',
+                        spaces: 'drive'
                     });
                     
                     if (response.result.files && response.result.files.length > 0) {
-                        state.spreadsheetId = response.result.files[0].id;
+                        state.fileId = response.result.files[0].id;
+                        console.log(`File data ditemukan dengan ID: ${state.fileId}`);
                     } else {
-                        updateSetupStatus('Membuat spreadsheet baru...');
-                        const createResponse = await gapi.client.sheets.spreadsheets.create({
-                            properties: { title: SPREADSHEET_TITLE },
-                            sheets: [{ properties: { title: 'Siswa' } }, { properties: { title: 'Absensi' } }]
+                        updateSetupStatus('Membuat file data baru...');
+                        const initialContent = JSON.stringify({ studentsByClass: {}, savedLogs: [] });
+                        const fileMetadata = { name: DATA_FILENAME, mimeType: 'application/json' };
+                        
+                        const form = new FormData();
+                        form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
+                        form.append('file', new Blob([initialContent], { type: 'application/json' }));
+
+                        const createResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                            method: 'POST',
+                            headers: new Headers({ 'Authorization': `Bearer ${gapi.client.getToken().access_token}` }),
+                            body: form
                         });
-                        state.spreadsheetId = createResponse.result.spreadsheetId;
-                        await gapi.client.sheets.spreadsheets.values.batchUpdate({
-                            spreadsheetId: state.spreadsheetId,
-                            resource: { valueInputOption: 'USER_ENTERED', data: [
-                                { range: 'Siswa!A1:B1', values: [['Kelas', 'Nama Siswa']]},
-                                { range: 'Absensi!A1:D1', values: [['Tanggal', 'Kelas', 'Nama Siswa', 'Status']] }
-                            ]}
-                        });
+                        
+                        const result = await createResponse.json();
+                        state.fileId = result.id;
+                        console.log(`File data baru dibuat dengan ID: ${state.fileId}`);
                     }
                     saveStateToLocal();
                 } catch (error) {
-                    showNotification('Gagal mengakses Google Drive/Sheets.', 'error');
+                    showNotification('Gagal mengakses Google Drive.', 'error');
                     signOut();
                     throw error;
                 }
             });
         };
 
-        const loadAllDataFromSheet = async () => {
+        const loadAllDataFromFile = async () => {
             await ensureDriveAccess(async () => {
-                await findOrCreateSpreadsheet();
-                if (!state.spreadsheetId) return;
+                await findOrCreateDataFile();
+                if (!state.fileId) return;
 
-                updateSetupStatus('Memuat data dari Google Sheet...');
+                updateSetupStatus('Memuat data dari Google Drive...');
                 try {
-                    const response = await gapi.client.sheets.spreadsheets.values.batchGet({
-                        spreadsheetId: state.spreadsheetId, ranges: ['Absensi!A2:D', 'Siswa!A2:B']
+                    const response = await gapi.client.drive.files.get({
+                        fileId: state.fileId, alt: 'media'
                     });
-                    const [attendanceResult, studentsResult] = response.result.valueRanges;
                     
-                    if (attendanceResult.values) {
-                         state.savedLogs = attendanceResult.values.map(([date, className, studentName, status]) => ({ date, class: className, attendance: { [studentName]: status } })).reduce((acc, log) => {
-                            const existing = acc.find(item => item.date === log.date && item.class === log.class);
-                            if (existing) { Object.assign(existing.attendance, log.attendance); } else { acc.push(log); }
-                            return acc;
-                        }, []);
-                    } else { state.savedLogs = []; }
-                    
-                    state.studentsByClass = {};
-                    if (studentsResult.values) {
-                        studentsResult.values.forEach(([className, studentName]) => {
-                            if (!state.studentsByClass[className]) state.studentsByClass[className] = [];
-                            state.studentsByClass[className].push(studentName);
-                        });
-                    }
+                    const data = JSON.parse(response.body);
+                    state.studentsByClass = data.studentsByClass || {};
+                    state.savedLogs = data.savedLogs || [];
+
                     updateSetupStatus('Sinkronisasi selesai.', true);
                     saveStateToLocal();
-                    showNotification('Data berhasil disinkronkan dari Google Sheets.');
+                    showNotification('Data berhasil disinkronkan dari Google Drive.');
                 } catch (error) {
-                     showNotification('Gagal memuat data dari Google Sheets.', 'error');
+                     console.error("Gagal memuat atau mem-parsing data dari file:", error);
+                     showNotification('Gagal memuat data dari Google Drive.', 'error');
                 }
             });
         };
 
-        return { initializeGsi, signIn, signOut, findOrCreateSpreadsheet, loadAllDataFromSheet, ensureDriveAccess };
+        const saveAllDataToFile = async () => {
+            await ensureDriveAccess(async () => {
+                if (!state.fileId) {
+                    console.log("Tidak ada fileId, mencari atau membuat file terlebih dahulu.");
+                    await findOrCreateDataFile();
+                }
+                
+                showLoader('Menyinkronkan ke Google Drive...');
+                try {
+                    const dataToSave = JSON.stringify({
+                        studentsByClass: state.studentsByClass,
+                        savedLogs: state.savedLogs
+                    });
+
+                    await fetch(`https://www.googleapis.com/upload/drive/v3/files/${state.fileId}?uploadType=media`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Authorization': `Bearer ${gapi.client.getToken().access_token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: dataToSave
+                    });
+                    
+                    showNotification('Data berhasil disinkronkan ke Google Drive.');
+                } catch (error) {
+                    console.error("Gagal menyimpan data ke file:", error);
+                    showNotification('Gagal sinkronisasi. Data aman di perangkat.', 'error');
+                }
+            });
+        };
+
+        return { initializeGsi, signIn, signOut, loadAllDataFromFile, saveAllDataToFile, ensureDriveAccess };
     })();
 
 
@@ -981,60 +999,24 @@
     function handleManageStudents() {
         state.selectedClass = document.getElementById('class-select').value;
         state.students = state.studentsByClass[state.selectedClass] || [];
-        
-        // Populate state.newStudents with a copy of existing students.
-        // If empty, start with one blank input for convenience.
         state.newStudents = state.students.length > 0 ? [...state.students] : [''];
-        
         navigateTo('add-students');
     }
 
     async function handleSaveNewStudents() {
-        // Get the final list of students from the input fields.
         const finalStudentList = state.newStudents.map(s => s.trim()).filter(s => s);
 
         showLoader('Menyimpan data siswa...');
         
-        // Update local state by replacing the student list for the class
         state.studentsByClass[state.selectedClass] = finalStudentList;
         saveStateToLocal();
         showNotification('Data siswa diperbarui di perangkat.');
 
         if (state.userProfile) {
             try {
-                await gapiService.ensureDriveAccess(async () => {
-                    await gapiService.findOrCreateSpreadsheet();
-                    showLoader('Menyinkronkan data siswa ke Google Sheets...');
-                    
-                    // Fetch all students, filter out the ones from the current class, add the new ones, and rewrite the whole sheet.
-                    const allStudentsResponse = await gapi.client.sheets.spreadsheets.values.get({
-                        spreadsheetId: state.spreadsheetId,
-                        range: 'Siswa!A2:B'
-                    });
-                    const otherClassStudents = (allStudentsResponse.result.values || []).filter(row => row[0] !== state.selectedClass);
-                    const thisClassStudents = finalStudentList.map(name => [state.selectedClass, name]);
-                    const finalSheetData = [...otherClassStudents, ...thisClassStudents];
-                    
-                    // Clear and update the sheet
-                    await gapi.client.sheets.spreadsheets.values.clear({
-                        spreadsheetId: state.spreadsheetId,
-                        range: 'Siswa!A2:B'
-                    });
-
-                    if (finalSheetData.length > 0) {
-                        await gapi.client.sheets.spreadsheets.values.update({
-                            spreadsheetId: state.spreadsheetId,
-                            range: 'Siswa!A2',
-                            valueInputOption: 'USER_ENTERED',
-                            resource: { values: finalSheetData }
-                        });
-                    }
-                    
-                    showNotification('Data siswa berhasil disinkronkan.');
-                });
+                await gapiService.saveAllDataToFile();
             } catch (e) {
-                console.error('Failed to sync students:', e);
-                showNotification('Gagal sinkronisasi. Data aman di perangkat.', 'error');
+                console.error('Gagal sinkronisasi data siswa:', e);
             }
         }
         hideLoader();
@@ -1053,26 +1035,10 @@
         saveStateToLocal();
 
         if (state.userProfile) {
-            try {
-                await gapiService.ensureDriveAccess(async () => {
-                    await gapiService.findOrCreateSpreadsheet();
-                    showLoader('Menyinkronkan ke Google Sheets...');
-                    const allAttendanceResponse = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId: state.spreadsheetId, range: 'Absensi!A2:D' });
-                    const otherAttendanceData = (allAttendanceResponse.result.values || []).filter(row => !(row[0] === state.selectedDate && row[1] === state.selectedClass));
-                    const newRows = Object.entries(state.attendance).map(([studentName, status]) => [state.selectedDate, state.selectedClass, studentName, status]);
-                    const finalData = [...otherAttendanceData, ...newRows];
-                    
-                    await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId: state.spreadsheetId, range: 'Absensi!A2:D' });
-                    if (finalData.length > 0) {
-                        await gapi.client.sheets.spreadsheets.values.update({ spreadsheetId: state.spreadsheetId, range: 'Absensi!A2', valueInputOption: 'USER_ENTERED', resource: { values: finalData }});
-                    }
-                });
+             try {
+                await gapiService.saveAllDataToFile();
             } catch (error) {
-                console.error('Failed to save attendance to sheet:', error);
-                showNotification('Gagal sinkronisasi. Data aman di perangkat.', 'error');
-                hideLoader();
-                navigateTo('success');
-                return;
+                console.error('Gagal sinkronisasi data absensi:', error);
             }
         }
         
@@ -1093,13 +1059,13 @@
         
         try {
             if (hasLocalData) {
-                const confirmed = await showConfirmation("Anda memiliki data lokal. Apakah Anda ingin menimpanya dengan data dari Google Sheets (jika ada)?");
+                const confirmed = await showConfirmation("Anda memiliki data lokal. Apakah Anda ingin menimpanya dengan data dari Google Drive (jika ada)?");
                 if (!confirmed) {
                     hideLoader();
                     return;
                 }
             }
-            await gapiService.loadAllDataFromSheet();
+            await gapiService.loadAllDataFromFile();
         } catch (error) {
             showNotification('Gagal melakukan sinkronisasi.', 'error');
         } finally {
@@ -1139,7 +1105,6 @@
                 const studentNames = json.slice(1).map(row => String(row[0] || '').trim()).filter(Boolean);
 
                 if (studentNames.length > 0) {
-                    // Replace the current list with the imported one
                     state.newStudents = studentNames;
                     renderStudentInputRows();
                     showNotification(`${studentNames.length} siswa berhasil diimpor & akan menggantikan daftar saat ini.`);
