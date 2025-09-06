@@ -132,9 +132,9 @@
         selectedClass: '',
         selectedDate: new Date().toISOString().split('T')[0],
         students: [], // students for the current class
-        studentsByClass: {}, // { '1A': ['Siswa A', 'Siswa B'], ... }
+        studentsByClass: {}, // { '1A': { students: ['Siswa A', 'Siswa B'], lastModified: '...' }, ... }
         attendance: {}, // { studentName: status }
-        savedLogs: [], // historical attendance logs
+        savedLogs: [], // historical attendance logs with { ..., lastModified: '...' }
         historyClassFilter: null, // to filter history view by class
         newStudents: [''], // for add-students screen
         recapSortOrder: 'total', // 'total' or 'absen'
@@ -169,7 +169,7 @@
                             <div class="mb-6">
                                 <button id="sync-data-btn" class="w-full flex items-center justify-center gap-2 bg-green-100 hover:bg-green-200 text-green-700 font-semibold py-3 px-4 rounded-lg transition" ${!state.isGapiClientReady ? 'disabled' : ''}>
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M4 4l16 16"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 4h-5v5M4 20h5v-5"></path></svg>
-                                    ${state.isGapiClientReady ? 'Sinkronkan Ulang Data' : 'Menyiapkan Sinkronisasi...'}
+                                    ${state.isGapiClientReady ? 'Sinkronkan Data' : 'Menyiapkan Sinkronisasi...'}
                                 </button>
                             </div>
                         `
@@ -421,10 +421,11 @@
         try {
             const savedData = JSON.parse(localStorage.getItem('attendanceApp'));
             if (savedData) {
-                state.savedLogs = savedData.savedLogs || [];
-                state.studentsByClass = savedData.studentsByClass || {};
-                state.userProfile = savedData.userProfile || null;
-                state.fileId = savedData.fileId || null;
+                const migratedData = migrateData(savedData);
+                state.savedLogs = migratedData.savedLogs || [];
+                state.studentsByClass = migratedData.studentsByClass || {};
+                state.userProfile = migratedData.userProfile || null;
+                state.fileId = migratedData.fileId || null;
             }
         } catch (e) {
             console.error("Failed to load state from local storage:", e);
@@ -510,6 +511,74 @@
         // Sanitize details to prevent HTML injection if error messages are weird.
         details = details.replace(/</g, "&lt;").replace(/>/g, "&gt;");
         errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${message}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
+    }
+
+
+    // --- DATA MIGRATION & MERGING ---
+    function migrateData(data) {
+        if (!data) return { studentsByClass: {}, savedLogs: [] };
+        
+        // Migrate studentsByClass
+        if (data.studentsByClass) {
+            Object.keys(data.studentsByClass).forEach(className => {
+                const classData = data.studentsByClass[className];
+                if (Array.isArray(classData)) { // Old format: ['Student A']
+                    data.studentsByClass[className] = {
+                        students: classData,
+                        lastModified: new Date(0).toISOString() // Use a very old date
+                    };
+                }
+            });
+        }
+
+        // Migrate savedLogs
+        if (data.savedLogs) {
+            data.savedLogs = data.savedLogs.map(log => {
+                if (!log.lastModified) {
+                    return { ...log, lastModified: new Date(0).toISOString() };
+                }
+                return log;
+            });
+        }
+        return data;
+    }
+
+    function mergeData(localData, driveData) {
+        // Merge studentsByClass
+        const mergedStudentsByClass = {};
+        const allClassNames = new Set([
+            ...Object.keys(localData.studentsByClass || {}), 
+            ...Object.keys(driveData.studentsByClass || {})
+        ]);
+
+        allClassNames.forEach(className => {
+            const local = localData.studentsByClass[className];
+            const drive = driveData.studentsByClass[className];
+
+            if (local && !drive) {
+                mergedStudentsByClass[className] = local;
+            } else if (!local && drive) {
+                mergedStudentsByClass[className] = drive;
+            } else if (local && drive) {
+                mergedStudentsByClass[className] = 
+                    new Date(local.lastModified) > new Date(drive.lastModified) ? local : drive;
+            }
+        });
+
+        // Merge savedLogs
+        const mergedLogsMap = new Map();
+        [...(localData.savedLogs || []), ...(driveData.savedLogs || [])].forEach(log => {
+            const key = `${log.date}_${log.class}`;
+            const existing = mergedLogsMap.get(key);
+            if (!existing || new Date(log.lastModified) > new Date(existing.lastModified)) {
+                mergedLogsMap.set(key, log);
+            }
+        });
+
+        return {
+            studentsByClass: mergedStudentsByClass,
+            savedLogs: Array.from(mergedLogsMap.values())
+        };
     }
 
 
@@ -637,10 +706,12 @@
         const studentToClassMap = {};
 
         for (const className in state.studentsByClass) {
-            state.studentsByClass[className].forEach(studentName => {
-                recapData[studentName] = { S: 0, I: 0, A: 0 };
-                studentToClassMap[studentName] = className;
-            });
+            if (state.studentsByClass[className] && state.studentsByClass[className].students) {
+                state.studentsByClass[className].students.forEach(studentName => {
+                    recapData[studentName] = { S: 0, I: 0, A: 0 };
+                    studentToClassMap[studentName] = className;
+                });
+            }
         }
 
         state.savedLogs.forEach(log => {
@@ -666,7 +737,7 @@
             } else { // 'absen'
                 const classCompare = a.class.localeCompare(b.class);
                 if (classCompare !== 0) return classCompare;
-                const classStudents = state.studentsByClass[a.class];
+                const classStudents = state.studentsByClass[a.class]?.students;
                 return classStudents ? classStudents.indexOf(a.name) - classStudents.indexOf(b.name) : 0;
             }
         });
@@ -819,12 +890,11 @@
                         state.userProfile = await userInfoResponse.json();
                         console.log('Step 3 SUCCESS: User info fetched for', state.userProfile.email);
         
-                        console.log('Step 4: Loading all data from Google Drive file...');
-                        await loadAllDataFromFile();
-                        console.log('Step 4 SUCCESS: Data loaded from file.');
+                        console.log('Step 4: Syncing data...');
+                        await syncData();
+                        console.log('Step 4 SUCCESS: Data synced.');
                         
-                        console.log('Step 5: Finalizing login and saving state.');
-                        saveStateToLocal();
+                        console.log('Step 5: Finalizing login.');
                         hideLoader();
                         navigateTo('setup');
                         console.log('Login process complete.');
@@ -911,28 +981,43 @@
             });
         };
 
-        const loadAllDataFromFile = async () => {
+        const syncData = async () => {
             await ensureDriveAccess(async () => {
                 await findOrCreateDataFile();
-                if (!state.fileId) return;
-
-                updateSetupStatus('Memuat data dari Google Drive...');
-                try {
-                    const response = await gapi.client.drive.files.get({
-                        fileId: state.fileId, alt: 'media'
-                    });
-                    
-                    const data = JSON.parse(response.body);
-                    state.studentsByClass = data.studentsByClass || {};
-                    state.savedLogs = data.savedLogs || [];
-
-                    updateSetupStatus('Sinkronisasi selesai.', true);
-                    saveStateToLocal();
-                    showNotification('Data berhasil disinkronkan dari Google Drive.');
-                } catch (error) {
-                     console.error("Gagal memuat atau mem-parsing data dari file:", error);
-                     showNotification('Gagal memuat data dari Google Drive.', 'error');
+                if (!state.fileId) {
+                    console.error("No fileId, cannot sync.");
+                    throw new Error("Tidak dapat menemukan atau membuat file data di Google Drive.");
                 }
+
+                showLoader('Memulai sinkronisasi...');
+                
+                // 1. Get Drive data
+                let driveData = { studentsByClass: {}, savedLogs: [] };
+                try {
+                    const response = await gapi.client.drive.files.get({ fileId: state.fileId, alt: 'media' });
+                    driveData = migrateData(JSON.parse(response.body));
+                } catch (e) { console.error("Could not fetch or parse Drive data, will proceed with local data.", e); }
+
+                // 2. Get Local data
+                const localState = JSON.parse(localStorage.getItem('attendanceApp') || '{}');
+                const localData = migrateData({
+                    studentsByClass: localState.studentsByClass || {},
+                    savedLogs: localState.savedLogs || []
+                });
+
+                // 3. Merge data
+                showLoader('Menggabungkan data...');
+                const merged = mergeData(localData, driveData);
+
+                // 4. Update state and local storage
+                state.studentsByClass = merged.studentsByClass;
+                state.savedLogs = merged.savedLogs;
+                saveStateToLocal();
+
+                // 5. Save merged data back to Drive
+                await saveAllDataToFile(); 
+                
+                updateSetupStatus('Sinkronisasi selesai.', true);
             });
         };
 
@@ -967,7 +1052,7 @@
             });
         };
 
-        return { initializeGsi, signIn, signOut, loadAllDataFromFile, saveAllDataToFile, ensureDriveAccess };
+        return { initializeGsi, signIn, signOut, syncData, saveAllDataToFile, ensureDriveAccess };
     })();
 
 
@@ -976,7 +1061,7 @@
     async function handleStartAttendance() {
         state.selectedClass = document.getElementById('class-select').value;
         state.selectedDate = document.getElementById('date-input').value;
-        state.students = state.studentsByClass[state.selectedClass] || [];
+        state.students = (state.studentsByClass[state.selectedClass] || {}).students || [];
         
         const existingLog = state.savedLogs.find(log => log.class === state.selectedClass && log.date === state.selectedDate);
         if (existingLog) {
@@ -998,7 +1083,7 @@
     
     function handleManageStudents() {
         state.selectedClass = document.getElementById('class-select').value;
-        state.students = state.studentsByClass[state.selectedClass] || [];
+        state.students = (state.studentsByClass[state.selectedClass] || {}).students || [];
         state.newStudents = state.students.length > 0 ? [...state.students] : [''];
         navigateTo('add-students');
     }
@@ -1008,7 +1093,11 @@
 
         showLoader('Menyimpan data siswa...');
         
-        state.studentsByClass[state.selectedClass] = finalStudentList;
+        state.studentsByClass[state.selectedClass] = {
+            students: finalStudentList,
+            lastModified: new Date().toISOString()
+        };
+
         saveStateToLocal();
         showNotification('Data siswa diperbarui di perangkat.');
 
@@ -1030,7 +1119,12 @@
         showLoader('Menyimpan ke perangkat...');
 
         const existingLogIndex = state.savedLogs.findIndex(log => log.class === state.selectedClass && log.date === state.selectedDate);
-        const newLog = { date: state.selectedDate, class: state.selectedClass, attendance: { ...state.attendance }};
+        const newLog = { 
+            date: state.selectedDate, 
+            class: state.selectedClass, 
+            attendance: { ...state.attendance },
+            lastModified: new Date().toISOString()
+        };
         if (existingLogIndex > -1) { state.savedLogs[existingLogIndex] = newLog; } else { state.savedLogs.push(newLog); }
         saveStateToLocal();
 
@@ -1052,25 +1146,17 @@
             return;
         }
 
-        const localData = JSON.parse(localStorage.getItem('attendanceApp') || '{}');
-        const hasLocalData = (localData.savedLogs?.length > 0 || Object.keys(localData.studentsByClass || {}).length > 0);
-        
-        showLoader('Menyiapkan sinkronisasi...');
+        const confirmed = await showConfirmation("Sinkronisasi akan menggabungkan data dari perangkat ini dengan data di Google Drive. Lanjutkan?");
+        if (!confirmed) return;
         
         try {
-            if (hasLocalData) {
-                const confirmed = await showConfirmation("Anda memiliki data lokal. Apakah Anda ingin menimpanya dengan data dari Google Drive (jika ada)?");
-                if (!confirmed) {
-                    hideLoader();
-                    return;
-                }
-            }
-            await gapiService.loadAllDataFromFile();
+            await gapiService.syncData();
         } catch (error) {
             showNotification('Gagal melakukan sinkronisasi.', 'error');
+            console.error('Manual sync failed:', error);
         } finally {
             hideLoader();
-            render();
+            if(state.currentScreen === 'setup') render();
         }
     }
     
