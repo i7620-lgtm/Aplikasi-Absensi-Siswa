@@ -166,18 +166,12 @@
                                     <p class="text-sm text-slate-500">${state.userProfile.email}</p>
                                 </div>
                             </div>
-                            <div class="mb-6">
-                                <button id="sync-data-btn" class="w-full flex items-center justify-center gap-2 bg-green-100 hover:bg-green-200 text-green-700 font-semibold py-3 px-4 rounded-lg transition" ${!state.isGapiClientReady ? 'disabled' : ''}>
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M4 4l16 16"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 4h-5v5M4 20h5v-5"></path></svg>
-                                    ${state.isGapiClientReady ? 'Sinkronkan Data' : 'Menyiapkan Sinkronisasi...'}
-                                </button>
-                            </div>
                         `
                         : `
                             <h1 class="text-xl font-bold text-slate-800 mb-4">Absensi Online Siswa</h1>
                             <div id="backup-notice" class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6 text-sm text-blue-800">
                                 <p class="font-semibold mb-2">Aplikasi ini bekerja offline!</p>
-                                <p class="mb-3">Data Anda disimpan di perangkat ini. Login dengan Google untuk mencadangkan dan menyinkronkan data Anda dengan aman di Google Drive.</p>
+                                <p class="mb-3">Data Anda disimpan di perangkat ini. Login dengan Google untuk mencadangkan dan menyinkronkan data Anda secara otomatis dengan Google Drive.</p>
                                 <button id="loginBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg w-full transition duration-300 flex items-center justify-center gap-2" disabled>
                                     <svg class="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.222,0-9.519-3.108-11.127-7.481l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,35.17,44,30.023,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>
                                     <span id="loginBtnText">Memuat Opsi Login...</span>
@@ -203,7 +197,7 @@
                          <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Rekap Absensi Siswa</button>
                          <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Tambah/Kurangi Data Siswa</button>
                     </div>
-                    <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.fileId ? 'Tersinkronisasi dengan Google Drive.' : ''}</p>
+                    <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.userProfile ? 'Data disinkronkan secara otomatis.' : ''}</p>
                     <div class="text-center text-xs text-slate-500 mt-6 border-t border-slate-200 pt-4">
                         <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="hover:underline">Kebijakan Privasi</a>
                         &bull;
@@ -274,7 +268,11 @@
                     </div>
                 </div>
             </div>`,
-        success: () => `
+        success: () => {
+            const message = state.userProfile 
+                ? 'Data absensi telah berhasil disimpan dan dicadangkan ke Google Drive Anda.'
+                : 'Data absensi telah berhasil disimpan di penyimpanan lokal perangkat ini.';
+            return `
             <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
                 <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
                     <div class="checkmark-wrapper mx-auto mb-6">
@@ -284,13 +282,14 @@
                         </svg>
                     </div>
                     <h1 class="text-3xl md:text-4xl font-bold text-slate-800 mb-3">Absensi Tersimpan!</h1>
-                    <p class="text-slate-500 mb-10">Data absensi telah berhasil disimpan di perangkat ini. ${state.fileId ? 'Data juga telah disinkronkan ke Google Drive.' : ''}</p>
+                    <p class="text-slate-500 mb-10">${message}</p>
                     <div class="space-y-4">
                          <button id="success-back-to-start-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Kembali ke Halaman Awal</button>
                          <button id="success-view-data-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Semua Riwayat</button>
                     </div>
                 </div>
-            </div>`,
+            </div>`;
+        },
         data: () => `
              <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
                  <div class="bg-white p-8 rounded-2xl shadow-lg">
@@ -338,7 +337,6 @@
                 appContainer.innerHTML = templates.setup();
                 if (state.userProfile) {
                     document.getElementById('logoutBtn').addEventListener('click', gapiService.signOut);
-                    document.getElementById('sync-data-btn').addEventListener('click', handleManualSync);
                 } else {
                     document.getElementById('loginBtn').addEventListener('click', gapiService.signIn);
                 }
@@ -1023,20 +1021,21 @@
                 saveStateToLocal();
 
                 // 5. Save merged data back to Drive
-                await saveAllDataToFile(); 
+                showLoader('Menyimpan data gabungan...');
+                await saveAllDataToFile(false); 
                 
                 updateSetupStatus('Sinkronisasi selesai.', true);
+                showNotification('Sinkronisasi data berhasil.');
             });
         };
 
-        const saveAllDataToFile = async () => {
+        const saveAllDataToFile = async (showSuccessNotification = true) => {
             await ensureDriveAccess(async () => {
                 if (!state.fileId) {
                     console.log("Tidak ada fileId, mencari atau membuat file terlebih dahulu.");
                     await findOrCreateDataFile();
                 }
                 
-                showLoader('Menyinkronkan ke Google Drive...');
                 try {
                     const dataToSave = JSON.stringify({
                         studentsByClass: state.studentsByClass,
@@ -1052,10 +1051,13 @@
                         body: dataToSave
                     });
                     
-                    showNotification('Data berhasil disinkronkan ke Google Drive.');
+                    if (showSuccessNotification) {
+                        showNotification('Data berhasil dicadangkan ke Google Drive.');
+                    }
                 } catch (error) {
                     console.error("Gagal menyimpan data ke file:", error);
                     showNotification('Gagal sinkronisasi. Data aman di perangkat.', 'error');
+                    throw error;
                 }
             });
         };
@@ -1098,24 +1100,28 @@
 
     async function handleSaveNewStudents() {
         const finalStudentList = state.newStudents.map(s => s.trim()).filter(s => s);
+        const isUserLoggedIn = !!state.userProfile;
 
-        showLoader('Menyimpan data siswa...');
+        showLoader(isUserLoggedIn ? 'Menyimpan & Menyinkronkan...' : 'Menyimpan data siswa...');
         
         state.studentsByClass[state.selectedClass] = {
             students: finalStudentList,
             lastModified: new Date().toISOString()
         };
-
         saveStateToLocal();
-        showNotification('Data siswa diperbarui di perangkat.');
 
-        if (state.userProfile) {
+        if (isUserLoggedIn) {
             try {
-                await gapiService.saveAllDataToFile();
+                await gapiService.saveAllDataToFile(false);
+                showNotification('Data siswa berhasil disimpan & dicadangkan ke Google Drive.');
             } catch (e) {
                 console.error('Gagal sinkronisasi data siswa:', e);
+                showNotification('Data siswa disimpan lokal, namun gagal sinkronisasi ke Drive.', 'error');
             }
+        } else {
+            showNotification('Data siswa berhasil disimpan ke penyimpanan lokal.');
         }
+
         hideLoader();
         navigateTo('setup');
     }
@@ -1124,7 +1130,8 @@
         const confirmed = await showConfirmation(`Anda akan menyimpan data absensi untuk kelas ${state.selectedClass}. Lanjutkan?`);
         if (!confirmed) return;
 
-        showLoader('Menyimpan ke perangkat...');
+        const isUserLoggedIn = !!state.userProfile;
+        showLoader(isUserLoggedIn ? 'Menyimpan & Menyinkronkan...' : 'Menyimpan ke penyimpanan lokal...');
 
         const existingLogIndex = state.savedLogs.findIndex(log => log.class === state.selectedClass && log.date === state.selectedDate);
         const newLog = { 
@@ -1136,36 +1143,17 @@
         if (existingLogIndex > -1) { state.savedLogs[existingLogIndex] = newLog; } else { state.savedLogs.push(newLog); }
         saveStateToLocal();
 
-        if (state.userProfile) {
+        if (isUserLoggedIn) {
              try {
-                await gapiService.saveAllDataToFile();
+                await gapiService.saveAllDataToFile(false);
             } catch (error) {
                 console.error('Gagal sinkronisasi data absensi:', error);
+                // Notification will be on the success screen, but we can log it here.
             }
         }
         
         hideLoader();
         navigateTo('success');
-    }
-    
-    async function handleManualSync() {
-        if (!state.userProfile) {
-            showNotification('Anda belum login dengan Google.', 'error');
-            return;
-        }
-
-        const confirmed = await showConfirmation("Sinkronisasi akan menggabungkan data dari perangkat ini dengan data di Google Drive. Lanjutkan?");
-        if (!confirmed) return;
-        
-        try {
-            await gapiService.syncData();
-        } catch (error) {
-            showNotification('Gagal melakukan sinkronisasi.', 'error');
-            console.error('Manual sync failed:', error);
-        } finally {
-            hideLoader();
-            if(state.currentScreen === 'setup') render();
-        }
     }
     
     function handleViewHistory(isClassSpecific = false) {
