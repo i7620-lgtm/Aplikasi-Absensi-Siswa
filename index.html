@@ -920,18 +920,26 @@
         };
 
         const signOut = () => {
-             const token = gapi.client && gapi.client.getToken();
-             if (token) {
-                 google.accounts.oauth2.revoke(token.access_token, () => {
-                     gapi.client.setToken('');
-                 });
-             }
-             state.userProfile = null;
-             state.fileId = null;
-             state.isGapiClientReady = false;
-             gapiClientInitPromise = null;
-             saveStateToLocal();
-             navigateTo('setup');
+            // Attempt to revoke the Google token, but don't let it block the local logout.
+            try {
+                const token = gapi.client && gapi.client.getToken();
+                if (token && window.google && google.accounts && google.accounts.oauth2) {
+                    google.accounts.oauth2.revoke(token.access_token, () => {
+                        // Best-effort attempt to clear the token from the GAPI client.
+                        try { gapi.client.setToken(''); } catch(e) {}
+                    });
+                }
+            } catch (e) {
+                console.warn("Could not perform Google token revocation. Proceeding with local logout.", e);
+            }
+    
+            // Perform the crucial local logout steps regardless of the token revocation result.
+            state.userProfile = null;
+            state.fileId = null;
+            state.isGapiClientReady = false;
+            gapiClientInitPromise = null;
+            saveStateToLocal();
+            navigateTo('setup');
         };
         
         const ensureDriveAccess = async (callback) => {
