@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -196,6 +197,7 @@
                          <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Riwayat Kelas Terpilih</button>
                          <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Rekap Absensi Siswa</button>
                          <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Tambah/Kurangi Data Siswa</button>
+                         <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Unduh Rekap Absensi (Excel)</button>
                     </div>
                     <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.userProfile ? 'Data disinkronkan secara otomatis.' : ''}</p>
                     <div class="text-center text-xs text-slate-500 mt-6 border-t border-slate-200 pt-4">
@@ -344,6 +346,7 @@
                 document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(true));
                 document.getElementById('recapBtn').addEventListener('click', () => navigateTo('recap'));
                 document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
+                document.getElementById('downloadDataBtn').addEventListener('click', handleDownloadData);
                 document.getElementById('class-select').value = state.selectedClass || CLASSES[0];
                 updateLoginButtonState();
                 break;
@@ -1202,6 +1205,85 @@
         event.target.value = ''; // Reset input
     }
     
+    async function handleDownloadData() {
+        showLoader('Menyiapkan data untuk diunduh...');
+
+        if (!state.studentsByClass || Object.keys(state.studentsByClass).length === 0) {
+            hideLoader();
+            showNotification('Tidak ada data siswa untuk diunduh.', 'error');
+            return;
+        }
+
+        try {
+            const recapData = {};
+            const studentToClassMap = {};
+
+            for (const className in state.studentsByClass) {
+                if (state.studentsByClass[className] && state.studentsByClass[className].students) {
+                    state.studentsByClass[className].students.forEach(studentName => {
+                        recapData[studentName] = { S: 0, I: 0, A: 0 };
+                        studentToClassMap[studentName] = className;
+                    });
+                }
+            }
+
+            state.savedLogs.forEach(log => {
+                Object.entries(log.attendance).forEach(([studentName, status]) => {
+                    if (recapData[studentName] && status !== 'H') {
+                        if (recapData[studentName][status] !== undefined) {
+                            recapData[studentName][status]++;
+                        }
+                    }
+                });
+            });
+            
+            const recapArray = Object.keys(recapData).map(name => {
+                const data = recapData[name];
+                const total = data.S + data.I + data.A;
+                return { name, class: studentToClassMap[name] || 'N/A', ...data, total };
+            });
+
+            recapArray.sort((a, b) => {
+                const classCompare = a.class.localeCompare(b.class);
+                if (classCompare !== 0) return classCompare;
+                const classStudents = state.studentsByClass[a.class]?.students;
+                return classStudents ? classStudents.indexOf(a.name) - classStudents.indexOf(b.name) : 0;
+            });
+
+            const dataForSheet = [
+                ['Nama Lengkap', 'Sakit (S)', 'Izin (I)', 'Alpa (A)']
+            ];
+
+            recapArray.forEach((item) => {
+                dataForSheet.push([
+                    item.name,
+                    item.S,
+                    item.I,
+                    item.A,
+                ]);
+            });
+            
+            const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Absensi');
+            
+            const columnWidths = dataForSheet[0].map((_, colIndex) => ({
+                wch: dataForSheet.reduce((w, r) => Math.max(w, String(r[colIndex] || "").length), 10)
+            }));
+            worksheet['!cols'] = columnWidths;
+
+            XLSX.writeFile(workbook, 'Rekap_Absensi_Siswa.xlsx');
+            
+            hideLoader();
+            showNotification('Data absensi berhasil diunduh.', 'success');
+
+        } catch (error) {
+            hideLoader();
+            showNotification('Terjadi kesalahan saat membuat file Excel.', 'error');
+            console.error("Failed to download data:", error);
+        }
+    }
+
     // --- INITIALIZATION ---
     function main() {
         document.getElementById('static-fallback').style.display = 'none';
