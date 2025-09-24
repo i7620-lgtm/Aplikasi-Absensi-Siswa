@@ -95,6 +95,7 @@ export const templates = {
         </div>`;
     },
     adminHome: () => {
+        const isAdmin = state.userProfile?.role === 'SUPER_ADMIN';
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
@@ -117,61 +118,10 @@ export const templates = {
                     <button id="go-to-attendance-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lakukan Absensi</button>
                     <button id="view-dashboard-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Dasbor Kepala Sekolah</button>
                     <button id="view-admin-panel-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Panel Admin</button>
-                    <button id="import-data-btn" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Impor Data Absensi Lama</button>
                 </div>
             </div>
         </div>`;
     },
-    importData: () => `
-        <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
-             <div class="bg-white p-8 rounded-2xl shadow-lg">
-                <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
-                    <h1 class="text-2xl font-bold text-slate-800">Impor Data Absensi Lama</h1>
-                    <button id="import-back-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
-                </div>
-                
-                <div class="space-y-6">
-                    <!-- Step 1 -->
-                    <div class="flex items-start gap-4">
-                        <div class="flex-shrink-0 w-10 h-10 bg-blue-500 text-white font-bold text-xl rounded-full flex items-center justify-center">1</div>
-                        <div>
-                            <h2 class="text-lg font-semibold text-slate-700">Unduh Template</h2>
-                            <p class="text-slate-500 mb-3">Unduh template Excel untuk memastikan data Anda diformat dengan benar. Template berisi dua sheet: 'Daftar Siswa' dan 'Riwayat Absensi'.</p>
-                            <button id="download-import-template-btn" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition">Unduh Template Excel</button>
-                        </div>
-                    </div>
-                    
-                    <!-- Step 2 -->
-                    <div class="flex items-start gap-4">
-                        <div class="flex-shrink-0 w-10 h-10 bg-blue-500 text-white font-bold text-xl rounded-full flex items-center justify-center">2</div>
-                        <div>
-                            <h2 class="text-lg font-semibold text-slate-700">Unggah File</h2>
-                            <p class="text-slate-500 mb-3">Setelah Anda mengisi template dengan data historis Anda, unggah file tersebut di sini.</p>
-                            <input type="file" id="import-file-input" class="hidden" accept=".xlsx, .xls"/>
-                            <button id="upload-import-btn" class="bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg text-sm transition">Pilih File untuk Diunggah</button>
-                        </div>
-                    </div>
-
-                    <!-- Step 3 -->
-                    <div class="flex items-start gap-4">
-                         <div class="flex-shrink-0 w-10 h-10 bg-blue-500 text-white font-bold text-xl rounded-full flex items-center justify-center">3</div>
-                        <div>
-                            <h2 class="text-lg font-semibold text-slate-700">Pratinjau & Simpan</h2>
-                            <p class="text-slate-500 mb-3">Periksa ringkasan data yang dibaca dari file Anda. Jika sudah benar, simpan data ke sistem.</p>
-                             <div id="import-preview" class="min-h-[80px] bg-slate-50 border p-4 rounded-lg text-sm">
-                                ${state.importData.previewHtml || '<p class="text-slate-400">Silakan unggah file untuk melihat pratinjau di sini.</p>'}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-8 pt-6 border-t border-slate-200 flex justify-end">
-                    <button id="save-imported-data-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition" ${!state.importData.parsedData ? 'disabled' : ''}>Simpan Data Impor</button>
-                </div>
-                 <p class="text-xs text-slate-400 mt-4 text-right">Penting: Proses ini akan menambahkan data dari file. Jika ada data absensi untuk kelas & tanggal yang sama, data lama akan ditimpa.</p>
-            </div>
-        </div>
-    `,
     dashboard: () => {
         const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const canGoBack = state.userProfile?.role === 'SUPER_ADMIN';
