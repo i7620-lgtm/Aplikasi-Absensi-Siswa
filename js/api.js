@@ -32,6 +32,10 @@ export const apiService = {
         return await _fetch('saveData', data);
     },
 
+    async importData(data) {
+        return await _fetch('importData', data);
+    },
+
     async getDashboardData() {
         return await _fetch('getDashboardData');
     },
