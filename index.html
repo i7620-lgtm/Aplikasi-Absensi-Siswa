@@ -149,22 +149,37 @@
 
         // --- API SERVICE ---
         const apiService = {
-            async getData(email) {
-                if (!email) throw new Error("Email is required to fetch data.");
-                const response = await fetch(`/api/data?email=${encodeURIComponent(email)}`);
-                if (!response.ok) {
-                    if (response.status === 404) return {}; // User has no data yet, return empty object.
-                    throw new Error(`Gagal mengambil data dari server: ${response.statusText}`);
+            async _handleError(response) {
+                if (response.status === 404) {
+                    throw new Error(`Kesalahan 404: Endpoint API tidak ditemukan. Periksa apakah file 'api/data.js' sudah di-deploy dengan benar di Vercel.`);
                 }
+                if (response.status >= 500) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(`Kesalahan Server (${response.status}): ${errorData.error || 'Gagal terhubung ke database. Periksa variabel lingkungan POSTGRES_URL di Vercel.'}`);
+                }
+                // For other client-side errors
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`Gagal memproses permintaan: ${errorData.error || response.statusText}`);
+            },
+
+            async getData(email) {
+                if (!email) throw new Error("Email diperlukan untuk mengambil data.");
+                const response = await fetch(`/api/data?email=${encodeURIComponent(email)}`);
+                
+                if (!response.ok) {
+                    await this._handleError(response);
+                }
+
                 const data = await response.json();
-                // Ensure structure is valid
+                // Ensure structure is valid even if backend sends nulls
                 return {
                     studentsByClass: data.students_by_class || {},
                     savedLogs: data.saved_logs || [],
                 };
             },
+
             async saveData(email, data) {
-                if (!email) throw new Error("Email is required to save data.");
+                if (!email) throw new Error("Email diperlukan untuk menyimpan data.");
                 const payload = {
                     email: email,
                     studentsByClass: data.studentsByClass,
@@ -175,9 +190,11 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
+                
                 if (!response.ok) {
-                    throw new Error(`Gagal menyimpan data ke server: ${response.statusText}`);
+                    await this._handleError(response);
                 }
+
                 return response.json();
             },
         };
@@ -455,7 +472,7 @@
             notificationEl.classList.add('show');
             setTimeout(() => {
                 notificationEl.classList.remove('show');
-            }, 4000);
+            }, 5000);
         }
 
         function showConfirmation(message) {
@@ -751,8 +768,8 @@
                 state.userProfile = await userInfoResponse.json();
                 
                 const serverData = await apiService.getData(state.userProfile.email);
-                state.studentsByClass = serverData.studentsByClass || {};
-                state.savedLogs = serverData.savedLogs || [];
+                state.studentsByClass = serverData.studentsByClass;
+                state.savedLogs = serverData.savedLogs;
 
                 hideLoader();
                 navigateTo('setup');
@@ -832,7 +849,7 @@
                 showNotification('Data siswa berhasil disimpan ke cloud.');
             } catch (e) {
                 console.error('Gagal menyimpan data siswa:', e);
-                showNotification('Gagal menyimpan data siswa. Periksa koneksi internet Anda.', 'error');
+                showNotification(e.message, 'error');
                 // Optionally revert state change here if save fails
             }
 
@@ -867,10 +884,8 @@
                 });
             } catch (error) {
                 console.error('Gagal menyimpan data absensi:', error);
-                // On failure, navigate to success anyway but show an error.
-                // The data is still in memory and will be saved on the next successful attempt.
                 navigateTo('success');
-                showNotification('Data disimpan sementara, tapi gagal sinkronisasi. Coba lagi nanti.', 'error');
+                showNotification(error.message, 'error');
                 hideLoader();
                 return;
             }
