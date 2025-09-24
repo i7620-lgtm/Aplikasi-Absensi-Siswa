@@ -11,6 +11,7 @@ async function setupTables() {
         name VARCHAR(255),
         picture TEXT,
         role VARCHAR(50) DEFAULT 'GURU',
+        assigned_classes TEXT[] DEFAULT '{}',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         last_login TIMESTAMPTZ
       );
@@ -27,7 +28,7 @@ async function setupTables() {
 
 async function loginOrRegisterUser(profile) {
     const { email, name, picture } = profile;
-    const { rows } = await sql`SELECT * FROM users WHERE email = ${email}`;
+    const { rows } = await sql`SELECT email, name, picture, role, COALESCE(assigned_classes, '{}') as assigned_classes FROM users WHERE email = ${email}`;
     let user = rows[0];
 
     if (user) {
@@ -38,9 +39,9 @@ async function loginOrRegisterUser(profile) {
         // New user, determine role
         const role = SUPER_ADMIN_EMAILS.includes(email) ? 'SUPER_ADMIN' : 'GURU';
         const { rows: newRows } = await sql`
-            INSERT INTO users (email, name, picture, role, last_login)
-            VALUES (${email}, ${name}, ${picture}, ${role}, NOW())
-            RETURNING *;
+            INSERT INTO users (email, name, picture, role, last_login, assigned_classes)
+            VALUES (${email}, ${name}, ${picture}, ${role}, NOW(), '{}')
+            RETURNING email, name, picture, role, assigned_classes;
         `;
         user = newRows[0];
     }
@@ -113,7 +114,7 @@ export default async function handler(request, response) {
                     if (userRole !== 'SUPER_ADMIN') {
                          return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
-                    const { rows: allUsers } = await sql`SELECT email, name, picture, role FROM users ORDER BY name;`;
+                    const { rows: allUsers } = await sql`SELECT email, name, picture, role, COALESCE(assigned_classes, '{}') as assigned_classes FROM users ORDER BY name;`;
                     return response.status(200).json({ allUsers });
 
                 case 'updateUserRole':
@@ -125,6 +126,15 @@ export default async function handler(request, response) {
                         return response.status(400).json({ error: 'Cannot demote a bootstrapped Super Admin.' });
                     }
                     await sql`UPDATE users SET role = ${newRole} WHERE email = ${targetEmail}`;
+                    return response.status(200).json({ success: true });
+
+                case 'updateAssignedClasses':
+                    if (userRole !== 'SUPER_ADMIN') {
+                        return response.status(403).json({ error: 'Forbidden: Access denied' });
+                    }
+                    const { emailToUpdate, newClasses } = payload;
+                    // newClasses should be an array of strings
+                    await sql`UPDATE users SET assigned_classes = ${newClasses} WHERE email = ${emailToUpdate}`;
                     return response.status(200).json({ success: true });
                 
                 default:
