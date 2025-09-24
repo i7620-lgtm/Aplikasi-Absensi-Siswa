@@ -63,14 +63,14 @@ export function displayAuthError(message, error = null) {
 
 function renderSetupScreen() {
     appContainer.innerHTML = templates.setup();
+    const isAdmin = state.userProfile?.role === 'SUPER_ADMIN';
     const isTeacher = state.userProfile?.role === 'GURU';
     const needsAssignment = isTeacher && (!state.userProfile.assigned_classes || state.userProfile.assigned_classes.length === 0);
 
     if (state.userProfile) {
         document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
-        if (state.userProfile.role === 'SUPER_ADMIN') {
-            document.getElementById('view-dashboard-btn').addEventListener('click', () => navigateTo('dashboard'));
-            document.getElementById('view-admin-panel-btn').addEventListener('click', () => navigateTo('adminPanel'));
+        if (isAdmin) {
+            document.getElementById('back-to-admin-home-btn').addEventListener('click', () => navigateTo('adminHome'));
         }
     } else {
         document.getElementById('loginBtn').addEventListener('click', handleSignIn);
@@ -82,15 +82,29 @@ function renderSetupScreen() {
         document.getElementById('recapBtn').addEventListener('click', () => navigateTo('recap'));
         document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
         document.getElementById('downloadDataBtn').addEventListener('click', handleDownloadData);
-        document.getElementById('class-select').value = state.selectedClass || state.userProfile?.assigned_classes?.[0] || '';
+
+        const availableClasses = isAdmin ? state.CLASSES : (state.userProfile?.assigned_classes || []);
+        document.getElementById('class-select').value = state.selectedClass || availableClasses[0] || '';
     }
 }
+
+function renderAdminHomeScreen() {
+    appContainer.innerHTML = templates.adminHome();
+    document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
+    document.getElementById('go-to-attendance-btn').addEventListener('click', () => navigateTo('setup'));
+    document.getElementById('view-dashboard-btn').addEventListener('click', () => navigateTo('dashboard'));
+    document.getElementById('view-admin-panel-btn').addEventListener('click', () => navigateTo('adminPanel'));
+}
+
 
 async function renderDashboardScreen() {
     appContainer.innerHTML = templates.dashboard();
     document.getElementById('logoutBtn-ks').addEventListener('click', handleSignOut);
-    if(state.userProfile.role === 'SUPER_ADMIN') {
-        document.getElementById('dashboard-back-btn').addEventListener('click', () => navigateTo('setup'));
+    
+    const backBtn = document.getElementById('dashboard-back-btn');
+    if(backBtn) {
+        const target = backBtn.dataset.target;
+        backBtn.addEventListener('click', () => navigateTo(target));
     }
 
     const container = document.getElementById('ks-report-container');
@@ -158,7 +172,7 @@ async function renderDashboardScreen() {
 
 async function renderAdminPanelScreen() {
     appContainer.innerHTML = templates.adminPanel();
-    document.getElementById('admin-panel-back-btn').addEventListener('click', () => navigateTo('setup'));
+    document.getElementById('admin-panel-back-btn').addEventListener('click', () => navigateTo('adminHome'));
     const container = document.getElementById('admin-panel-container');
 
     try {
@@ -355,14 +369,20 @@ function renderAttendanceScreen() {
         });
     });
 
-    document.getElementById('back-to-setup-btn').addEventListener('click', () => navigateTo('setup'));
+    document.getElementById('back-to-setup-btn').addEventListener('click', () => {
+       const targetScreen = state.userProfile.role === 'SUPER_ADMIN' ? 'adminHome' : 'setup';
+       navigateTo(targetScreen);
+    });
     document.getElementById('save-attendance-btn').addEventListener('click', handleSaveAttendance);
 }
 
 
 function renderDataScreen() {
     appContainer.innerHTML = templates.data();
-    document.getElementById('data-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
+    document.getElementById('data-back-to-start-btn').addEventListener('click', () => {
+        const targetScreen = state.userProfile.role === 'SUPER_ADMIN' ? 'adminHome' : 'setup';
+        navigateTo(targetScreen);
+    });
     const container = document.getElementById('data-container');
     const titleEl = document.getElementById('data-title');
     
@@ -412,7 +432,10 @@ function renderDataScreen() {
 
 function renderRecapScreen() {
     appContainer.innerHTML = templates.recap();
-    document.getElementById('recap-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
+    document.getElementById('recap-back-to-start-btn').addEventListener('click', () => {
+        const targetScreen = state.userProfile.role === 'SUPER_ADMIN' ? 'adminHome' : 'setup';
+        navigateTo(targetScreen);
+    });
     document.getElementById('sort-by-total-btn').addEventListener('click', () => { setState({ recapSortOrder: 'total' }); navigateTo('recap'); });
     document.getElementById('sort-by-absen-btn').addEventListener('click', () => { setState({ recapSortOrder: 'absen' }); navigateTo('recap'); });
 
@@ -501,6 +524,9 @@ export function renderScreen(screen) {
         case 'setup':
             renderSetupScreen();
             break;
+        case 'adminHome':
+            renderAdminHomeScreen();
+            break;
         case 'dashboard':
             renderDashboardScreen();
             break;
@@ -515,7 +541,10 @@ export function renderScreen(screen) {
             break;
         case 'success':
              appContainer.innerHTML = templates.success();
-             document.getElementById('success-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
+             document.getElementById('success-back-to-start-btn').addEventListener('click', () => {
+                const targetScreen = state.userProfile.role === 'SUPER_ADMIN' ? 'adminHome' : 'setup';
+                navigateTo(targetScreen);
+             });
              document.getElementById('success-view-data-btn').addEventListener('click', () => handleViewHistory(false));
              break;
         case 'data':
