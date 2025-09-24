@@ -1,4 +1,4 @@
-import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance } from './main.js';
+import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleDownloadImportTemplate, handleFileUploadForImport, handleSaveImportedData } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
 import { apiService } from './api.js';
@@ -94,8 +94,17 @@ function renderAdminHomeScreen() {
     document.getElementById('go-to-attendance-btn').addEventListener('click', () => navigateTo('setup'));
     document.getElementById('view-dashboard-btn').addEventListener('click', () => navigateTo('dashboard'));
     document.getElementById('view-admin-panel-btn').addEventListener('click', () => navigateTo('adminPanel'));
+    document.getElementById('import-data-btn').addEventListener('click', () => navigateTo('importData'));
 }
 
+function renderImportDataScreen() {
+    appContainer.innerHTML = templates.importData();
+    document.getElementById('import-back-btn').addEventListener('click', () => navigateTo('adminHome'));
+    document.getElementById('download-import-template-btn').addEventListener('click', handleDownloadImportTemplate);
+    document.getElementById('upload-import-btn').addEventListener('click', () => document.getElementById('import-file-input').click());
+    document.getElementById('import-file-input').addEventListener('change', handleFileUploadForImport);
+    document.getElementById('save-imported-data-btn').addEventListener('click', handleSaveImportedData);
+}
 
 async function renderDashboardScreen() {
     appContainer.innerHTML = templates.dashboard();
@@ -526,6 +535,9 @@ export function renderScreen(screen) {
             break;
         case 'adminHome':
             renderAdminHomeScreen();
+            break;
+        case 'importData':
+            renderImportDataScreen();
             break;
         case 'dashboard':
             renderDashboardScreen();
