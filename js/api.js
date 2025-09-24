@@ -42,5 +42,9 @@ export const apiService = {
 
     async updateUserRole(targetEmail, newRole) {
         return await _fetch('updateUserRole', { targetEmail, newRole });
+    },
+
+    async updateAssignedClasses(emailToUpdate, newClasses) {
+        return await _fetch('updateAssignedClasses', { emailToUpdate, newClasses });
     }
 };
