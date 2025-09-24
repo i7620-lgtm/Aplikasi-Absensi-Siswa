@@ -264,7 +264,39 @@ export async function handleDownloadData() {
 
 
 // --- INITIALIZATION ---
+function checkSession() {
+    const storedProfile = sessionStorage.getItem('userProfile');
+    const storedData = sessionStorage.getItem('userData');
+
+    if (storedProfile && storedData) {
+        try {
+            const user = JSON.parse(storedProfile);
+            const userData = JSON.parse(storedData);
+            
+            setState({
+                userProfile: user,
+                studentsByClass: userData.students_by_class || {},
+                savedLogs: userData.saved_logs || [],
+            });
+
+            if (user.role === 'SUPER_ADMIN') {
+                state.currentScreen = 'adminHome';
+            } else if (user.role === 'KEPALA_SEKOLAH') {
+                state.currentScreen = 'dashboard';
+            } else {
+                state.currentScreen = 'setup';
+            }
+            console.log('Sesi dipulihkan untuk:', user.name);
+
+        } catch (e) {
+            console.error("Gagal mem-parsing data sesi, membersihkan penyimpanan.", e);
+            sessionStorage.clear();
+        }
+    }
+}
+
 function main() {
+    checkSession();
     initializeGsi();
     render();
 }
