@@ -1024,19 +1024,24 @@
             document.getElementById('static-fallback').style.display = 'none';
             document.getElementById('root').classList.remove('hidden');
 
-            // Wait for the GSI script to load
-            const gsiScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
-            if (gsiScript.async) {
-                gsiScript.onload = initializeGsi;
-            } else {
-                // Fallback for browsers that might not respect async/defer onload
-                const interval = setInterval(() => {
-                    if (window.google && window.google.accounts) {
-                        clearInterval(interval);
-                        initializeGsi();
-                    }
-                }, 100);
-            }
+            // Wait for the GSI script to load using a reliable interval check
+            const gsiLoadCheck = setInterval(() => {
+                if (window.google && window.google.accounts) {
+                    clearInterval(gsiLoadCheck);
+                    initializeGsi();
+                }
+            }, 100);
+
+            // Set a timeout to prevent an infinite loop in case GSI fails to load
+            setTimeout(() => {
+                // Check if GSI is still not ready after 10 seconds
+                if (!state.isGsiReady) {
+                    clearInterval(gsiLoadCheck);
+                    console.error("GSI script failed to load within 10 seconds.");
+                    // Call initializeGsi one last time to trigger the built-in error message
+                    initializeGsi(); 
+                }
+            }, 10000); // 10 second timeout
 
             render();
         }
