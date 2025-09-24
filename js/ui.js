@@ -63,6 +63,9 @@ export function displayAuthError(message, error = null) {
 
 function renderSetupScreen() {
     appContainer.innerHTML = templates.setup();
+    const isTeacher = state.userProfile?.role === 'GURU';
+    const needsAssignment = isTeacher && (!state.userProfile.assigned_classes || state.userProfile.assigned_classes.length === 0);
+
     if (state.userProfile) {
         document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
         if (state.userProfile.role === 'SUPER_ADMIN') {
@@ -72,12 +75,15 @@ function renderSetupScreen() {
     } else {
         document.getElementById('loginBtn').addEventListener('click', handleSignIn);
     }
-    document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
-    document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(false));
-    document.getElementById('recapBtn').addEventListener('click', () => navigateTo('recap'));
-    document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
-    document.getElementById('downloadDataBtn').addEventListener('click', handleDownloadData);
-    document.getElementById('class-select').value = state.selectedClass || state.CLASSES?.[0] || '1A';
+    
+    if (!needsAssignment && state.userProfile) {
+        document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
+        document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(false));
+        document.getElementById('recapBtn').addEventListener('click', () => navigateTo('recap'));
+        document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
+        document.getElementById('downloadDataBtn').addEventListener('click', handleDownloadData);
+        document.getElementById('class-select').value = state.selectedClass || state.userProfile?.assigned_classes?.[0] || '';
+    }
 }
 
 async function renderDashboardScreen() {
@@ -165,6 +171,7 @@ async function renderAdminPanelScreen() {
                     <tr class="border-b bg-slate-50">
                         <th class="p-3 text-sm font-semibold text-slate-600">Pengguna</th>
                         <th class="p-3 text-sm font-semibold text-slate-600">Peran</th>
+                        <th class="p-3 text-sm font-semibold text-slate-600">Tindakan</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -185,6 +192,16 @@ async function renderAdminPanelScreen() {
                                     <option value="KEPALA_SEKOLAH" ${user.role === 'KEPALA_SEKOLAH' ? 'selected' : ''}>Kepala Sekolah</option>
                                     <option value="SUPER_ADMIN" ${user.role === 'SUPER_ADMIN' ? 'selected' : ''}>Super Admin</option>
                                 </select>
+                            </td>
+                             <td class="p-3">
+                                ${user.role === 'GURU' ? `
+                                <button class="manage-classes-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" 
+                                        data-email="${user.email}" 
+                                        data-name="${user.name}" 
+                                        data-assigned='${JSON.stringify(user.assigned_classes || [])}'>
+                                    Kelola Kelas
+                                </button>
+                                ` : ''}
                             </td>
                         </tr>
                     `).join('')}
@@ -213,9 +230,51 @@ async function renderAdminPanelScreen() {
                 }
             });
         });
+
+        document.querySelectorAll('.manage-classes-btn').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const user = {
+                    email: e.currentTarget.dataset.email,
+                    name: e.currentTarget.dataset.name,
+                    assigned_classes: JSON.parse(e.currentTarget.dataset.assigned)
+                };
+                showManageClassesModal(user);
+            });
+        });
     } catch(error) {
          container.innerHTML = `<p class="text-center text-red-500 py-8">${error.message}</p>`;
     }
+}
+
+function showManageClassesModal(user) {
+    const existingModal = document.getElementById('manage-classes-modal');
+    if (existingModal) existingModal.parentElement.remove();
+    
+    const modalContainer = document.createElement('div');
+    modalContainer.innerHTML = templates.manageClassesModal(user);
+    document.body.appendChild(modalContainer);
+
+    const closeModal = () => {
+        if (document.body.contains(modalContainer)) {
+            document.body.removeChild(modalContainer);
+        }
+    };
+
+    document.getElementById('manage-classes-cancel-btn').onclick = closeModal;
+    document.getElementById('manage-classes-save-btn').onclick = async () => {
+        const selectedClasses = Array.from(document.querySelectorAll('#class-checkbox-container input:checked')).map(cb => cb.value);
+        showLoader('Menyimpan perubahan...');
+        try {
+            await apiService.updateAssignedClasses(user.email, selectedClasses);
+            showNotification('Kelas berhasil diperbarui.');
+            closeModal();
+            navigateTo('adminPanel'); // Refresh to show updated data
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            hideLoader();
+        }
+    };
 }
 
 
