@@ -5,17 +5,34 @@ import { sql } from '@vercel/postgres';
 const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
 
 async function setupTables() {
+    // Membuat tabel 'users' jika belum ada.
     await sql`
       CREATE TABLE IF NOT EXISTS users (
         email VARCHAR(255) PRIMARY KEY,
         name VARCHAR(255),
         picture TEXT,
         role VARCHAR(50) DEFAULT 'GURU',
-        assigned_classes TEXT[] DEFAULT '{}',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         last_login TIMESTAMPTZ
       );
     `;
+
+    // Bagian ini menangani migrasi skema untuk tabel yang sudah ada.
+    // Aman untuk dijalankan berulang kali (idempotent).
+    try {
+        // Mencoba menambahkan kolom untuk kelas yang ditugaskan.
+        await sql`ALTER TABLE users ADD COLUMN assigned_classes TEXT[] DEFAULT '{}'`;
+    } catch (error) {
+        // Abaikan error jika kolom sudah ada (kode error Postgres: 42701)
+        if (error.code !== '42701') {
+            throw error;
+        }
+    }
+
+    // Ini memastikan setiap pengguna yang dibuat sebelum kolom memiliki nilai default diperbaiki.
+    await sql`UPDATE users SET assigned_classes = '{}' WHERE assigned_classes IS NULL`;
+    
+    // Membuat tabel 'absensi_data' jika belum ada.
     await sql`
       CREATE TABLE IF NOT EXISTS absensi_data (
         user_email VARCHAR(255) PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
@@ -28,15 +45,21 @@ async function setupTables() {
 
 async function loginOrRegisterUser(profile) {
     const { email, name, picture } = profile;
-    const { rows } = await sql`SELECT email, name, picture, role, COALESCE(assigned_classes, '{}') as assigned_classes FROM users WHERE email = ${email}`;
+    
+    // Dengan setupTables memastikan kolom ada dan tidak null, query ini lebih aman.
+    const { rows } = await sql`SELECT email, name, picture, role, assigned_classes FROM users WHERE email = ${email}`;
     let user = rows[0];
 
     if (user) {
-        // User exists, update last login
+        // Pengguna ada, perbarui login terakhir
         await sql`UPDATE users SET last_login = NOW(), name = ${name}, picture = ${picture} WHERE email = ${email}`;
         user.last_login = new Date();
+        // Pemeriksaan defensif: pastikan assigned_classes adalah array, bukan null.
+        if (user.assigned_classes === null) {
+            user.assigned_classes = [];
+        }
     } else {
-        // New user, determine role
+        // Pengguna baru, tentukan peran
         const role = SUPER_ADMIN_EMAILS.includes(email) ? 'SUPER_ADMIN' : 'GURU';
         const { rows: newRows } = await sql`
             INSERT INTO users (email, name, picture, role, last_login, assigned_classes)
@@ -44,6 +67,10 @@ async function loginOrRegisterUser(profile) {
             RETURNING email, name, picture, role, assigned_classes;
         `;
         user = newRows[0];
+        // Klausa RETURNING harus memberikan array karena DEFAULT, tetapi periksa untuk jaga-jaga.
+         if (user.assigned_classes === null) {
+            user.assigned_classes = [];
+        }
     }
     return user;
 }
@@ -60,12 +87,12 @@ export default async function handler(request, response) {
                 return response.status(400).json({ error: 'Action is required' });
             }
 
-            // For all actions EXCEPT loginOrRegister, we need an authenticated user email.
+            // Untuk semua tindakan KECUALI loginOrRegister, kita memerlukan email pengguna yang terotentikasi.
             if (action !== 'loginOrRegister' && !userEmail) {
                 return response.status(400).json({ error: 'userEmail is required for this action' });
             }
             
-            // Authenticate user for all actions (except login which is handled inside the switch)
+            // Otentikasi pengguna untuk semua tindakan (kecuali login yang ditangani di dalam switch)
             let userRole = null;
             if (action !== 'loginOrRegister') {
                 const { rows: userRows } = await sql`SELECT role FROM users WHERE email = ${userEmail}`;
@@ -114,7 +141,7 @@ export default async function handler(request, response) {
                     if (userRole !== 'SUPER_ADMIN') {
                          return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
-                    const { rows: allUsers } = await sql`SELECT email, name, picture, role, COALESCE(assigned_classes, '{}') as assigned_classes FROM users ORDER BY name;`;
+                    const { rows: allUsers } = await sql`SELECT email, name, picture, role, assigned_classes FROM users ORDER BY name;`;
                     return response.status(200).json({ allUsers });
 
                 case 'updateUserRole':
@@ -133,7 +160,7 @@ export default async function handler(request, response) {
                         return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
                     const { emailToUpdate, newClasses } = payload;
-                    // newClasses should be an array of strings
+                    // newClasses harus berupa array string
                     await sql`UPDATE users SET assigned_classes = ${newClasses} WHERE email = ${emailToUpdate}`;
                     return response.status(200).json({ success: true });
                 
