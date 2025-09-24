@@ -2,7 +2,7 @@ import { sql } from '@vercel/postgres';
 
 // --- KONFIGURASI ---
 // Ganti dengan email akun yang akan dijadikan sebagai admin/kepala sekolah.
-const KEPALA_SEKOLAH_EMAIL = 'i7620@guru.sd.belajar.id'; 
+const KEPALA_SEKOLAH_EMAIL = 'mc4diaz@gmail.com'; 
 
 export default async function handler(request, response) {
   try {
