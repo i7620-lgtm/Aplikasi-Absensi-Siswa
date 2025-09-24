@@ -13,6 +13,10 @@ function getRoleDisplayName(role) {
 export const templates = {
     setup: () => {
         const isAdmin = state.userProfile?.role === 'SUPER_ADMIN';
+        const isTeacher = state.userProfile?.role === 'GURU';
+        const assignedClasses = state.userProfile?.assigned_classes || [];
+        const needsAssignment = isTeacher && assignedClasses.length === 0;
+        
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
@@ -55,25 +59,41 @@ export const templates = {
                         <button id="view-admin-panel-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Panel Admin</button>
                     </div>` : ''
                 }
-
-                <h2 class="text-lg font-semibold text-slate-700 mb-4 pt-4 ${state.userProfile ? 'border-t border-slate-200' : ''}">Pilih Kelas & Tanggal</h2>
-                <div class="space-y-4">
-                    <div>
-                        <label for="class-select" class="block text-sm font-medium text-slate-700 mb-1">Pilih Kelas</label>
-                        <select id="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">${CLASSES.map(c => `<option value="${c}">${c}</option>`).join('')}</select>
+                ${ needsAssignment ? `
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+                        <div class="flex">
+                            <div class="py-1"><svg class="w-6 h-6 text-yellow-500 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg></div>
+                            <div>
+                                <p class="font-bold text-yellow-800">Menunggu Penugasan Kelas</p>
+                                <p class="text-sm text-yellow-700 mt-1">Akun Anda aktif tetapi belum ditugaskan kelas. Silakan hubungi admin sekolah untuk mendapatkan akses.</p>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <label for="date-input" class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
-                        <input type="date" id="date-input" value="${state.selectedDate}" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"/>
+                ` : `
+                    <h2 class="text-lg font-semibold text-slate-700 mb-4 pt-4 ${state.userProfile ? 'border-t border-slate-200' : ''}">Pilih Kelas & Tanggal</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="class-select" class="block text-sm font-medium text-slate-700 mb-1">Pilih Kelas</label>
+                            <select id="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${!state.userProfile || assignedClasses.length === 0 ? 'disabled' : ''}>
+                                ${ assignedClasses.length > 0 
+                                    ? assignedClasses.map(c => `<option value="${c}">${c}</option>`).join('')
+                                    : `<option>Tidak ada kelas ditugaskan</option>`
+                                }
+                            </select>
+                        </div>
+                        <div>
+                            <label for="date-input" class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
+                            <input type="date" id="date-input" value="${state.selectedDate}" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${!state.userProfile ? 'disabled' : ''}/>
+                        </div>
                     </div>
-                </div>
-                <div class="mt-6 space-y-3">
-                     <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile ? 'disabled' : ''}>Mulai Absensi</button>
-                     <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile ? 'disabled' : ''}>Lihat Semua Riwayat</button>
-                     <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile ? 'disabled' : ''}>Rekap Absensi Siswa</button>
-                     <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile ? 'disabled' : ''}>Tambah/Kurangi Data Siswa</button>
-                     <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile ? 'disabled' : ''}>Unduh Rekap Absensi (Excel)</button>
-                </div>
+                    <div class="mt-6 space-y-3">
+                         <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Mulai Absensi</button>
+                         <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Lihat Semua Riwayat</button>
+                         <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Rekap Absensi Siswa</button>
+                         <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Tambah/Kurangi Data Siswa</button>
+                         <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Unduh Rekap Absensi (Excel)</button>
+                    </div>
+                `}
                 <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.userProfile ? 'Data disimpan secara otomatis di cloud.' : 'Silakan login untuk memulai.'}</p>
             </div>
         </div>`;
@@ -232,5 +252,27 @@ export const templates = {
                     <button id="confirm-yes-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition">Ya</button>
                 </div>
             </div>
-        </div>`
+        </div>`,
+    manageClassesModal: (user) => {
+        const assigned = user.assigned_classes || [];
+        return `
+        <div id="manage-classes-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
+             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
+                <h2 class="text-xl font-bold text-slate-800 mb-2">Kelola Kelas untuk</h2>
+                <p class="text-slate-600 mb-6 font-semibold">${user.name}</p>
+                <div id="class-checkbox-container" class="grid grid-cols-3 gap-4 max-h-60 overflow-y-auto border p-4 rounded-lg mb-6">
+                    ${CLASSES.map(c => `
+                        <label class="flex items-center space-x-2 text-slate-700">
+                            <input type="checkbox" value="${c}" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${assigned.includes(c) ? 'checked' : ''}>
+                            <span>${c}</span>
+                        </label>
+                    `).join('')}
+                </div>
+                <div class="flex justify-end gap-4">
+                    <button id="manage-classes-cancel-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Batal</button>
+                    <button id="manage-classes-save-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition">Simpan</button>
+                </div>
+            </div>
+        </div>`;
+    }
 };
