@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -11,7 +10,7 @@
     <title>Absensi Online Siswa</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    <!-- Scripts will be loaded dynamically by the module -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         @import url('https://rsms.me/inter/inter.css');
@@ -69,6 +68,13 @@
         #notification.error { background-color: #ef4444; }
         #notification.success { background-color: #22c55e; }
     </style>
+<script type="importmap">
+{
+  "imports": {
+    "@vercel/postgres": "https://aistudiocdn.com/@vercel/postgres@^0.10.0"
+  }
+}
+</script>
 </head>
 <body class="bg-slate-100 flex flex-col min-h-screen">
     <!-- Static Fallback for Verification Bots -->
@@ -78,8 +84,7 @@
         
         <h2 class="text-xl font-semibold text-slate-700 mt-4">Fitur Utama</h2>
         <ul class="text-slate-600 list-disc list-inside space-y-1">
-            <li><strong>Bekerja Offline:</strong> Catat absensi kapan saja, di mana saja, bahkan tanpa koneksi internet. Data akan tersimpan aman di perangkat Anda.</li>
-            <li><strong>Sinkronisasi Google Drive:</strong> Secara opsional, login dengan akun Google Anda untuk secara otomatis mencadangkan dan menyinkronkan semua data absensi ke sebuah file JSON pribadi di Google Drive Anda. Aman dan mudah diakses.</li>
+            <li><strong>Penyimpanan Cloud Terpusat:</strong> Login dengan akun Google Anda untuk menyimpan dan mengakses data absensi Anda dengan aman dari perangkat mana pun.</li>
             <li><strong>Manajemen Kelas & Siswa:</strong> Tambahkan daftar kelas dan siswa dengan mudah, baik secara manual maupun dengan mengimpor dari file Excel.</li>
             <li><strong>Pencatatan Cepat:</strong> Pilih kelas dan tanggal, lalu tandai status kehadiran setiap siswa (Hadir, Sakit, Izin, Alfa) dengan sekali klik.</li>
             <li><strong>Riwayat & Rekapitulasi:</strong> Lihat riwayat absensi per tanggal atau per kelas, dan dapatkan rekapitulasi total ketidakhadiran setiap siswa untuk evaluasi.</li>
@@ -115,1106 +120,513 @@
         <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a>
     </footer>
 
-<script type="module">
-    // --- CONFIGURATION ---
-    const API_KEY = 'AIzaSyAoriBT31QhnPKAVH-t2-ANV7AiYdKjfsE';
-    const CLIENT_ID = '584511730006-avkntpukucstgnf7c0otn3dt0lajtu43.apps.googleusercontent.com';
-    const SCOPES = 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file';
-    const DATA_FILENAME = 'absensi_app_data.json';
-    const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5B", "6A", "6B"];
-    
-    // --- APPLICATION STATE ---
-    let state = {
-        userProfile: null,
-        fileId: null, // ID for the JSON data file in Google Drive
-        currentScreen: 'setup', // Default to setup screen
-        isGsiReady: false,
-        isGapiClientReady: false,
-        selectedClass: '',
-        selectedDate: new Date().toISOString().split('T')[0],
-        students: [], // students for the current class
-        studentsByClass: {}, // { '1A': { students: ['Siswa A', 'Siswa B'], lastModified: '...' }, ... }
-        attendance: {}, // { studentName: status }
-        savedLogs: [], // historical attendance logs with { ..., lastModified: '...' }
-        historyClassFilter: null, // to filter history view by class
-        newStudents: [''], // for add-students screen
-        recapSortOrder: 'total', // 'total' or 'absen'
-    };
+    <script type="module">
+        // --- CONFIGURATION ---
+        const CLIENT_ID = '584511730006-avkntpukucstgnf7c0otn3dt0lajtu43.apps.googleusercontent.com';
+        const SCOPES = 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
+        const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5B", "6A", "6B"];
 
-    // --- DOM ELEMENTS ---
-    const appContainer = document.getElementById('app-container');
-    const loaderWrapper = document.getElementById('loader-wrapper');
-    const notificationEl = document.getElementById('notification');
-
-    // --- TEMPLATES ---
-    const templates = {
-        setup: () => `
-            <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
-                <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
-                    ${
-                        state.userProfile
-                        ? `
-                            <div class="flex items-center justify-between mb-6">
-                                <h1 class="text-xl font-bold text-slate-800">Absensi Online Siswa</h1>
-                                <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
-                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                                </button>
-                            </div>
-                            <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
-                                <img src="${state.userProfile.picture}" alt="User" class="w-12 h-12 rounded-full"/>
-                                <div>
-                                    <p class="font-semibold text-slate-800">${state.userProfile.name}</p>
-                                    <p class="text-sm text-slate-500">${state.userProfile.email}</p>
-                                </div>
-                            </div>
-                        `
-                        : `
-                            <h1 class="text-xl font-bold text-slate-800 mb-4">Absensi Online Siswa</h1>
-                            <div id="backup-notice" class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6 text-sm text-blue-800">
-                                <p class="font-semibold mb-2">Aplikasi ini bekerja offline!</p>
-                                <p class="mb-3">Data Anda disimpan di perangkat ini. Login dengan Google untuk mencadangkan dan menyinkronkan data Anda secara otomatis dengan Google Drive.</p>
-                                <button id="loginBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg w-full transition duration-300 flex items-center justify-center gap-2" disabled>
-                                    <svg class="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.222,0-9.519-3.108-11.127-7.481l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,35.17,44,30.023,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>
-                                    <span id="loginBtnText">Memuat Opsi Login...</span>
-                                </button>
-                                <div id="auth-error-container" class="text-left text-sm mt-4 hidden"></div>
-                            </div>
-                        `
-                    }
-                    <h2 class="text-lg font-semibold text-slate-700 mb-4">Pilih Kelas & Tanggal</h2>
-                    <div class="space-y-4">
-                        <div>
-                            <label for="class-select" class="block text-sm font-medium text-slate-700 mb-1">Pilih Kelas</label>
-                            <select id="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">${CLASSES.map(c => `<option value="${c}">${c}</option>`).join('')}</select>
-                        </div>
-                        <div>
-                            <label for="date-input" class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
-                            <input type="date" id="date-input" value="${state.selectedDate}" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"/>
-                        </div>
-                    </div>
-                    <div class="mt-6 space-y-3">
-                         <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Mulai Absensi</button>
-                         <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Riwayat Kelas Terpilih</button>
-                         <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Rekap Absensi Siswa</button>
-                         <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Tambah/Kurangi Data Siswa</button>
-                         <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Unduh Rekap Absensi (Excel)</button>
-                    </div>
-                    <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.userProfile ? 'Data disinkronkan secara otomatis.' : ''}</p>
-                    <div class="text-center text-xs text-slate-500 mt-6 border-t border-slate-200 pt-4">
-                        <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="hover:underline">Kebijakan Privasi</a>
-                        &bull;
-                        <a href="./terms.html" target="_blank" rel="noopener noreferrer" class="hover:underline">Ketentuan Layanan</a>
-                    </div>
-                </div>
-            </div>`,
-        addStudents: (className) => {
-            const isEditing = (state.students && state.students.length > 0);
-            const message = isEditing
-                ? `Ubah daftar siswa untuk kelas <span class="font-semibold text-blue-600">${className}</span>. Hapus nama atau baris untuk mengurangi siswa.`
-                : `Data siswa untuk <span class="font-semibold text-blue-600">${className}</span> belum ada. Silakan tambahkan di bawah ini.`;
-            return `
-            <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
-                 <div class="bg-white p-8 rounded-2xl shadow-lg">
-                    <h1 class="text-2xl font-bold text-slate-800 mb-2">Tambah/Kurangi Data Siswa</h1>
-                    <p class="text-slate-500 mb-6">${message}</p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <!-- Manual Input -->
-                        <div class="border-r-0 md:border-r md:pr-8 border-slate-200">
-                             <h2 class="text-lg font-semibold text-slate-700 mb-4">Daftar Siswa</h2>
-                             <div id="manual-input-container" class="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2"></div>
-                             <button id="add-student-row-btn" class="w-full text-sm bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold py-2 px-4 rounded-lg transition">+ Tambah Baris</button>
-                        </div>
-                        <!-- Excel Import -->
-                        <div>
-                            <h2 class="text-lg font-semibold text-slate-700 mb-4">Impor dari File</h2>
-                            <p class="text-sm text-slate-500 mb-4">Unggah file .xlsx untuk <span class="font-bold">menimpa</span> daftar saat ini.</p>
-                            <button id="download-template-btn" class="w-full mb-3 text-sm bg-green-100 hover:bg-green-200 text-green-700 font-semibold py-2 px-4 rounded-lg transition">Unduh Template (.csv)</button>
-                            <input type="file" id="excel-upload" class="hidden" accept=".xlsx, .xls, .csv"/>
-                            <button id="import-excel-btn" class="w-full text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg transition">Pilih File Excel untuk Diimpor</button>
-                        </div>
-                    </div>
-                    <div class="mt-8 pt-6 border-t border-slate-200 flex justify-end gap-4">
-                        <button id="cancel-add-students-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Batal</button>
-                        <button id="save-students-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition">Simpan Data Siswa</button>
-                    </div>
-                </div>
-            </div>`;
-        },
-        attendance: (className, date) => `
-            <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
-                 <div class="bg-white p-8 rounded-2xl shadow-lg">
-                    <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
-                        <div>
-                            <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${className}</h1>
-                            <p class="text-slate-500">Tanggal: ${new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                        </div>
-                         <button id="back-to-setup-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left">
-                            <thead>
-                                <tr class="border-b bg-slate-50">
-                                    <th class="p-3 text-sm font-semibold text-slate-600">No.</th>
-                                    <th class="p-3 text-sm font-semibold text-slate-600">Nama Siswa</th>
-                                    <th class="p-3 text-sm font-semibold text-slate-600 text-center">Hadir (H)</th>
-                                    <th class="p-3 text-sm font-semibold text-slate-600 text-center">Sakit (S)</th>
-                                    <th class="p-3 text-sm font-semibold text-slate-600 text-center">Izin (I)</th>
-                                    <th class="p-3 text-sm font-semibold text-slate-600 text-center">Alfa (A)</th>
-                                </tr>
-                            </thead>
-                            <tbody id="attendance-table-body"></tbody>
-                        </table>
-                    </div>
-                    <div class="mt-8 flex justify-end">
-                        <button id="save-attendance-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition">Simpan Absensi</button>
-                    </div>
-                </div>
-            </div>`,
-        success: () => {
-            const message = state.userProfile 
-                ? 'Data absensi telah berhasil disimpan dan dicadangkan ke Google Drive Anda.'
-                : 'Data absensi telah berhasil disimpan di penyimpanan lokal perangkat ini.';
-            return `
-            <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
-                <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
-                    <div class="checkmark-wrapper mx-auto mb-6">
-                        <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
-                            <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
-                            <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
-                        </svg>
-                    </div>
-                    <h1 class="text-3xl md:text-4xl font-bold text-slate-800 mb-3">Absensi Tersimpan!</h1>
-                    <p class="text-slate-500 mb-10">${message}</p>
-                    <div class="space-y-4">
-                         <button id="success-back-to-start-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Kembali ke Halaman Awal</button>
-                         <button id="success-view-data-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Semua Riwayat</button>
-                    </div>
-                </div>
-            </div>`;
-        },
-        data: () => `
-             <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
-                 <div class="bg-white p-8 rounded-2xl shadow-lg">
-                     <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
-                        <h1 id="data-title" class="text-2xl font-bold text-slate-800">Riwayat Data Absensi</h1>
-                        <button id="data-back-to-start-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
-                    </div>
-                    <div id="data-container" class="space-y-6"></div>
-                 </div>
-            </div>`,
-        recap: () => `
-             <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
-                 <div class="bg-white p-8 rounded-2xl shadow-lg">
-                     <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
-                        <h1 class="text-2xl font-bold text-slate-800">Rekapitulasi Absensi Siswa</h1>
-                        <button id="recap-back-to-start-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
-                    </div>
-                    <div class="mb-4 flex items-center gap-2">
-                        <label class="text-sm font-medium text-slate-600">Urutkan:</label>
-                        <button id="sort-by-total-btn" class="${state.recapSortOrder === 'total' ? 'bg-blue-500 text-white' : 'bg-white text-blue-700 border border-blue-500 hover:bg-blue-50'} font-semibold py-1 px-3 rounded-lg text-sm transition">Total Terbanyak</button>
-                        <button id="sort-by-absen-btn" class="${state.recapSortOrder === 'absen' ? 'bg-blue-500 text-white' : 'bg-white text-blue-700 border border-blue-500 hover:bg-blue-50'} font-semibold py-1 px-3 rounded-lg text-sm transition">No. Absen</button>
-                    </div>
-                    <div id="recap-container" class="overflow-x-auto"></div>
-                 </div>
-            </div>`,
-        confirmation: (message) => `
-            <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
-                 <div class="bg-white p-8 rounded-2xl shadow-lg max-w-sm w-full text-center animate-fade-in">
-                    <h2 class="text-xl font-bold text-slate-800 mb-4">Konfirmasi</h2>
-                    <p class="text-slate-600 mb-8">${message}</p>
-                    <div class="flex justify-center gap-4">
-                        <button id="confirm-no-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-8 rounded-lg transition">Tidak</button>
-                        <button id="confirm-yes-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition">Ya</button>
-                    </div>
-                </div>
-            </div>`
-    };
-
-    // --- RENDER FUNCTION ---
-    function render() {
-        appContainer.innerHTML = '';
-        
-        switch(state.currentScreen) {
-            case 'setup':
-                appContainer.innerHTML = templates.setup();
-                if (state.userProfile) {
-                    document.getElementById('logoutBtn').addEventListener('click', gapiService.signOut);
-                } else {
-                    document.getElementById('loginBtn').addEventListener('click', gapiService.signIn);
-                }
-                document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
-                document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(true));
-                document.getElementById('recapBtn').addEventListener('click', () => navigateTo('recap'));
-                document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
-                document.getElementById('downloadDataBtn').addEventListener('click', handleDownloadData);
-                document.getElementById('class-select').value = state.selectedClass || CLASSES[0];
-                updateLoginButtonState();
-                break;
-            case 'add-students':
-                appContainer.innerHTML = templates.addStudents(state.selectedClass);
-                renderStudentInputRows();
-                document.getElementById('add-student-row-btn').addEventListener('click', addStudentInputRow);
-                document.getElementById('download-template-btn').addEventListener('click', handleDownloadTemplate);
-                document.getElementById('import-excel-btn').addEventListener('click', () => document.getElementById('excel-upload').click());
-                document.getElementById('excel-upload').addEventListener('change', handleExcelImport);
-                document.getElementById('cancel-add-students-btn').addEventListener('click', () => navigateTo('setup'));
-                document.getElementById('save-students-btn').addEventListener('click', handleSaveNewStudents);
-                break;
-            case 'attendance':
-                appContainer.innerHTML = templates.attendance(state.selectedClass, state.selectedDate);
-                renderAttendanceTable();
-                document.getElementById('back-to-setup-btn').addEventListener('click', () => navigateTo('setup'));
-                document.getElementById('save-attendance-btn').addEventListener('click', handleSaveAttendance);
-                break;
-            case 'success':
-                 appContainer.innerHTML = templates.success();
-                 document.getElementById('success-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
-                 document.getElementById('success-view-data-btn').addEventListener('click', () => handleViewHistory(false));
-                 break;
-            case 'data':
-                appContainer.innerHTML = templates.data();
-                renderDataScreen();
-                document.getElementById('data-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
-                break;
-            case 'recap':
-                appContainer.innerHTML = templates.recap();
-                renderRecapScreen();
-                document.getElementById('recap-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
-                document.getElementById('sort-by-total-btn').addEventListener('click', () => {
-                    state.recapSortOrder = 'total';
-                    navigateTo('recap');
-                });
-                document.getElementById('sort-by-absen-btn').addEventListener('click', () => {
-                    state.recapSortOrder = 'absen';
-                    navigateTo('recap');
-                });
-                break;
-        }
-
-        if (appContainer.classList.contains('hidden')) {
-             appContainer.classList.remove('hidden');
-             hideLoader();
-        }
-    }
-    
-    function navigateTo(screen) {
-        state.currentScreen = screen;
-        render();
-    }
-    
-    // --- LOCAL STORAGE ---
-    function saveStateToLocal() {
-        try {
-            const dataToSave = {
-                savedLogs: state.savedLogs,
-                studentsByClass: state.studentsByClass,
-                userProfile: state.userProfile,
-                fileId: state.fileId,
-            };
-            localStorage.setItem('attendanceApp', JSON.stringify(dataToSave));
-        } catch (e) {
-            console.error("Failed to save state to local storage:", e);
-            showNotification('Gagal menyimpan data ke perangkat.', 'error');
-        }
-    }
-
-    function loadStateFromLocal() {
-        try {
-            const savedData = JSON.parse(localStorage.getItem('attendanceApp'));
-            if (savedData) {
-                const migratedData = migrateData(savedData);
-                state.savedLogs = migratedData.savedLogs || [];
-                state.studentsByClass = migratedData.studentsByClass || {};
-                state.userProfile = migratedData.userProfile || null;
-                state.fileId = migratedData.fileId || null;
-            }
-        } catch (e) {
-            console.error("Failed to load state from local storage:", e);
-            localStorage.removeItem('attendanceApp');
-        }
-    }
-
-
-    // --- UI HELPERS ---
-    function showLoader(message) {
-        loaderWrapper.querySelector('.loader-text').textContent = message;
-        loaderWrapper.style.display = 'flex';
-        setTimeout(() => loaderWrapper.style.opacity = '1', 10);
-    }
-
-    function hideLoader() {
-        loaderWrapper.style.opacity = '0';
-        setTimeout(() => {
-            loaderWrapper.style.display = 'none';
-            loaderWrapper.querySelector('.loader-text').textContent = 'Memuat...';
-        }, 300);
-    }
-    
-    function showNotification(message, type = 'success') {
-        notificationEl.textContent = message;
-        notificationEl.className = type === 'error' ? 'error' : 'success';
-        notificationEl.classList.add('show');
-        setTimeout(() => {
-            notificationEl.classList.remove('show');
-        }, 4000);
-    }
-
-    function showConfirmation(message) {
-        return new Promise(resolve => {
-            const existingModal = document.getElementById('confirmation-modal');
-            if (existingModal) existingModal.remove();
-            
-            const modalContainer = document.createElement('div');
-            modalContainer.innerHTML = templates.confirmation(message);
-            document.body.appendChild(modalContainer);
-
-            const cleanup = () => {
-                if(document.body.contains(modalContainer)){
-                    document.body.removeChild(modalContainer);
-                }
-            }
-
-            document.getElementById('confirm-yes-btn').onclick = () => {
-                cleanup();
-                resolve(true);
-            };
-            document.getElementById('confirm-no-btn').onclick = () => {
-                cleanup();
-                resolve(false);
-            };
-        });
-    }
-
-    function updateLoginButtonState() {
-        const loginBtn = document.getElementById('loginBtn');
-        const loginBtnText = document.getElementById('loginBtnText');
-        if (loginBtn && loginBtnText) {
-            if (state.isGsiReady) {
-                loginBtn.disabled = false;
-                loginBtnText.textContent = 'Login & Cadangkan Data';
-            } else {
-                loginBtn.disabled = true;
-                loginBtnText.textContent = 'Opsi Login Gagal Dimuat';
-            }
-        }
-    }
-
-    function updateSetupStatus(message, success = false) {
-        const statusEl = document.getElementById('setup-status');
-        if (statusEl) statusEl.textContent = message;
-    }
-
-    function displayAuthError(message, error = null) {
-        const errorContainer = document.getElementById('auth-error-container');
-        if (!errorContainer) return;
-        errorContainer.classList.remove('hidden');
-        let details = error ? (error.message || (typeof error === 'string' ? error : JSON.stringify(error))) : '';
-        // Sanitize details to prevent HTML injection if error messages are weird.
-        details = details.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${message}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
-    }
-
-
-    // --- DATA MIGRATION & MERGING ---
-    function migrateData(data) {
-        if (!data) return { studentsByClass: {}, savedLogs: [] };
-        
-        // Migrate studentsByClass
-        if (data.studentsByClass) {
-            Object.keys(data.studentsByClass).forEach(className => {
-                const classData = data.studentsByClass[className];
-                if (Array.isArray(classData)) { // Old format: ['Student A']
-                    data.studentsByClass[className] = {
-                        students: classData,
-                        lastModified: new Date(0).toISOString() // Use a very old date
-                    };
-                }
-            });
-        }
-
-        // Migrate savedLogs
-        if (data.savedLogs) {
-            data.savedLogs = data.savedLogs.map(log => {
-                if (!log.lastModified) {
-                    return { ...log, lastModified: new Date(0).toISOString() };
-                }
-                return log;
-            });
-        }
-        return data;
-    }
-
-    function mergeData(localData, driveData) {
-        // Merge studentsByClass
-        const mergedStudentsByClass = {};
-        const allClassNames = new Set([
-            ...Object.keys(localData.studentsByClass || {}), 
-            ...Object.keys(driveData.studentsByClass || {})
-        ]);
-
-        allClassNames.forEach(className => {
-            const local = localData.studentsByClass[className];
-            const drive = driveData.studentsByClass[className];
-
-            if (local && !drive) {
-                mergedStudentsByClass[className] = local;
-            } else if (!local && drive) {
-                mergedStudentsByClass[className] = drive;
-            } else if (local && drive) {
-                mergedStudentsByClass[className] = 
-                    new Date(local.lastModified) > new Date(drive.lastModified) ? local : drive;
-            }
-        });
-
-        // Merge savedLogs
-        const mergedLogsMap = new Map();
-        [...(localData.savedLogs || []), ...(driveData.savedLogs || [])].forEach(log => {
-            const key = `${log.date}_${log.class}`;
-            const existing = mergedLogsMap.get(key);
-            if (!existing || new Date(log.lastModified) > new Date(existing.lastModified)) {
-                mergedLogsMap.set(key, log);
-            }
-        });
-
-        return {
-            studentsByClass: mergedStudentsByClass,
-            savedLogs: Array.from(mergedLogsMap.values())
+        // --- APPLICATION STATE ---
+        let state = {
+            userProfile: null,
+            currentScreen: 'setup',
+            isGsiReady: false,
+            selectedClass: '',
+            selectedDate: new Date().toISOString().split('T')[0],
+            students: [], // students for the current class
+            studentsByClass: {}, // { '1A': { students: ['Siswa A', 'Siswa B'], lastModified: '...' }, ... }
+            attendance: {}, // { studentName: status }
+            savedLogs: [], // historical attendance logs with { ..., lastModified: '...' }
+            historyClassFilter: null, // to filter history view by class
+            newStudents: [''], // for add-students screen
+            recapSortOrder: 'total', // 'total' or 'absen'
         };
-    }
 
+        // --- DOM ELEMENTS ---
+        const appContainer = document.getElementById('app-container');
+        const loaderWrapper = document.getElementById('loader-wrapper');
+        const notificationEl = document.getElementById('notification');
 
-    // --- SCREEN SPECIFIC RENDER LOGIC ---
-    function renderStudentInputRows() {
-        const container = document.getElementById('manual-input-container');
-        container.innerHTML = '';
-        state.newStudents.forEach((name, index) => {
-            const div = document.createElement('div');
-            div.className = 'flex items-center gap-2';
-            div.innerHTML = `
-                <input type="text" value="${name}" data-index="${index}" class="student-name-input w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Nama Siswa ${index + 1}">
-                <button data-index="${index}" class="remove-student-row-btn text-slate-400 hover:text-red-500 p-1 text-2xl font-bold leading-none">&times;</button>
-            `;
-            container.appendChild(div);
-        });
-        document.querySelectorAll('.student-name-input').forEach(input => {
-            input.addEventListener('input', (e) => {
-                state.newStudents[e.target.dataset.index] = e.target.value;
-            });
-        });
-        document.querySelectorAll('.remove-student-row-btn').forEach(button => {
-            button.addEventListener('click', (e) => {
-                removeStudentInputRow(e.target.dataset.index);
-            });
-        });
-    }
-
-    function addStudentInputRow() {
-        state.newStudents.push('');
-        renderStudentInputRows();
-        const inputs = document.querySelectorAll('.student-name-input');
-        inputs[inputs.length - 1].focus();
-    }
-    
-    function removeStudentInputRow(index) {
-        state.newStudents.splice(index, 1);
-        if (state.newStudents.length === 0) {
-            state.newStudents.push('');
-        }
-        renderStudentInputRows();
-    }
-    
-    function renderAttendanceTable() {
-        const tbody = document.getElementById('attendance-table-body');
-        tbody.innerHTML = '';
-        state.students.forEach((student, index) => {
-            const tr = document.createElement('tr');
-            tr.className = 'border-b hover:bg-slate-50 transition';
-            const status = state.attendance[student] || 'H';
-            tr.innerHTML = `
-                <td class="p-3 text-sm text-slate-500">${index + 1}</td>
-                <td class="p-3 font-medium text-slate-800">${student}</td>
-                ${['H', 'S', 'I', 'A'].map(s => `
-                    <td class="p-3 text-center">
-                        <input type="radio" name="status-${index}" value="${s}" class="w-5 h-5 accent-blue-500" ${status === s ? 'checked' : ''} data-student="${student}">
-                    </td>
-                `).join('')}
-            `;
-            tbody.appendChild(tr);
-        });
-
-        document.querySelectorAll('input[type="radio"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                state.attendance[e.target.dataset.student] = e.target.value;
-            });
-        });
-    }
-
-    function renderDataScreen() {
-        const container = document.getElementById('data-container');
-        const titleEl = document.getElementById('data-title');
-        
-        const logsToShow = state.historyClassFilter 
-            ? state.savedLogs.filter(log => log.class === state.historyClassFilter)
-            : state.savedLogs;
-            
-        if (state.historyClassFilter) {
-            titleEl.textContent = `Riwayat Absensi Kelas ${state.historyClassFilter}`;
-        }
-
-        if (logsToShow.length === 0) {
-            container.innerHTML = `<p class="text-center text-slate-500">Belum ada riwayat absensi yang tersimpan.</p>`;
-            return;
-        }
-
-        const groupedByDate = logsToShow.reduce((acc, log) => {
-            const dateStr = log.date;
-            if (!acc[dateStr]) acc[dateStr] = [];
-            acc[dateStr].push(log);
-            return acc;
-        }, {});
-
-        container.innerHTML = Object.entries(groupedByDate)
-            .sort((a, b) => new Date(b[0]) - new Date(a[0]))
-            .map(([date, logs]) => {
-                const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-                const logsHtml = logs.map(log => {
-                    const absentStudents = Object.entries(log.attendance)
-                        .filter(([_, status]) => status !== 'H');
-                    
-                    let contentHtml;
-                    if (absentStudents.length > 0) {
-                        contentHtml = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead><tbody>${Object.entries(Object.fromEntries(absentStudents)).map(([name, status]) => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${status === 'S' ? 'bg-yellow-100 text-yellow-800' : status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${status}</span></td></tr>`).join('')}</tbody></table></div>`;
-                    } else {
-                        contentHtml = `<p class="text-sm text-slate-500 italic px-1 py-2">Semua siswa hadir.</p>`;
-                    }
-
-                    return `<div class="bg-slate-50 p-4 rounded-lg"><h3 class="font-bold text-blue-600 mb-2">Kelas ${log.class}</h3>${contentHtml}</div>`;
-                }).join('');
-
-                return `<div><h2 class="text-lg font-semibold text-slate-700 mb-3">${displayDate}</h2><div class="space-y-4">${logsHtml}</div></div>`;
-            }).join('');
-    }
-
-    function renderRecapScreen() {
-        const container = document.getElementById('recap-container');
-
-        if (!state.studentsByClass || Object.keys(state.studentsByClass).length === 0) {
-            container.innerHTML = `<p class="text-center text-slate-500">Belum ada data siswa untuk ditampilkan.</p>`;
-            return;
-        }
-
-        const recapData = {};
-        const studentToClassMap = {};
-
-        for (const className in state.studentsByClass) {
-            if (state.studentsByClass[className] && state.studentsByClass[className].students) {
-                state.studentsByClass[className].students.forEach(studentName => {
-                    recapData[studentName] = { S: 0, I: 0, A: 0 };
-                    studentToClassMap[studentName] = className;
-                });
-            }
-        }
-
-        state.savedLogs.forEach(log => {
-            Object.entries(log.attendance).forEach(([studentName, status]) => {
-                if (recapData[studentName] && status !== 'H') {
-                    if (recapData[studentName][status] !== undefined) {
-                        recapData[studentName][status]++;
-                    }
+        // --- API SERVICE ---
+        const apiService = {
+            async getData(email) {
+                if (!email) throw new Error("Email is required to fetch data.");
+                const response = await fetch(`/api/data?email=${encodeURIComponent(email)}`);
+                if (!response.ok) {
+                    if (response.status === 404) return {}; // User has no data yet, return empty object.
+                    throw new Error(`Gagal mengambil data dari server: ${response.statusText}`);
                 }
-            });
-        });
-        
-        const recapArray = Object.keys(recapData).map(name => {
-            const data = recapData[name];
-            const total = data.S + data.I + data.A;
-            return { name, class: studentToClassMap[name] || 'N/A', ...data, total };
-        });
-
-        recapArray.sort((a, b) => {
-            if (state.recapSortOrder === 'total') {
-                if (b.total !== a.total) return b.total - a.total;
-                return a.name.localeCompare(b.name);
-            } else { // 'absen'
-                const classCompare = a.class.localeCompare(b.class);
-                if (classCompare !== 0) return classCompare;
-                const classStudents = state.studentsByClass[a.class]?.students;
-                return classStudents ? classStudents.indexOf(a.name) - classStudents.indexOf(b.name) : 0;
-            }
-        });
-
-        const tableHtml = `
-            <table class="w-full text-left">
-                <thead>
-                    <tr class="border-b bg-slate-50">
-                        <th class="p-3 text-sm font-semibold text-slate-600">No.</th>
-                        <th class="p-3 text-sm font-semibold text-slate-600">Nama Siswa</th>
-                        <th class="p-3 text-sm font-semibold text-slate-600">Kelas</th>
-                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Sakit (S)</th>
-                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Izin (I)</th>
-                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Alfa (A)</th>
-                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${recapArray.map((item, index) => `
-                        <tr class="border-b hover:bg-slate-50 transition">
-                            <td class="p-3 text-sm text-slate-500">${index + 1}</td>
-                            <td class="p-3 font-medium text-slate-800">${item.name}</td>
-                            <td class="p-3 text-sm text-slate-500">${item.class}</td>
-                            <td class="p-3 text-sm text-slate-700 text-center">${item.S}</td>
-                            <td class="p-3 text-sm text-slate-700 text-center">${item.I}</td>
-                            <td class="p-3 text-sm text-slate-700 text-center">${item.A}</td>
-                            <td class="p-3 text-sm font-bold text-slate-800 text-center">${item.total}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>`;
-        container.innerHTML = tableHtml;
-    }
-
-    // --- GOOGLE API SERVICE MODULE (ROBUST DECOUPLED IMPLEMENTATION) ---
-    const gapiService = (() => {
-        let gsiClient;
-        let gsiInitPromise = null;
-        let gapiClientInitPromise = null;
-
-        const loadScript = (src) => {
-            return new Promise((resolve, reject) => {
-                if (document.querySelector(`script[src="${src}"]`)) return resolve();
-                const script = document.createElement('script');
-                script.src = src;
-                script.async = true;
-                script.defer = true;
-                script.onload = resolve;
-                script.onerror = () => reject(new Error(`Gagal memuat skrip: ${src}`));
-                document.head.appendChild(script);
-            });
-        };
-        
-        const initializeGsi = () => {
-            if (gsiInitPromise) return gsiInitPromise;
-            gsiInitPromise = new Promise(async (resolve, reject) => {
-                try {
-                    await loadScript('https://accounts.google.com/gsi/client');
-                    gsiClient = google.accounts.oauth2.initTokenClient({
-                        client_id: CLIENT_ID,
-                        scope: SCOPES,
-                        callback: '', // Will be set dynamically in signIn
-                    });
-                    console.log('Google Sign-In (GSI) service initialized.');
-                    resolve(true);
-                } catch (err) {
-                    console.error("GSI Initialization Failed:", err);
-                    reject(new Error('Gagal memuat layanan login Google. Periksa koneksi internet dan coba lagi.'));
-                }
-            });
-            return gsiInitPromise;
-        };
-        
-        const initializeGapiClient = () => {
-            if (gapiClientInitPromise) return gapiClientInitPromise;
-            gapiClientInitPromise = new Promise(async (resolve, reject) => {
-                try {
-                    await loadScript('https://apis.google.com/js/api.js');
-                    await new Promise((res, rej) => gapi.load('client', { callback: res, onerror: rej }));
-                    
-                    await gapi.client.init({
-                        apiKey: API_KEY,
-                        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-                    });
-                    console.log('Google API Client (GAPI) for Drive initialized.');
-                    resolve(true);
-                } catch (err) {
-                    console.error("GAPI Client Initialization Failed:", err);
-                    reject(new Error('Gagal memuat API Google Drive.'));
-                }
-            });
-            return gapiClientInitPromise;
-        }
-
-        const ensureGapiClientInitialized = async () => {
-            if (!state.isGapiClientReady) {
-                 throw new Error("GAPI client belum siap.");
-            }
-            return gapiClientInitPromise;
-        }
-        
-        const signIn = async () => {
-            try {
-                await initializeGsi();
-                gsiClient.callback = async (tokenResponse) => {
-                    console.log('Token response received from Google:', tokenResponse);
-                    if (tokenResponse.error) {
-                        console.error('Authentication failed in token response:', tokenResponse);
-                        let friendlyMessage = 'Proses otentikasi gagal.';
-                        let errorDetails = tokenResponse.error_description || 'Detail tidak tersedia.';
-
-                        if (tokenResponse.error === 'popup_closed_by_user' || tokenResponse.error === 'access_denied') {
-                            showNotification('Proses login dibatalkan oleh pengguna.', 'error');
-                            hideLoader();
-                            return;
-                        } else if (tokenResponse.error === 'idpiframe_initialization_failed') {
-                            friendlyMessage = 'Gagal memulai otentikasi.';
-                            errorDetails = 'Ini mungkin karena cookie pihak ketiga diblokir. Coba aktifkan atau gunakan jendela samaran (incognito).';
-                        } else if (tokenResponse.error_subtype === 'origin_mismatch' || tokenResponse.error === 'invalid_request') {
-                            friendlyMessage = 'Kesalahan Konfigurasi Aplikasi.';
-                            errorDetails = 'Pastikan URL aplikasi Anda (termasuk http/https dan port) telah ditambahkan ke "Authorized JavaScript origins" di Google Cloud Console untuk Client ID Anda.';
-                        } else {
-                            friendlyMessage = `Otentikasi Gagal: ${tokenResponse.error}`;
-                        }
-                        
-                        displayAuthError(friendlyMessage, new Error(errorDetails));
-                        hideLoader();
-                        return;
-                    }
-        
-                    try {
-                        showLoader('Login berhasil, menyiapkan API...');
-
-                        console.log('Step 1: Initializing GAPI client for Drive...');
-                        await initializeGapiClient();
-                        state.isGapiClientReady = true;
-                        console.log('Step 1 SUCCESS: GAPI client ready.');
-
-                        console.log('Step 2: Setting GAPI access token.');
-                        gapi.client.setToken(tokenResponse);
-                        console.log('Step 2 SUCCESS: Access token set.');
-        
-                        console.log('Step 3: Fetching user info...');
-                        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                            headers: { 'Authorization': `Bearer ${tokenResponse.access_token}` }
-                        });
-                        if (!userInfoResponse.ok) {
-                            throw new Error(`Gagal mengambil info pengguna: ${userInfoResponse.statusText}`);
-                        }
-                        state.userProfile = await userInfoResponse.json();
-                        console.log('Step 3 SUCCESS: User info fetched for', state.userProfile.email);
-        
-                        console.log('Step 4: Syncing data...');
-                        await syncData();
-                        console.log('Step 4 SUCCESS: Data synced.');
-                        
-                        console.log('Step 5: Finalizing login.');
-                        hideLoader();
-                        navigateTo('setup');
-                        console.log('Login process complete.');
-        
-                    } catch (error) {
-                        console.error('A critical error occurred after receiving the token:', error);
-                        hideLoader();
-                        showNotification(error.message || 'Terjadi kesalahan saat sinkronisasi.', 'error');
-                        displayAuthError('Terjadi kesalahan setelah login berhasil.', error);
-                        signOut();
-                    }
+                const data = await response.json();
+                // Ensure structure is valid
+                return {
+                    studentsByClass: data.students_by_class || {},
+                    savedLogs: data.saved_logs || [],
                 };
-
-                showLoader('Membuka jendela login Google...');
-                gsiClient.requestAccessToken({ prompt: 'consent' });
-
-            } catch (error) {
-                console.error("Failed to initiate sign-in:", error);
-                hideLoader();
-                displayAuthError("Gagal memulai proses login.", error);
-                showNotification("Gagal memulai proses login.", "error");
-            }
-        };
-
-        const signOut = () => {
-            // Attempt to revoke the Google token, but don't let it block the local logout.
-            try {
-                const token = gapi.client && gapi.client.getToken();
-                if (token && window.google && google.accounts && google.accounts.oauth2) {
-                    google.accounts.oauth2.revoke(token.access_token, () => {
-                        // Best-effort attempt to clear the token from the GAPI client.
-                        try { gapi.client.setToken(''); } catch(e) {}
-                    });
-                }
-            } catch (e) {
-                console.warn("Could not perform Google token revocation. Proceeding with local logout.", e);
-            }
-    
-            // Perform the crucial local logout steps regardless of the token revocation result.
-            state.userProfile = null;
-            state.fileId = null;
-            state.isGapiClientReady = false;
-            gapiClientInitPromise = null;
-            saveStateToLocal();
-            navigateTo('setup');
-        };
-        
-        const ensureDriveAccess = async (callback) => {
-            await ensureGapiClientInitialized();
-            await callback();
-        };
-        
-        const findOrCreateDataFile = async () => {
-            await ensureDriveAccess(async () => {
-                if (state.fileId) return;
-                updateSetupStatus('Mencari file data...');
-                try {
-                    const response = await gapi.client.drive.files.list({
-                        q: `name='${DATA_FILENAME}' and mimeType='application/json' and trashed=false`,
-                        fields: 'files(id, name)',
-                        spaces: 'drive'
-                    });
-                    
-                    if (response.result.files && response.result.files.length > 0) {
-                        state.fileId = response.result.files[0].id;
-                        console.log(`File data ditemukan dengan ID: ${state.fileId}`);
-                    } else {
-                        updateSetupStatus('Membuat file data baru...');
-                        const initialContent = JSON.stringify({ studentsByClass: {}, savedLogs: [] });
-                        const fileMetadata = { name: DATA_FILENAME, mimeType: 'application/json' };
-                        
-                        const form = new FormData();
-                        form.append('metadata', new Blob([JSON.stringify(fileMetadata)], { type: 'application/json' }));
-                        form.append('file', new Blob([initialContent], { type: 'application/json' }));
-
-                        const createResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-                            method: 'POST',
-                            headers: new Headers({ 'Authorization': `Bearer ${gapi.client.getToken().access_token}` }),
-                            body: form
-                        });
-                        
-                        const result = await createResponse.json();
-                        state.fileId = result.id;
-                        console.log(`File data baru dibuat dengan ID: ${state.fileId}`);
-                    }
-                    saveStateToLocal();
-                } catch (error) {
-                    showNotification('Gagal mengakses Google Drive.', 'error');
-                    signOut();
-                    throw error;
-                }
-            });
-        };
-
-        const syncData = async () => {
-            await ensureDriveAccess(async () => {
-                await findOrCreateDataFile();
-                if (!state.fileId) {
-                    console.error("No fileId, cannot sync.");
-                    throw new Error("Tidak dapat menemukan atau membuat file data di Google Drive.");
-                }
-
-                showLoader('Memulai sinkronisasi...');
-                
-                // 1. Get Drive data
-                let driveData = { studentsByClass: {}, savedLogs: [] };
-                try {
-                    const response = await gapi.client.drive.files.get({ fileId: state.fileId, alt: 'media' });
-                    driveData = migrateData(JSON.parse(response.body));
-                } catch (e) { console.error("Could not fetch or parse Drive data, will proceed with local data.", e); }
-
-                // 2. Get Local data
-                const localState = JSON.parse(localStorage.getItem('attendanceApp') || '{}');
-                const localData = migrateData({
-                    studentsByClass: localState.studentsByClass || {},
-                    savedLogs: localState.savedLogs || []
+            },
+            async saveData(email, data) {
+                if (!email) throw new Error("Email is required to save data.");
+                const payload = {
+                    email: email,
+                    studentsByClass: data.studentsByClass,
+                    savedLogs: data.savedLogs,
+                };
+                const response = await fetch('/api/data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
                 });
-
-                // 3. Merge data
-                showLoader('Menggabungkan data...');
-                const merged = mergeData(localData, driveData);
-
-                // 4. Update state and local storage
-                state.studentsByClass = merged.studentsByClass;
-                state.savedLogs = merged.savedLogs;
-                saveStateToLocal();
-
-                // 5. Save merged data back to Drive
-                showLoader('Menyimpan data gabungan...');
-                await saveAllDataToFile(false); 
-                
-                updateSetupStatus('Sinkronisasi selesai.', true);
-                showNotification('Sinkronisasi data berhasil.');
-            });
+                if (!response.ok) {
+                    throw new Error(`Gagal menyimpan data ke server: ${response.statusText}`);
+                }
+                return response.json();
+            },
         };
 
-        const saveAllDataToFile = async (showSuccessNotification = true) => {
-            await ensureDriveAccess(async () => {
-                if (!state.fileId) {
-                    console.log("Tidak ada fileId, mencari atau membuat file terlebih dahulu.");
-                    await findOrCreateDataFile();
-                }
-                
-                try {
-                    const dataToSave = JSON.stringify({
-                        studentsByClass: state.studentsByClass,
-                        savedLogs: state.savedLogs
-                    });
 
-                    await fetch(`https://www.googleapis.com/upload/drive/v3/files/${state.fileId}?uploadType=media`, {
-                        method: 'PATCH',
-                        headers: {
-                            'Authorization': `Bearer ${gapi.client.getToken().access_token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: dataToSave
-                    });
-                    
-                    if (showSuccessNotification) {
-                        showNotification('Data berhasil dicadangkan ke Google Drive.');
+        // --- TEMPLATES ---
+        const templates = {
+            setup: () => `
+                <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
+                    <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
+                        ${
+                            state.userProfile
+                            ? `
+                                <div class="flex items-center justify-between mb-6">
+                                    <h1 class="text-xl font-bold text-slate-800">Absensi Online Siswa</h1>
+                                    <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
+                                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                                    </button>
+                                </div>
+                                <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
+                                    <img src="${state.userProfile.picture}" alt="User" class="w-12 h-12 rounded-full"/>
+                                    <div>
+                                        <p class="font-semibold text-slate-800">${state.userProfile.name}</p>
+                                        <p class="text-sm text-slate-500">${state.userProfile.email}</p>
+                                    </div>
+                                </div>
+                            `
+                            : `
+                                <h1 class="text-xl font-bold text-slate-800 mb-4">Absensi Online Siswa</h1>
+                                <div id="backup-notice" class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6 text-sm text-blue-800">
+                                    <p class="font-semibold mb-2">Selamat Datang!</p>
+                                    <p class="mb-3">Untuk memulai, silakan login dengan akun Google Anda. Semua data absensi akan disimpan dengan aman di cloud dan dapat diakses dari perangkat mana pun.</p>
+                                    <button id="loginBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg w-full transition duration-300 flex items-center justify-center gap-2" disabled>
+                                        <svg class="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.222,0-9.519-3.108-11.127-7.481l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,35.17,44,30.023,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>
+                                        <span id="loginBtnText">Memuat Opsi Login...</span>
+                                    </button>
+                                    <div id="auth-error-container" class="text-left text-sm mt-4 hidden"></div>
+                                </div>
+                            `
+                        }
+                        <h2 class="text-lg font-semibold text-slate-700 mb-4">Pilih Kelas & Tanggal</h2>
+                        <div class="space-y-4">
+                            <div>
+                                <label for="class-select" class="block text-sm font-medium text-slate-700 mb-1">Pilih Kelas</label>
+                                <select id="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">${CLASSES.map(c => `<option value="${c}">${c}</option>`).join('')}</select>
+                            </div>
+                            <div>
+                                <label for="date-input" class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
+                                <input type="date" id="date-input" value="${state.selectedDate}" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"/>
+                            </div>
+                        </div>
+                        <div class="mt-6 space-y-3">
+                             <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile ? 'disabled' : ''}>Mulai Absensi</button>
+                             <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile ? 'disabled' : ''}>Lihat Riwayat Kelas Terpilih</button>
+                             <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile ? 'disabled' : ''}>Rekap Absensi Siswa</button>
+                             <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile ? 'disabled' : ''}>Tambah/Kurangi Data Siswa</button>
+                             <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile ? 'disabled' : ''}>Unduh Rekap Absensi (Excel)</button>
+                        </div>
+                        <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.userProfile ? 'Data disimpan secara otomatis di cloud.' : 'Silakan login untuk memulai.'}</p>
+                        <div class="text-center text-xs text-slate-500 mt-6 border-t border-slate-200 pt-4">
+                            <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="hover:underline">Kebijakan Privasi</a>
+                            &bull;
+                            <a href="./terms.html" target="_blank" rel="noopener noreferrer" class="hover:underline">Ketentuan Layanan</a>
+                        </div>
+                    </div>
+                </div>`,
+            addStudents: (className) => {
+                const isEditing = (state.students && state.students.length > 0);
+                const message = isEditing
+                    ? `Ubah daftar siswa untuk kelas <span class="font-semibold text-blue-600">${className}</span>. Hapus nama atau baris untuk mengurangi siswa.`
+                    : `Data siswa untuk <span class="font-semibold text-blue-600">${className}</span> belum ada. Silakan tambahkan di bawah ini.`;
+                return `
+                <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
+                     <div class="bg-white p-8 rounded-2xl shadow-lg">
+                        <h1 class="text-2xl font-bold text-slate-800 mb-2">Tambah/Kurangi Data Siswa</h1>
+                        <p class="text-slate-500 mb-6">${message}</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <!-- Manual Input -->
+                            <div class="border-r-0 md:border-r md:pr-8 border-slate-200">
+                                 <h2 class="text-lg font-semibold text-slate-700 mb-4">Daftar Siswa</h2>
+                                 <div id="manual-input-container" class="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2"></div>
+                                 <button id="add-student-row-btn" class="w-full text-sm bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold py-2 px-4 rounded-lg transition">+ Tambah Baris</button>
+                            </div>
+                            <!-- Excel Import -->
+                            <div>
+                                <h2 class="text-lg font-semibold text-slate-700 mb-4">Impor dari File</h2>
+                                <p class="text-sm text-slate-500 mb-4">Unggah file .xlsx untuk <span class="font-bold">menimpa</span> daftar saat ini.</p>
+                                <button id="download-template-btn" class="w-full mb-3 text-sm bg-green-100 hover:bg-green-200 text-green-700 font-semibold py-2 px-4 rounded-lg transition">Unduh Template (.csv)</button>
+                                <input type="file" id="excel-upload" class="hidden" accept=".xlsx, .xls, .csv"/>
+                                <button id="import-excel-btn" class="w-full text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg transition">Pilih File Excel untuk Diimpor</button>
+                            </div>
+                        </div>
+                        <div class="mt-8 pt-6 border-t border-slate-200 flex justify-end gap-4">
+                            <button id="cancel-add-students-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Batal</button>
+                            <button id="save-students-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition">Simpan Data Siswa</button>
+                        </div>
+                    </div>
+                </div>`;
+            },
+            attendance: (className, date) => `
+                <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
+                     <div class="bg-white p-8 rounded-2xl shadow-lg">
+                        <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
+                            <div>
+                                <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${className}</h1>
+                                <p class="text-slate-500">Tanggal: ${new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                            </div>
+                             <button id="back-to-setup-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead>
+                                    <tr class="border-b bg-slate-50">
+                                        <th class="p-3 text-sm font-semibold text-slate-600">No.</th>
+                                        <th class="p-3 text-sm font-semibold text-slate-600">Nama Siswa</th>
+                                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Hadir (H)</th>
+                                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Sakit (S)</th>
+                                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Izin (I)</th>
+                                        <th class="p-3 text-sm font-semibold text-slate-600 text-center">Alfa (A)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="attendance-table-body"></tbody>
+                            </table>
+                        </div>
+                        <div class="mt-8 flex justify-end">
+                            <button id="save-attendance-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition">Simpan Absensi</button>
+                        </div>
+                    </div>
+                </div>`,
+            success: () => `
+                <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
+                    <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
+                        <div class="checkmark-wrapper mx-auto mb-6">
+                            <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                                <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
+                                <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                            </svg>
+                        </div>
+                        <h1 class="text-3xl md:text-4xl font-bold text-slate-800 mb-3">Absensi Tersimpan!</h1>
+                        <p class="text-slate-500 mb-10">Data absensi telah berhasil disimpan di database cloud Anda.</p>
+                        <div class="space-y-4">
+                             <button id="success-back-to-start-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Kembali ke Halaman Awal</button>
+                             <button id="success-view-data-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Semua Riwayat</button>
+                        </div>
+                    </div>
+                </div>`,
+            data: () => `
+                 <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
+                     <div class="bg-white p-8 rounded-2xl shadow-lg">
+                         <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
+                            <h1 id="data-title" class="text-2xl font-bold text-slate-800">Riwayat Data Absensi</h1>
+                            <button id="data-back-to-start-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
+                        </div>
+                        <div id="data-container" class="space-y-6"></div>
+                     </div>
+                </div>`,
+            recap: () => `
+                 <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
+                     <div class="bg-white p-8 rounded-2xl shadow-lg">
+                         <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
+                            <h1 class="text-2xl font-bold text-slate-800">Rekapitulasi Absensi Siswa</h1>
+                            <button id="recap-back-to-start-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
+                        </div>
+                        <div class="mb-4 flex items-center gap-2">
+                            <label class="text-sm font-medium text-slate-600">Urutkan:</label>
+                            <button id="sort-by-total-btn" class="${state.recapSortOrder === 'total' ? 'bg-blue-500 text-white' : 'bg-white text-blue-700 border border-blue-500 hover:bg-blue-50'} font-semibold py-1 px-3 rounded-lg text-sm transition">Total Terbanyak</button>
+                            <button id="sort-by-absen-btn" class="${state.recapSortOrder === 'absen' ? 'bg-blue-500 text-white' : 'bg-white text-blue-700 border border-blue-500 hover:bg-blue-50'} font-semibold py-1 px-3 rounded-lg text-sm transition">No. Absen</button>
+                        </div>
+                        <div id="recap-container" class="overflow-x-auto"></div>
+                     </div>
+                </div>`,
+            confirmation: (message) => `
+                <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
+                     <div class="bg-white p-8 rounded-2xl shadow-lg max-w-sm w-full text-center animate-fade-in">
+                        <h2 class="text-xl font-bold text-slate-800 mb-4">Konfirmasi</h2>
+                        <p class="text-slate-600 mb-8">${message}</p>
+                        <div class="flex justify-center gap-4">
+                            <button id="confirm-no-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-8 rounded-lg transition">Tidak</button>
+                            <button id="confirm-yes-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg transition">Ya</button>
+                        </div>
+                    </div>
+                </div>`
+        };
+
+        // --- RENDER FUNCTION ---
+        function render() {
+            appContainer.innerHTML = '';
+            
+            switch(state.currentScreen) {
+                case 'setup':
+                    appContainer.innerHTML = templates.setup();
+                    if (state.userProfile) {
+                        document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
+                    } else {
+                        document.getElementById('loginBtn').addEventListener('click', handleSignIn);
                     }
-                } catch (error) {
-                    console.error("Gagal menyimpan data ke file:", error);
-                    showNotification('Gagal sinkronisasi. Data aman di perangkat.', 'error');
-                    throw error;
-                }
-            });
-        };
-
-        return { initializeGsi, signIn, signOut, syncData, saveAllDataToFile, ensureDriveAccess };
-    })();
-
-
-    // --- EVENT HANDLERS & LOGIC ---
-    
-    async function handleStartAttendance() {
-        state.selectedClass = document.getElementById('class-select').value;
-        state.selectedDate = document.getElementById('date-input').value;
-        state.students = (state.studentsByClass[state.selectedClass] || {}).students || [];
-        
-        const existingLog = state.savedLogs.find(log => log.class === state.selectedClass && log.date === state.selectedDate);
-        if (existingLog) {
-            const confirmed = await showConfirmation(`Absensi untuk kelas ${state.selectedClass} pada tanggal ini sudah ada. Ingin mengeditnya?`);
-            if (!confirmed) return;
-        }
-
-        if (state.students.length === 0) {
-            state.newStudents = [''];
-            navigateTo('add-students');
-        } else {
-            state.attendance = existingLog ? { ...existingLog.attendance } : {};
-            if (!existingLog) {
-                state.students.forEach(s => state.attendance[s] = 'H');
-            }
-            navigateTo('attendance');
-        }
-    }
-    
-    function handleManageStudents() {
-        state.selectedClass = document.getElementById('class-select').value;
-        state.students = (state.studentsByClass[state.selectedClass] || {}).students || [];
-        state.newStudents = state.students.length > 0 ? [...state.students] : [''];
-        navigateTo('add-students');
-    }
-
-    async function handleSaveNewStudents() {
-        const finalStudentList = state.newStudents.map(s => s.trim()).filter(s => s);
-        const isUserLoggedIn = !!state.userProfile;
-
-        showLoader(isUserLoggedIn ? 'Menyimpan & Menyinkronkan...' : 'Menyimpan data siswa...');
-        
-        state.studentsByClass[state.selectedClass] = {
-            students: finalStudentList,
-            lastModified: new Date().toISOString()
-        };
-        saveStateToLocal();
-
-        if (isUserLoggedIn) {
-            try {
-                await gapiService.saveAllDataToFile(false);
-                showNotification('Data siswa berhasil disimpan & dicadangkan ke Google Drive.');
-            } catch (e) {
-                console.error('Gagal sinkronisasi data siswa:', e);
-                showNotification('Data siswa disimpan lokal, namun gagal sinkronisasi ke Drive.', 'error');
-            }
-        } else {
-            showNotification('Data siswa berhasil disimpan ke penyimpanan lokal.');
-        }
-
-        hideLoader();
-        navigateTo('setup');
-    }
-
-    async function handleSaveAttendance() {
-        const confirmed = await showConfirmation(`Anda akan menyimpan data absensi untuk kelas ${state.selectedClass}. Lanjutkan?`);
-        if (!confirmed) return;
-
-        const isUserLoggedIn = !!state.userProfile;
-        showLoader(isUserLoggedIn ? 'Menyimpan & Menyinkronkan...' : 'Menyimpan ke penyimpanan lokal...');
-
-        const existingLogIndex = state.savedLogs.findIndex(log => log.class === state.selectedClass && log.date === state.selectedDate);
-        const newLog = { 
-            date: state.selectedDate, 
-            class: state.selectedClass, 
-            attendance: { ...state.attendance },
-            lastModified: new Date().toISOString()
-        };
-        if (existingLogIndex > -1) { state.savedLogs[existingLogIndex] = newLog; } else { state.savedLogs.push(newLog); }
-        saveStateToLocal();
-
-        if (isUserLoggedIn) {
-             try {
-                await gapiService.saveAllDataToFile(false);
-            } catch (error) {
-                console.error('Gagal sinkronisasi data absensi:', error);
-                // Notification will be on the success screen, but we can log it here.
-            }
-        }
-        
-        hideLoader();
-        navigateTo('success');
-    }
-    
-    function handleViewHistory(isClassSpecific = false) {
-        state.historyClassFilter = isClassSpecific ? document.getElementById('class-select').value : null;
-        navigateTo('data');
-    }
-
-    function handleDownloadTemplate() {
-        const csvContent = "data:text/csv;charset=utf-8," + "Nama Siswa\nContoh Siswa 1\nContoh Siswa 2";
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "template_siswa.csv");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-
-    function handleExcelImport(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, {type: 'array'});
-                const sheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                const studentNames = json.slice(1).map(row => String(row[0] || '').trim()).filter(Boolean);
-
-                if (studentNames.length > 0) {
-                    state.newStudents = studentNames;
+                    document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
+                    document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(true));
+                    document.getElementById('recapBtn').addEventListener('click', () => navigateTo('recap'));
+                    document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
+                    document.getElementById('downloadDataBtn').addEventListener('click', handleDownloadData);
+                    document.getElementById('class-select').value = state.selectedClass || CLASSES[0];
+                    updateLoginButtonState();
+                    break;
+                case 'add-students':
+                    appContainer.innerHTML = templates.addStudents(state.selectedClass);
                     renderStudentInputRows();
-                    showNotification(`${studentNames.length} siswa berhasil diimpor & akan menggantikan daftar saat ini.`);
-                } else {
-                    showNotification('Tidak ada nama siswa yang ditemukan di file.', 'error');
-                }
-            } catch (error) {
-                showNotification('Gagal membaca file. Pastikan formatnya benar.', 'error');
-                console.error("Excel import error:", error);
+                    document.getElementById('add-student-row-btn').addEventListener('click', addStudentInputRow);
+                    document.getElementById('download-template-btn').addEventListener('click', handleDownloadTemplate);
+                    document.getElementById('import-excel-btn').addEventListener('click', () => document.getElementById('excel-upload').click());
+                    document.getElementById('excel-upload').addEventListener('change', handleExcelImport);
+                    document.getElementById('cancel-add-students-btn').addEventListener('click', () => navigateTo('setup'));
+                    document.getElementById('save-students-btn').addEventListener('click', handleSaveNewStudents);
+                    break;
+                case 'attendance':
+                    appContainer.innerHTML = templates.attendance(state.selectedClass, state.selectedDate);
+                    renderAttendanceTable();
+                    document.getElementById('back-to-setup-btn').addEventListener('click', () => navigateTo('setup'));
+                    document.getElementById('save-attendance-btn').addEventListener('click', handleSaveAttendance);
+                    break;
+                case 'success':
+                     appContainer.innerHTML = templates.success();
+                     document.getElementById('success-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
+                     document.getElementById('success-view-data-btn').addEventListener('click', () => handleViewHistory(false));
+                     break;
+                case 'data':
+                    appContainer.innerHTML = templates.data();
+                    renderDataScreen();
+                    document.getElementById('data-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
+                    break;
+                case 'recap':
+                    appContainer.innerHTML = templates.recap();
+                    renderRecapScreen();
+                    document.getElementById('recap-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
+                    document.getElementById('sort-by-total-btn').addEventListener('click', () => {
+                        state.recapSortOrder = 'total';
+                        navigateTo('recap');
+                    });
+                    document.getElementById('sort-by-absen-btn').addEventListener('click', () => {
+                        state.recapSortOrder = 'absen';
+                        navigateTo('recap');
+                    });
+                    break;
             }
-        };
-        reader.readAsArrayBuffer(file);
-        event.target.value = ''; // Reset input
-    }
-    
-    async function handleDownloadData() {
-        showLoader('Menyiapkan data untuk diunduh...');
 
-        if (!state.studentsByClass || Object.keys(state.studentsByClass).length === 0) {
-            hideLoader();
-            showNotification('Tidak ada data siswa untuk diunduh.', 'error');
-            return;
+            if (appContainer.classList.contains('hidden')) {
+                 appContainer.classList.remove('hidden');
+                 hideLoader();
+            }
         }
 
-        try {
+        function navigateTo(screen) {
+            state.currentScreen = screen;
+            render();
+        }
+
+        // --- UI HELPERS ---
+        function showLoader(message) {
+            loaderWrapper.querySelector('.loader-text').textContent = message;
+            loaderWrapper.style.display = 'flex';
+            setTimeout(() => loaderWrapper.style.opacity = '1', 10);
+        }
+
+        function hideLoader() {
+            loaderWrapper.style.opacity = '0';
+            setTimeout(() => {
+                loaderWrapper.style.display = 'none';
+                loaderWrapper.querySelector('.loader-text').textContent = 'Memuat...';
+            }, 300);
+        }
+
+        function showNotification(message, type = 'success') {
+            notificationEl.textContent = message;
+            notificationEl.className = type === 'error' ? 'error' : 'success';
+            notificationEl.classList.add('show');
+            setTimeout(() => {
+                notificationEl.classList.remove('show');
+            }, 4000);
+        }
+
+        function showConfirmation(message) {
+            return new Promise(resolve => {
+                const existingModal = document.getElementById('confirmation-modal');
+                if (existingModal) existingModal.remove();
+                
+                const modalContainer = document.createElement('div');
+                modalContainer.innerHTML = templates.confirmation(message);
+                document.body.appendChild(modalContainer);
+
+                const cleanup = () => {
+                    if(document.body.contains(modalContainer)){
+                        document.body.removeChild(modalContainer);
+                    }
+                }
+
+                document.getElementById('confirm-yes-btn').onclick = () => {
+                    cleanup();
+                    resolve(true);
+                };
+                document.getElementById('confirm-no-btn').onclick = () => {
+                    cleanup();
+                    resolve(false);
+                };
+            });
+        }
+
+        function updateLoginButtonState() {
+            const loginBtn = document.getElementById('loginBtn');
+            const loginBtnText = document.getElementById('loginBtnText');
+            if (loginBtn && loginBtnText) {
+                if (state.isGsiReady) {
+                    loginBtn.disabled = false;
+                    loginBtnText.textContent = 'Login & Mulai Absensi';
+                } else {
+                    loginBtn.disabled = true;
+                    loginBtnText.textContent = 'Opsi Login Gagal Dimuat';
+                }
+            }
+        }
+
+        function displayAuthError(message, error = null) {
+            const errorContainer = document.getElementById('auth-error-container');
+            if (!errorContainer) return;
+            errorContainer.classList.remove('hidden');
+            let details = error ? (error.message || (typeof error === 'string' ? error : JSON.stringify(error))) : '';
+            details = details.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${message}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
+        }
+
+        // --- SCREEN SPECIFIC RENDER LOGIC ---
+        function renderStudentInputRows() {
+            const container = document.getElementById('manual-input-container');
+            container.innerHTML = '';
+            state.newStudents.forEach((name, index) => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center gap-2';
+                div.innerHTML = `
+                    <input type="text" value="${name}" data-index="${index}" class="student-name-input w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Nama Siswa ${index + 1}">
+                    <button data-index="${index}" class="remove-student-row-btn text-slate-400 hover:text-red-500 p-1 text-2xl font-bold leading-none">&times;</button>
+                `;
+                container.appendChild(div);
+            });
+            document.querySelectorAll('.student-name-input').forEach(input => {
+                input.addEventListener('input', (e) => {
+                    state.newStudents[e.target.dataset.index] = e.target.value;
+                });
+            });
+            document.querySelectorAll('.remove-student-row-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    removeStudentInputRow(e.target.dataset.index);
+                });
+            });
+        }
+
+        function addStudentInputRow() {
+            state.newStudents.push('');
+            renderStudentInputRows();
+            const inputs = document.querySelectorAll('.student-name-input');
+            inputs[inputs.length - 1].focus();
+        }
+
+        function removeStudentInputRow(index) {
+            state.newStudents.splice(index, 1);
+            if (state.newStudents.length === 0) {
+                state.newStudents.push('');
+            }
+            renderStudentInputRows();
+        }
+
+        function renderAttendanceTable() {
+            const tbody = document.getElementById('attendance-table-body');
+            tbody.innerHTML = '';
+            state.students.forEach((student, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b hover:bg-slate-50 transition';
+                const status = state.attendance[student] || 'H';
+                tr.innerHTML = `
+                    <td class="p-3 text-sm text-slate-500">${index + 1}</td>
+                    <td class="p-3 font-medium text-slate-800">${student}</td>
+                    ${['H', 'S', 'I', 'A'].map(s => `
+                        <td class="p-3 text-center">
+                            <input type="radio" name="status-${index}" value="${s}" class="w-5 h-5 accent-blue-500" ${status === s ? 'checked' : ''} data-student="${student}">
+                        </td>
+                    `).join('')}
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.querySelectorAll('input[type="radio"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    state.attendance[e.target.dataset.student] = e.target.value;
+                });
+            });
+        }
+
+        function renderDataScreen() {
+            const container = document.getElementById('data-container');
+            const titleEl = document.getElementById('data-title');
+            
+            const logsToShow = state.historyClassFilter 
+                ? state.savedLogs.filter(log => log.class === state.historyClassFilter)
+                : state.savedLogs;
+                
+            if (state.historyClassFilter) {
+                titleEl.textContent = `Riwayat Absensi Kelas ${state.historyClassFilter}`;
+            }
+
+            if (logsToShow.length === 0) {
+                container.innerHTML = `<p class="text-center text-slate-500">Belum ada riwayat absensi yang tersimpan.</p>`;
+                return;
+            }
+
+            const groupedByDate = logsToShow.reduce((acc, log) => {
+                const dateStr = log.date;
+                if (!acc[dateStr]) acc[dateStr] = [];
+                acc[dateStr].push(log);
+                return acc;
+            }, {});
+
+            container.innerHTML = Object.entries(groupedByDate)
+                .sort((a, b) => new Date(b[0]) - new Date(a[0]))
+                .map(([date, logs]) => {
+                    const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    const logsHtml = logs.map(log => {
+                        const absentStudents = Object.entries(log.attendance)
+                            .filter(([_, status]) => status !== 'H');
+                        
+                        let contentHtml;
+                        if (absentStudents.length > 0) {
+                            contentHtml = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead><tbody>${Object.entries(Object.fromEntries(absentStudents)).map(([name, status]) => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${status === 'S' ? 'bg-yellow-100 text-yellow-800' : status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${status}</span></td></tr>`).join('')}</tbody></table></div>`;
+                        } else {
+                            contentHtml = `<p class="text-sm text-slate-500 italic px-1 py-2">Semua siswa hadir.</p>`;
+                        }
+
+                        return `<div class="bg-slate-50 p-4 rounded-lg"><h3 class="font-bold text-blue-600 mb-2">Kelas ${log.class}</h3>${contentHtml}</div>`;
+                    }).join('');
+
+                    return `<div><h2 class="text-lg font-semibold text-slate-700 mb-3">${displayDate}</h2><div class="space-y-4">${logsHtml}</div></div>`;
+                }).join('');
+        }
+
+        function renderRecapScreen() {
+            const container = document.getElementById('recap-container');
+
+            if (!state.studentsByClass || Object.keys(state.studentsByClass).length === 0) {
+                container.innerHTML = `<p class="text-center text-slate-500">Belum ada data siswa untuk ditampilkan.</p>`;
+                return;
+            }
+
             const recapData = {};
             const studentToClassMap = {};
 
@@ -1244,73 +656,378 @@
             });
 
             recapArray.sort((a, b) => {
-                const classCompare = a.class.localeCompare(b.class);
-                if (classCompare !== 0) return classCompare;
-                const classStudents = state.studentsByClass[a.class]?.students;
-                return classStudents ? classStudents.indexOf(a.name) - classStudents.indexOf(b.name) : 0;
+                if (state.recapSortOrder === 'total') {
+                    if (b.total !== a.total) return b.total - a.total;
+                    return a.name.localeCompare(b.name);
+                } else { // 'absen'
+                    const classCompare = a.class.localeCompare(b.class);
+                    if (classCompare !== 0) return classCompare;
+                    const classStudents = state.studentsByClass[a.class]?.students;
+                    return classStudents ? classStudents.indexOf(a.name) - classStudents.indexOf(b.name) : 0;
+                }
             });
 
-            const dataForSheet = [
-                ['Nama Lengkap', 'Sakit (S)', 'Izin (I)', 'Alpa (A)']
-            ];
-
-            recapArray.forEach((item) => {
-                dataForSheet.push([
-                    item.name,
-                    item.S,
-                    item.I,
-                    item.A,
-                ]);
-            });
-            
-            const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Absensi');
-            
-            const columnWidths = dataForSheet[0].map((_, colIndex) => ({
-                wch: dataForSheet.reduce((w, r) => Math.max(w, String(r[colIndex] || "").length), 10)
-            }));
-            worksheet['!cols'] = columnWidths;
-
-            XLSX.writeFile(workbook, 'Rekap_Absensi_Siswa.xlsx');
-            
-            hideLoader();
-            showNotification('Data absensi berhasil diunduh.', 'success');
-
-        } catch (error) {
-            hideLoader();
-            showNotification('Terjadi kesalahan saat membuat file Excel.', 'error');
-            console.error("Failed to download data:", error);
+            const tableHtml = `
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="border-b bg-slate-50">
+                            <th class="p-3 text-sm font-semibold text-slate-600">No.</th>
+                            <th class="p-3 text-sm font-semibold text-slate-600">Nama Siswa</th>
+                            <th class="p-3 text-sm font-semibold text-slate-600">Kelas</th>
+                            <th class="p-3 text-sm font-semibold text-slate-600 text-center">Sakit (S)</th>
+                            <th class="p-3 text-sm font-semibold text-slate-600 text-center">Izin (I)</th>
+                            <th class="p-3 text-sm font-semibold text-slate-600 text-center">Alfa (A)</th>
+                            <th class="p-3 text-sm font-semibold text-slate-600 text-center">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${recapArray.map((item, index) => `
+                            <tr class="border-b hover:bg-slate-50 transition">
+                                <td class="p-3 text-sm text-slate-500">${index + 1}</td>
+                                <td class="p-3 font-medium text-slate-800">${item.name}</td>
+                                <td class="p-3 text-sm text-slate-500">${item.class}</td>
+                                <td class="p-3 text-sm text-slate-700 text-center">${item.S}</td>
+                                <td class="p-3 text-sm text-slate-700 text-center">${item.I}</td>
+                                <td class="p-3 text-sm text-slate-700 text-center">${item.A}</td>
+                                <td class="p-3 text-sm font-bold text-slate-800 text-center">${item.total}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>`;
+            container.innerHTML = tableHtml;
         }
-    }
 
-    // --- INITIALIZATION ---
-    function main() {
-        document.getElementById('static-fallback').style.display = 'none';
-        document.getElementById('root').classList.remove('hidden');
 
-        loadStateFromLocal();
-        render(); 
-        
-        gapiService.initializeGsi()
-            .then(() => {
+        // --- AUTHENTICATION AND DATA HANDLING ---
+
+        let gsiClient;
+
+        function initializeGsi() {
+            try {
+                if (!window.google || !window.google.accounts) {
+                    throw new Error("Google Identity Services library not loaded.");
+                }
+                gsiClient = google.accounts.oauth2.initTokenClient({
+                    client_id: CLIENT_ID,
+                    scope: SCOPES,
+                    callback: handleTokenResponse,
+                });
                 state.isGsiReady = true;
-            })
-            .catch(error => {
+                console.log("Google Sign-In service initialized.");
+            } catch (err) {
                 state.isGsiReady = false;
-                displayAuthError('Gagal Memuat Layanan Login Google.', error);
-                showNotification(error.message || 'Gagal memuat layanan Google.', 'error');
-            })
-            .finally(() => {
+                console.error("GSI Initialization Failed:", err);
+                displayAuthError('Gagal memuat layanan login Google.', err);
+                showNotification(err.message || 'Gagal memuat layanan Google.', 'error');
+            } finally {
                 if (state.currentScreen === 'setup') {
                     render();
                 }
-            });
-    }
-    
-    main();
+            }
+        }
 
-</script>
+        async function handleTokenResponse(tokenResponse) {
+            if (tokenResponse.error) {
+                console.error('Authentication failed:', tokenResponse);
+                let friendlyMessage = 'Proses otentikasi gagal.';
+                if (tokenResponse.error === 'popup_closed_by_user' || tokenResponse.error === 'access_denied') {
+                    showNotification('Proses login dibatalkan oleh pengguna.', 'error');
+                    hideLoader();
+                    return;
+                }
+                displayAuthError(friendlyMessage, new Error(tokenResponse.error_description || 'Detail tidak tersedia.'));
+                hideLoader();
+                return;
+            }
+
+            try {
+                showLoader('Login berhasil, mengambil data...');
+                const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { 'Authorization': `Bearer ${tokenResponse.access_token}` }
+                });
+                if (!userInfoResponse.ok) {
+                    throw new Error(`Gagal mengambil info pengguna: ${userInfoResponse.statusText}`);
+                }
+                state.userProfile = await userInfoResponse.json();
+                
+                const serverData = await apiService.getData(state.userProfile.email);
+                state.studentsByClass = serverData.studentsByClass || {};
+                state.savedLogs = serverData.savedLogs || [];
+
+                hideLoader();
+                navigateTo('setup');
+                showNotification(`Selamat datang, ${state.userProfile.name}!`);
+
+            } catch (error) {
+                console.error('A critical error occurred after receiving the token:', error);
+                hideLoader();
+                showNotification(error.message || 'Terjadi kesalahan saat mengambil data.', 'error');
+                displayAuthError('Terjadi kesalahan setelah login berhasil.', error);
+                handleSignOut(); 
+            }
+        }
+
+        function handleSignIn() {
+            if (!state.isGsiReady || !gsiClient) {
+                showNotification("Layanan login belum siap, coba lagi.", "error");
+                return;
+            }
+            showLoader('Membuka jendela login Google...');
+            gsiClient.requestAccessToken({ prompt: 'consent' });
+        }
+
+        function handleSignOut() {
+            state.userProfile = null;
+            state.studentsByClass = {};
+            state.savedLogs = [];
+            navigateTo('setup');
+        }
+
+        // --- EVENT HANDLERS & LOGIC ---
+
+        async function handleStartAttendance() {
+            state.selectedClass = document.getElementById('class-select').value;
+            state.selectedDate = document.getElementById('date-input').value;
+            state.students = (state.studentsByClass[state.selectedClass] || {}).students || [];
+            
+            const existingLog = state.savedLogs.find(log => log.class === state.selectedClass && log.date === state.selectedDate);
+            if (existingLog) {
+                const confirmed = await showConfirmation(`Absensi untuk kelas ${state.selectedClass} pada tanggal ini sudah ada. Ingin mengeditnya?`);
+                if (!confirmed) return;
+            }
+
+            if (state.students.length === 0) {
+                state.newStudents = [''];
+                navigateTo('add-students');
+            } else {
+                state.attendance = existingLog ? { ...existingLog.attendance } : {};
+                if (!existingLog) {
+                    state.students.forEach(s => state.attendance[s] = 'H');
+                }
+                navigateTo('attendance');
+            }
+        }
+
+        function handleManageStudents() {
+            state.selectedClass = document.getElementById('class-select').value;
+            state.students = (state.studentsByClass[state.selectedClass] || {}).students || [];
+            state.newStudents = state.students.length > 0 ? [...state.students] : [''];
+            navigateTo('add-students');
+        }
+
+        async function handleSaveNewStudents() {
+            const finalStudentList = state.newStudents.map(s => s.trim()).filter(s => s);
+            showLoader('Menyimpan data siswa...');
+            
+            state.studentsByClass[state.selectedClass] = {
+                students: finalStudentList,
+                lastModified: new Date().toISOString()
+            };
+            
+            try {
+                await apiService.saveData(state.userProfile.email, {
+                    studentsByClass: state.studentsByClass,
+                    savedLogs: state.savedLogs
+                });
+                showNotification('Data siswa berhasil disimpan ke cloud.');
+            } catch (e) {
+                console.error('Gagal menyimpan data siswa:', e);
+                showNotification('Gagal menyimpan data siswa. Periksa koneksi internet Anda.', 'error');
+                // Optionally revert state change here if save fails
+            }
+
+            hideLoader();
+            navigateTo('setup');
+        }
+
+        async function handleSaveAttendance() {
+            const confirmed = await showConfirmation(`Anda akan menyimpan data absensi untuk kelas ${state.selectedClass}. Lanjutkan?`);
+            if (!confirmed) return;
+
+            showLoader('Menyimpan absensi...');
+
+            const existingLogIndex = state.savedLogs.findIndex(log => log.class === state.selectedClass && log.date === state.selectedDate);
+            const newLog = { 
+                date: state.selectedDate, 
+                class: state.selectedClass, 
+                attendance: { ...state.attendance },
+                lastModified: new Date().toISOString()
+            };
+
+            if (existingLogIndex > -1) { 
+                state.savedLogs[existingLogIndex] = newLog; 
+            } else { 
+                state.savedLogs.push(newLog); 
+            }
+
+            try {
+                await apiService.saveData(state.userProfile.email, {
+                    studentsByClass: state.studentsByClass,
+                    savedLogs: state.savedLogs
+                });
+            } catch (error) {
+                console.error('Gagal menyimpan data absensi:', error);
+                // On failure, navigate to success anyway but show an error.
+                // The data is still in memory and will be saved on the next successful attempt.
+                navigateTo('success');
+                showNotification('Data disimpan sementara, tapi gagal sinkronisasi. Coba lagi nanti.', 'error');
+                hideLoader();
+                return;
+            }
+            
+            hideLoader();
+            navigateTo('success');
+        }
+
+        function handleViewHistory(isClassSpecific = false) {
+            state.historyClassFilter = isClassSpecific ? document.getElementById('class-select').value : null;
+            navigateTo('data');
+        }
+
+        function handleDownloadTemplate() {
+            const csvContent = "data:text/csv;charset=utf-8," + "Nama Siswa\nContoh Siswa 1\nContoh Siswa 2";
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "template_siswa.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function handleExcelImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    const studentNames = json.slice(1).map(row => String(row[0] || '').trim()).filter(Boolean);
+
+                    if (studentNames.length > 0) {
+                        state.newStudents = studentNames;
+                        renderStudentInputRows();
+                        showNotification(`${studentNames.length} siswa berhasil diimpor & akan menggantikan daftar saat ini.`);
+                    } else {
+                        showNotification('Tidak ada nama siswa yang ditemukan di file.', 'error');
+                    }
+                } catch (error) {
+                    showNotification('Gagal membaca file. Pastikan formatnya benar.', 'error');
+                    console.error("Excel import error:", error);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            event.target.value = ''; // Reset input
+        }
+
+        async function handleDownloadData() {
+            showLoader('Menyiapkan data untuk diunduh...');
+
+            if (!state.studentsByClass || Object.keys(state.studentsByClass).length === 0) {
+                hideLoader();
+                showNotification('Tidak ada data siswa untuk diunduh.', 'error');
+                return;
+            }
+
+            try {
+                const recapData = {};
+                const studentToClassMap = {};
+
+                for (const className in state.studentsByClass) {
+                    if (state.studentsByClass[className] && state.studentsByClass[className].students) {
+                        state.studentsByClass[className].students.forEach(studentName => {
+                            recapData[studentName] = { S: 0, I: 0, A: 0 };
+                            studentToClassMap[studentName] = className;
+                        });
+                    }
+                }
+
+                state.savedLogs.forEach(log => {
+                    Object.entries(log.attendance).forEach(([studentName, status]) => {
+                        if (recapData[studentName] && status !== 'H') {
+                            if (recapData[studentName][status] !== undefined) {
+                                recapData[studentName][status]++;
+                            }
+                        }
+                    });
+                });
+                
+                const recapArray = Object.keys(recapData).map(name => {
+                    const data = recapData[name];
+                    const total = data.S + data.I + data.A;
+                    return { name, class: studentToClassMap[name] || 'N/A', ...data, total };
+                });
+
+                recapArray.sort((a, b) => {
+                    const classCompare = a.class.localeCompare(b.class);
+                    if (classCompare !== 0) return classCompare;
+                    const classStudents = state.studentsByClass[a.class]?.students;
+                    return classStudents ? classStudents.indexOf(a.name) - classStudents.indexOf(b.name) : 0;
+                });
+
+                const dataForSheet = [
+                    ['Nama Lengkap', 'Sakit (S)', 'Izin (I)', 'Alpa (A)']
+                ];
+
+                recapArray.forEach((item) => {
+                    dataForSheet.push([
+                        item.name,
+                        item.S,
+                        item.I,
+                        item.A,
+                    ]);
+                });
+                
+                const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Absensi');
+                
+                const columnWidths = dataForSheet[0].map((_, colIndex) => ({
+                    wch: dataForSheet.reduce((w, r) => Math.max(w, String(r[colIndex] || "").length), 10)
+                }));
+                worksheet['!cols'] = columnWidths;
+
+                XLSX.writeFile(workbook, 'Rekap_Absensi_Siswa.xlsx');
+                
+                hideLoader();
+                showNotification('Data absensi berhasil diunduh.', 'success');
+
+            } catch (error) {
+                hideLoader();
+                showNotification('Terjadi kesalahan saat membuat file Excel.', 'error');
+                console.error("Failed to download data:", error);
+            }
+        }
+
+        // --- INITIALIZATION ---
+        function main() {
+            document.getElementById('static-fallback').style.display = 'none';
+            document.getElementById('root').classList.remove('hidden');
+
+            // Wait for the GSI script to load
+            const gsiScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+            if (gsiScript.async) {
+                gsiScript.onload = initializeGsi;
+            } else {
+                // Fallback for browsers that might not respect async/defer onload
+                const interval = setInterval(() => {
+                    if (window.google && window.google.accounts) {
+                        clearInterval(interval);
+                        initializeGsi();
+                    }
+                }, 100);
+            }
+
+            render();
+        }
+
+        main();
+    </script>
 
 </body>
 </html>
