@@ -130,6 +130,49 @@ export default async function handler(request, response) {
                     `;
                     return response.status(200).json({ success: true });
 
+                case 'importData':
+                    if (userRole !== 'SUPER_ADMIN') {
+                        return response.status(403).json({ error: 'Forbidden: Access denied for data import.' });
+                    }
+                    const { studentsByClass: importedStudents, savedLogs: importedLogs } = payload;
+
+                    // Ambil data yang ada
+                    const { rows: currentDataRows } = await sql`SELECT students_by_class, saved_logs FROM absensi_data WHERE user_email = ${userEmail}`;
+                    const currentData = currentDataRows[0] || { students_by_class: {}, saved_logs: [] };
+
+                    // Gabungkan daftar siswa (data baru menimpa yang lama jika ada kelas yang sama)
+                    const mergedStudents = { ...(currentData.students_by_class || {}), ...importedStudents };
+                    
+                    // Gabungkan log absensi dengan cara yang lebih cerdas untuk menimpa
+                    const existingLogsMap = new Map();
+                    (currentData.saved_logs || []).forEach(log => {
+                        const key = `${log.date}-${log.class}`;
+                        existingLogsMap.set(key, log);
+                    });
+                    
+                    importedLogs.forEach(log => {
+                         const key = `${log.date}-${log.class}`;
+                         existingLogsMap.set(key, log); // Timpa atau tambahkan log baru
+                    });
+
+                    const mergedLogs = Array.from(existingLogsMap.values());
+
+                    // Simpan data yang digabungkan
+                    const mergedStudentsJson = JSON.stringify(mergedStudents);
+                    const mergedLogsJson = JSON.stringify(mergedLogs);
+                     await sql`
+                        INSERT INTO absensi_data (user_email, students_by_class, saved_logs, last_updated)
+                        VALUES (${userEmail}, ${mergedStudentsJson}, ${mergedLogsJson}, NOW())
+                        ON CONFLICT (user_email)
+                        DO UPDATE SET
+                          students_by_class = EXCLUDED.students_by_class,
+                          saved_logs = EXCLUDED.saved_logs,
+                          last_updated = NOW();
+                    `;
+
+                    return response.status(200).json({ success: true, mergedStudentCount: Object.keys(mergedStudents).length, mergedLogCount: mergedLogs.length });
+
+
                 case 'getDashboardData':
                      if (userRole !== 'SUPER_ADMIN' && userRole !== 'KEPALA_SEKOLAH') {
                         return response.status(403).json({ error: 'Forbidden: Access denied' });
