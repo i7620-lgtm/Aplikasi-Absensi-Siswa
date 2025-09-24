@@ -1,83 +1,130 @@
 import { sql } from '@vercel/postgres';
 
 // --- KONFIGURASI ---
-// Ganti dengan email akun yang akan dijadikan sebagai admin/kepala sekolah.
-const KEPALA_SEKOLAH_EMAIL = 'mc4diaz@gmail.com'; 
+// Daftar email yang akan otomatis menjadi SUPER_ADMIN saat pertama kali login.
+const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
 
-export default async function handler(request, response) {
-  try {
-    // Create table if it doesn't exist
+async function setupTables() {
+    await sql`
+      CREATE TABLE IF NOT EXISTS users (
+        email VARCHAR(255) PRIMARY KEY,
+        name VARCHAR(255),
+        picture TEXT,
+        role VARCHAR(50) DEFAULT 'GURU',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_login TIMESTAMPTZ
+      );
+    `;
     await sql`
       CREATE TABLE IF NOT EXISTS absensi_data (
-        user_email VARCHAR(255) PRIMARY KEY,
+        user_email VARCHAR(255) PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
         students_by_class JSONB,
         saved_logs JSONB,
         last_updated TIMESTAMPTZ DEFAULT NOW()
       );
     `;
-  } catch (error) {
-    return response.status(500).json({ error: 'Database setup failed', details: error.message });
-  }
+}
 
-  // Handle GET request to fetch data
-  if (request.method === 'GET') {
-    try {
-      const { email } = request.query;
-      if (!email) {
-        return response.status(400).json({ error: 'Email query parameter is required' });
-      }
+async function loginOrRegisterUser(profile) {
+    const { email, name, picture } = profile;
+    const { rows } = await sql`SELECT * FROM users WHERE email = ${email}`;
+    let user = rows[0];
 
-      // Jika email adalah email kepala sekolah, ambil semua data
-      if (email === KEPALA_SEKOLAH_EMAIL) {
-        const { rows } = await sql`SELECT user_email, students_by_class, saved_logs FROM absensi_data;`;
-        return response.status(200).json({ isKepalaSekolah: true, allData: rows });
-      }
-      
-      // Logika untuk pengguna biasa
-      const { rows } = await sql`SELECT students_by_class, saved_logs FROM absensi_data WHERE user_email = ${email};`;
-      
-      if (rows.length > 0) {
-        return response.status(200).json(rows[0]);
-      } else {
-        return response.status(200).json({ students_by_class: {}, saved_logs: [] });
-      }
-    } catch (error) {
-      return response.status(500).json({ error: 'Failed to fetch data', details: error.message });
+    if (user) {
+        // User exists, update last login
+        await sql`UPDATE users SET last_login = NOW(), name = ${name}, picture = ${picture} WHERE email = ${email}`;
+        user.last_login = new Date();
+    } else {
+        // New user, determine role
+        const role = SUPER_ADMIN_EMAILS.includes(email) ? 'SUPER_ADMIN' : 'GURU';
+        const { rows: newRows } = await sql`
+            INSERT INTO users (email, name, picture, role, last_login)
+            VALUES (${email}, ${name}, ${picture}, ${role}, NOW())
+            RETURNING *;
+        `;
+        user = newRows[0];
     }
-  }
+    return user;
+}
 
-  // Handle POST request to save (upsert) data
-  if (request.method === 'POST') {
+
+export default async function handler(request, response) {
     try {
-      const { email, studentsByClass, savedLogs } = request.body;
-      if (!email || studentsByClass === undefined || savedLogs === undefined) {
-        return response.status(400).json({ error: 'Missing required fields: email, studentsByClass, savedLogs' });
-      }
-      
-      // Kepala sekolah tidak boleh menyimpan data
-      if (email === KEPALA_SEKOLAH_EMAIL) {
-          return response.status(403).json({ error: 'Akun Kepala Sekolah bersifat hanya-baca.' });
-      }
+        await setupTables();
 
-      const studentsByClassJson = JSON.stringify(studentsByClass);
-      const savedLogsJson = JSON.stringify(savedLogs);
-      
-      await sql`
-        INSERT INTO absensi_data (user_email, students_by_class, saved_logs, last_updated)
-        VALUES (${email}, ${studentsByClassJson}, ${savedLogsJson}, NOW())
-        ON CONFLICT (user_email)
-        DO UPDATE SET
-          students_by_class = EXCLUDED.students_by_class,
-          saved_logs = EXCLUDED.saved_logs,
-          last_updated = NOW();
-      `;
-      
-      return response.status(200).json({ success: true, message: 'Data saved successfully' });
+        if (request.method === 'POST') {
+            const { action, payload, userEmail } = request.body;
+            
+            if (!action || !userEmail) {
+                return response.status(400).json({ error: 'Action and userEmail are required' });
+            }
+
+            // Authenticate user for all actions
+            const { rows: userRows } = await sql`SELECT role FROM users WHERE email = ${userEmail}`;
+            if (userRows.length === 0) {
+                return response.status(403).json({ error: 'Forbidden: User not found' });
+            }
+            const userRole = userRows[0].role;
+            
+            switch (action) {
+                case 'loginOrRegister':
+                    const user = await loginOrRegisterUser(payload.profile);
+                    const { rows: dataRows } = await sql`SELECT students_by_class, saved_logs FROM absensi_data WHERE user_email = ${user.email}`;
+                    const userData = dataRows[0] || { students_by_class: {}, saved_logs: [] };
+                    return response.status(200).json({ user, userData });
+
+                case 'saveData':
+                    if (userRole === 'KEPALA_SEKOLAH') {
+                         return response.status(403).json({ error: 'Akun Kepala Sekolah bersifat hanya-baca.' });
+                    }
+                    const { studentsByClass, savedLogs } = payload;
+                    const studentsByClassJson = JSON.stringify(studentsByClass);
+                    const savedLogsJson = JSON.stringify(savedLogs);
+                    await sql`
+                        INSERT INTO absensi_data (user_email, students_by_class, saved_logs, last_updated)
+                        VALUES (${userEmail}, ${studentsByClassJson}, ${savedLogsJson}, NOW())
+                        ON CONFLICT (user_email)
+                        DO UPDATE SET
+                          students_by_class = EXCLUDED.students_by_class,
+                          saved_logs = EXCLUDED.saved_logs,
+                          last_updated = NOW();
+                    `;
+                    return response.status(200).json({ success: true });
+
+                case 'getDashboardData':
+                     if (userRole !== 'SUPER_ADMIN' && userRole !== 'KEPALA_SEKOLAH') {
+                        return response.status(403).json({ error: 'Forbidden: Access denied' });
+                    }
+                    const { rows: allData } = await sql`SELECT ad.saved_logs, u.name as user_name FROM absensi_data ad JOIN users u ON ad.user_email = u.email;`;
+                    return response.status(200).json({ allData });
+
+                case 'getAllUsers':
+                    if (userRole !== 'SUPER_ADMIN') {
+                         return response.status(403).json({ error: 'Forbidden: Access denied' });
+                    }
+                    const { rows: allUsers } = await sql`SELECT email, name, picture, role FROM users ORDER BY name;`;
+                    return response.status(200).json({ allUsers });
+
+                case 'updateUserRole':
+                     if (userRole !== 'SUPER_ADMIN') {
+                         return response.status(403).json({ error: 'Forbidden: Access denied' });
+                    }
+                    const { targetEmail, newRole } = payload;
+                    if (SUPER_ADMIN_EMAILS.includes(targetEmail) && newRole !== 'SUPER_ADMIN') {
+                        return response.status(400).json({ error: 'Cannot demote a bootstrapped Super Admin.' });
+                    }
+                    await sql`UPDATE users SET role = ${newRole} WHERE email = ${targetEmail}`;
+                    return response.status(200).json({ success: true });
+                
+                default:
+                    return response.status(400).json({ error: 'Invalid action' });
+            }
+
+        } else {
+            return response.status(405).json({ error: 'Method Not Allowed' });
+        }
     } catch (error) {
-      return response.status(500).json({ error: 'Failed to save data', details: error.message });
+        console.error('API Error:', error);
+        return response.status(500).json({ error: 'An internal server error occurred', details: error.message });
     }
-  }
-
-  // Handle other methods
-  return response.status(405).json({ error: 'Method Not Allowed' });
 }
