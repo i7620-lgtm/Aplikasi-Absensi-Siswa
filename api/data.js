@@ -54,20 +54,31 @@ export default async function handler(request, response) {
 
         if (request.method === 'POST') {
             const { action, payload, userEmail } = request.body;
-            
-            if (!action || !userEmail) {
-                return response.status(400).json({ error: 'Action and userEmail are required' });
+
+            if (!action) {
+                return response.status(400).json({ error: 'Action is required' });
             }
 
-            // Authenticate user for all actions
-            const { rows: userRows } = await sql`SELECT role FROM users WHERE email = ${userEmail}`;
-            if (userRows.length === 0) {
-                return response.status(403).json({ error: 'Forbidden: User not found' });
+            // For all actions EXCEPT loginOrRegister, we need an authenticated user email.
+            if (action !== 'loginOrRegister' && !userEmail) {
+                return response.status(400).json({ error: 'userEmail is required for this action' });
             }
-            const userRole = userRows[0].role;
+            
+            // Authenticate user for all actions (except login which is handled inside the switch)
+            let userRole = null;
+            if (action !== 'loginOrRegister') {
+                const { rows: userRows } = await sql`SELECT role FROM users WHERE email = ${userEmail}`;
+                if (userRows.length === 0) {
+                    return response.status(403).json({ error: 'Forbidden: User not found' });
+                }
+                userRole = userRows[0].role;
+            }
             
             switch (action) {
                 case 'loginOrRegister':
+                    if (!payload || !payload.profile) {
+                        return response.status(400).json({ error: 'Profile payload is required for registration' });
+                    }
                     const user = await loginOrRegisterUser(payload.profile);
                     const { rows: dataRows } = await sql`SELECT students_by_class, saved_logs FROM absensi_data WHERE user_email = ${user.email}`;
                     const userData = dataRows[0] || { students_by_class: {}, saved_logs: [] };
