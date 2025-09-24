@@ -1,4 +1,3 @@
-
 import { sql } from '@vercel/postgres';
 
 export default async function handler(request, response) {
@@ -29,8 +28,8 @@ export default async function handler(request, response) {
       if (rows.length > 0) {
         return response.status(200).json(rows[0]);
       } else {
-        // No data found for this user, which is a valid case for new users.
-        return response.status(404).json({ message: 'No data found for this user' });
+        // For a new user, return a 200 OK with a default empty structure.
+        return response.status(200).json({ students_by_class: {}, saved_logs: [] });
       }
     } catch (error) {
       return response.status(500).json({ error: 'Failed to fetch data', details: error.message });
