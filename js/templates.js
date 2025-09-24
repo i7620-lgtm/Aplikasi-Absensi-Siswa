@@ -16,6 +16,7 @@ export const templates = {
         const isTeacher = state.userProfile?.role === 'GURU';
         const assignedClasses = state.userProfile?.assigned_classes || [];
         const needsAssignment = isTeacher && assignedClasses.length === 0;
+        const availableClasses = isAdmin ? CLASSES : assignedClasses;
         
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
@@ -25,9 +26,12 @@ export const templates = {
                     ? `
                         <div class="flex items-center justify-between mb-6">
                             <h1 class="text-xl font-bold text-slate-800">Absensi Online Siswa</h1>
-                            <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                            </button>
+                            <div>
+                                ${isAdmin ? `<button id="back-to-admin-home-btn" class="text-slate-500 hover:text-blue-500 transition duration-300 p-2 rounded-full -mr-2" title="Kembali ke Dasbor Admin"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg></button>` : ''}
+                                <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                                </button>
+                            </div>
                         </div>
                         <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
                             <img src="${state.userProfile.picture}" alt="User" class="w-12 h-12 rounded-full"/>
@@ -51,14 +55,6 @@ export const templates = {
                         </div>
                     `
                 }
-                ${
-                    isAdmin ? `
-                    <div class="mb-6 space-y-3 pt-4 border-t border-slate-200">
-                        <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center">Menu Super Admin</h2>
-                        <button id="view-dashboard-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Dasbor</button>
-                        <button id="view-admin-panel-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Panel Admin</button>
-                    </div>` : ''
-                }
                 ${ needsAssignment ? `
                     <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
                         <div class="flex">
@@ -74,9 +70,9 @@ export const templates = {
                     <div class="space-y-4">
                         <div>
                             <label for="class-select" class="block text-sm font-medium text-slate-700 mb-1">Pilih Kelas</label>
-                            <select id="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${!state.userProfile || assignedClasses.length === 0 ? 'disabled' : ''}>
-                                ${ assignedClasses.length > 0 
-                                    ? assignedClasses.map(c => `<option value="${c}">${c}</option>`).join('')
+                            <select id="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${!state.userProfile || availableClasses.length === 0 ? 'disabled' : ''}>
+                                ${ availableClasses.length > 0 
+                                    ? availableClasses.map(c => `<option value="${c}">${c}</option>`).join('')
                                     : `<option>Tidak ada kelas ditugaskan</option>`
                                 }
                             </select>
@@ -98,9 +94,38 @@ export const templates = {
             </div>
         </div>`;
     },
+    adminHome: () => {
+        const isAdmin = state.userProfile?.role === 'SUPER_ADMIN';
+        return `
+        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
+            <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-xl font-bold text-slate-800">Dasbor Super Admin</h1>
+                    <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    </button>
+                </div>
+                <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
+                    <img src="${state.userProfile.picture}" alt="User" class="w-12 h-12 rounded-full"/>
+                    <div>
+                        <p class="font-semibold text-slate-800">${state.userProfile.name}</p>
+                        <p class="text-sm text-slate-500">${state.userProfile.email}</p>
+                        <span class="px-2 py-0.5 mt-1 inline-block rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">${getRoleDisplayName(state.userProfile.role)}</span>
+                    </div>
+                </div>
+                <div class="space-y-3 pt-4 border-t border-slate-200">
+                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center">Menu Super Admin</h2>
+                    <button id="go-to-attendance-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lakukan Absensi</button>
+                    <button id="view-dashboard-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Dasbor Kepala Sekolah</button>
+                    <button id="view-admin-panel-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Panel Admin</button>
+                </div>
+            </div>
+        </div>`;
+    },
     dashboard: () => {
         const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const canGoBack = state.userProfile?.role === 'SUPER_ADMIN';
+        const backTarget = canGoBack ? 'adminHome' : 'setup';
         return `
         <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
              <div class="bg-white p-8 rounded-2xl shadow-lg">
@@ -110,7 +135,7 @@ export const templates = {
                         <p class="text-slate-500">${today}</p>
                     </div>
                     <div class="flex items-center gap-4 mt-4 sm:mt-0">
-                        ${canGoBack ? `<button id="dashboard-back-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>` : ''}
+                        ${canGoBack ? `<button id="dashboard-back-btn" data-target="${backTarget}" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>` : ''}
                         <button id="logoutBtn-ks" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full flex items-center gap-2 text-sm font-semibold">
                             <span>Logout</span>
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
