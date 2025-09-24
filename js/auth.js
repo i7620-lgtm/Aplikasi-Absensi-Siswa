@@ -74,6 +74,14 @@ async function handleTokenResponse(tokenResponse) {
         // Register user with our backend and get their role and data
         const { user, userData } = await apiService.loginOrRegisterUser(profile);
         
+        try {
+            sessionStorage.setItem('userProfile', JSON.stringify(user));
+            sessionStorage.setItem('userData', JSON.stringify(userData));
+        } catch (e) {
+            console.warn("Tidak dapat menyimpan data sesi ke sessionStorage.", e);
+            showNotification("Gagal menyimpan sesi, Anda mungkin perlu login lagi.", "error");
+        }
+
         setState({
             userProfile: user,
             studentsByClass: userData.students_by_class,
@@ -111,6 +119,9 @@ export function handleSignIn() {
 }
 
 export function handleSignOut() {
+    sessionStorage.removeItem('userProfile');
+    sessionStorage.removeItem('userData');
+    
     setState({
         userProfile: null,
         studentsByClass: {},
