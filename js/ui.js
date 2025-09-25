@@ -122,7 +122,7 @@ async function renderDashboardScreen() {
 
     const container = document.getElementById('ks-report-container');
     try {
-        const { allData } = await apiService.getDashboardData();
+        const { allData } = await apiService.getGlobalData();
         const todayStr = new Date().toISOString().split('T')[0];
 
         const todaysLogs = allData.flatMap(teacher => 
