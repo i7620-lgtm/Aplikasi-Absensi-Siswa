@@ -130,11 +130,11 @@ export default async function handler(request, response) {
                     `;
                     return response.status(200).json({ success: true });
 
-                case 'getDashboardData':
+                case 'getGlobalData':
                      if (userRole !== 'SUPER_ADMIN' && userRole !== 'KEPALA_SEKOLAH') {
                         return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
-                    const { rows: allData } = await sql`SELECT ad.saved_logs, u.name as user_name FROM absensi_data ad JOIN users u ON ad.user_email = u.email;`;
+                    const { rows: allData } = await sql`SELECT ad.saved_logs, ad.students_by_class, u.name as user_name FROM absensi_data ad JOIN users u ON ad.user_email = u.email;`;
                     return response.status(200).json({ allData });
 
                 case 'getAllUsers':
