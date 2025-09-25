@@ -1,5 +1,4 @@
 
-
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -165,6 +164,20 @@ async function renderDashboardScreen() {
         renderDashboardScreen(); 
     });
 
+    document.getElementById('view-summary-btn').addEventListener('click', async () => {
+        if (state.dashboard.activeView !== 'summary') {
+            await setState({ dashboard: { ...state.dashboard, activeView: 'summary' } });
+            renderDashboardScreen();
+        }
+    });
+    document.getElementById('view-report-btn').addEventListener('click', async () => {
+        if (state.dashboard.activeView !== 'report') {
+            await setState({ dashboard: { ...state.dashboard, activeView: 'report' } });
+            renderDashboardScreen();
+        }
+    });
+
+
     const reportContainer = document.getElementById('ks-report-container');
     const summaryContainer = document.getElementById('ks-summary-container');
     reportContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Memuat laporan...</p>`;
@@ -197,7 +210,9 @@ async function renderDashboardScreen() {
             });
         });
         
-        let reportHtml = Object.entries(absentByClass).map(([className, data]) => {
+        let reportHtml = Object.entries(absentByClass)
+            .sort(([classA], [classB]) => classA.localeCompare(classB))
+            .map(([className, data]) => {
             if (data.students.length === 0) return '';
             return `
                 <div class="bg-slate-50 p-4 rounded-lg">
