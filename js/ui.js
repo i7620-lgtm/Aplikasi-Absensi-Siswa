@@ -156,7 +156,6 @@ async function renderDashboardScreen() {
     }
     
     document.getElementById('ks-date-picker').addEventListener('change', async (e) => {
-        // Update state and re-render the whole screen to reflect the new date
         await setState({ 
             dashboard: { 
                 ...state.dashboard, 
@@ -165,6 +164,93 @@ async function renderDashboardScreen() {
         });
         renderScreen('dashboard'); 
     });
+
+    const dashboardContent = document.getElementById('dashboard-content');
+
+    try {
+        const { allData } = await apiService.getGlobalData();
+        const selectedDate = state.dashboard.selectedDate;
+        
+        const absentStudentsByClass = {};
+
+        allData.forEach(teacherData => {
+            if (teacherData.saved_logs) {
+                teacherData.saved_logs.forEach(log => {
+                    if (log.date === selectedDate) {
+                        if (!absentStudentsByClass[log.class]) {
+                            absentStudentsByClass[log.class] = {
+                                students: [],
+                                teacherName: teacherData.user_name
+                            };
+                        }
+                        
+                        Object.entries(log.attendance).forEach(([studentName, status]) => {
+                            if (status !== 'H') {
+                                const existingStudent = absentStudentsByClass[log.class].students.find(s => s.name === studentName);
+                                if (!existingStudent) {
+                                    absentStudentsByClass[log.class].students.push({ name: studentName, status: status });
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        });
+
+        const classNames = Object.keys(absentStudentsByClass).sort();
+        const hasAbsentees = Object.values(absentStudentsByClass).some(classData => classData.students.length > 0);
+
+        if (!hasAbsentees) {
+            dashboardContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada siswa yang absen pada tanggal yang dipilih.</p>`;
+            return;
+        }
+
+        dashboardContent.innerHTML = classNames.map(className => {
+            const classData = absentStudentsByClass[className];
+            if (classData.students.length === 0) return '';
+            
+            classData.students.sort((a, b) => a.name.localeCompare(b.name));
+
+            const studentRows = classData.students.map(student => `
+                <tr class="border-t border-slate-200">
+                    <td class="py-2 pr-4 text-slate-700">${student.name}</td>
+                    <td class="py-2 px-2">
+                        <span class="px-2 py-1 rounded-full text-xs font-semibold ${
+                            student.status === 'S' ? 'bg-yellow-100 text-yellow-800' : 
+                            student.status === 'I' ? 'bg-blue-100 text-blue-800' : 
+                            'bg-red-100 text-red-800'
+                        }">${student.status}</span>
+                    </td>
+                </tr>
+            `).join('');
+
+            return `
+                <div class="bg-slate-50 p-4 rounded-lg">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="font-bold text-blue-600">Kelas ${className}</h3>
+                        <p class="text-xs text-slate-400 font-medium">Oleh: ${classData.teacherName}</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left text-slate-500">
+                                    <th class="py-1 pr-4 font-medium">Nama Siswa</th>
+                                    <th class="py-1 px-2 font-medium">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${studentRows}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error("Failed to load dashboard data:", error);
+        dashboardContent.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
+    }
 }
 
 
