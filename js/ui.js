@@ -170,12 +170,57 @@ function renderSetupScreen() {
     // --- END: Real-time update for Teacher's profile ---
 }
 
-function renderAdminHomeScreen() {
+function renderMaintenanceToggle(container, isMaintenance) {
+    const statusText = isMaintenance ? 'Aktif' : 'Tidak Aktif';
+    const statusColor = isMaintenance ? 'text-red-600' : 'text-green-600';
+    const buttonText = isMaintenance ? 'Nonaktifkan' : 'Aktifkan';
+    const buttonColor = isMaintenance ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600';
+
+    container.innerHTML = `
+        <div class="flex items-center justify-between w-full">
+            <p class="text-sm text-slate-700">Status: <span class="font-bold ${statusColor}">${statusText}</span></p>
+            <button id="maintenance-action-btn" class="${buttonColor} text-white font-bold py-2 px-4 rounded-lg text-sm transition">
+                ${buttonText}
+            </button>
+        </div>
+    `;
+
+    document.getElementById('maintenance-action-btn').addEventListener('click', async () => {
+        const enable = !isMaintenance;
+        const actionVerb = enable ? "mengaktifkan" : "menonaktifkan";
+        const confirmed = await showConfirmation(`Anda yakin ingin ${actionVerb} mode perbaikan? Pengguna lain tidak akan bisa mengakses aplikasi.`);
+
+        if (confirmed) {
+            showLoader('Mengubah status...');
+            try {
+                const { newState } = await apiService.setMaintenanceStatus(enable);
+                showNotification(`Mode perbaikan berhasil di${actionVerb}.`);
+                renderMaintenanceToggle(container, newState); // Re-render toggle with new state
+            } catch (error) {
+                showNotification(error.message, 'error');
+            } finally {
+                hideLoader();
+            }
+        }
+    });
+}
+
+
+async function renderAdminHomeScreen() {
     appContainer.innerHTML = templates.adminHome();
     document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
     document.getElementById('go-to-attendance-btn').addEventListener('click', () => navigateTo('setup'));
     document.getElementById('view-dashboard-btn').addEventListener('click', () => navigateTo('dashboard'));
     document.getElementById('view-admin-panel-btn').addEventListener('click', () => navigateTo('adminPanel'));
+
+    // Render dan kelola tombol mode perbaikan
+    const maintenanceContainer = document.getElementById('maintenance-toggle-container');
+    try {
+        const { isMaintenance } = await apiService.getMaintenanceStatus();
+        renderMaintenanceToggle(maintenanceContainer, isMaintenance);
+    } catch (e) {
+        maintenanceContainer.innerHTML = `<p class="text-sm text-red-500">Gagal memuat status mode perbaikan.</p>`;
+    }
 }
 
 
@@ -734,6 +779,9 @@ export function renderScreen(screen) {
             break;
         case 'recap':
             renderRecapScreen();
+            break;
+        case 'maintenance':
+            appContainer.innerHTML = templates.maintenance();
             break;
         default:
             renderSetupScreen();
