@@ -156,7 +156,7 @@ async function renderDashboardScreen() {
     }
     
     document.getElementById('ks-date-picker').addEventListener('change', async (e) => {
-        // Update state and re-render the whole screen to reflect the new date and data
+        // Update state and re-render the whole screen to reflect the new date
         await setState({ 
             dashboard: { 
                 ...state.dashboard, 
@@ -165,81 +165,6 @@ async function renderDashboardScreen() {
         });
         renderScreen('dashboard'); 
     });
-
-    const reportContainer = document.getElementById('ks-report-container');
-    reportContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Memuat laporan harian...</p>`;
-
-    try {
-        const { allData } = await apiService.getGlobalData();
-        const selectedDateStr = state.dashboard.selectedDate;
-
-        // Filter all logs from all teachers for the selected date
-        const dateLogs = allData.flatMap(teacher => 
-            (teacher.saved_logs || [])
-                .filter(log => log.date === selectedDateStr)
-                .map(log => ({...log, teacherName: teacher.user_name}))
-        );
-
-        if (dateLogs.length === 0) {
-            reportContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada data absensi yang dicatat pada tanggal ini.</p>`;
-            return;
-        }
-
-        // Process data to find absent students, grouped by class
-        const absentByClass = {};
-        dateLogs.forEach(log => {
-            if (!log || !log.class || typeof log.attendance !== 'object') return;
-            
-            if (!absentByClass[log.class]) {
-                absentByClass[log.class] = { students: [], teacher: log.teacherName || 'N/A' };
-            }
-
-            Object.entries(log.attendance).forEach(([studentName, status]) => {
-                if (status !== 'H') {
-                    absentByClass[log.class].students.push({ name: studentName, status });
-                }
-            });
-        });
-
-        // Build HTML for the report, sorted by class name
-        let reportHtml = Object.entries(absentByClass)
-            .sort(([classA], [classB]) => classA.localeCompare(classB, undefined, { numeric: true }))
-            .map(([className, data]) => {
-                if (data.students.length === 0) return ''; // Don't show classes where everyone was present
-                return `
-                    <div class="bg-slate-50 p-4 rounded-lg">
-                        <div class="flex justify-between items-center mb-2">
-                            <h3 class="font-bold text-blue-600">Kelas ${className}</h3>
-                            <p class="text-xs text-slate-400 font-medium">Oleh: ${data.teacher}</p>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-sm">
-                                <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
-                                <tbody>
-                                    ${data.students.sort((a,b) => a.name.localeCompare(b.name)).map(student => `
-                                        <tr class="border-t border-slate-200">
-                                            <td class="py-2 pr-4 text-slate-700">${student.name}</td>
-                                            <td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${student.status === 'S' ? 'bg-yellow-100 text-yellow-800' : student.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${student.status}</span></td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-        // If after filtering, no one was absent, show a success message
-        if (reportHtml.trim() === '') {
-             reportHtml = `<div class="text-center py-8"><div class="inline-block p-4 bg-green-100 text-green-800 rounded-lg"><p class="font-semibold">Semua siswa di semua kelas yang tercatat hadir hari ini.</p></div></div>`;
-        }
-        
-        reportContainer.innerHTML = reportHtml;
-
-    } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        reportContainer.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
-    }
 }
 
 
