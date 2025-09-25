@@ -136,6 +136,13 @@ export const templates = {
                     <button id="view-dashboard-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Dasbor Kepala Sekolah</button>
                     <button id="view-admin-panel-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Panel Admin</button>
                 </div>
+
+                <div class="pt-4 mt-3 border-t border-slate-200">
+                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center mb-3">Mode Perbaikan</h2>
+                    <div id="maintenance-toggle-container" class="flex items-center justify-center p-3 bg-slate-50 rounded-lg">
+                        <p class="text-sm text-slate-500">Memuat status...</p>
+                    </div>
+                </div>
             </div>
         </div>`;
     },
@@ -290,6 +297,17 @@ export const templates = {
                 </div>
                 <div id="recap-container" class="overflow-x-auto"></div>
              </div>
+        </div>`,
+    maintenance: () => `
+        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
+            <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
+                <svg class="mx-auto h-16 w-16 text-amber-500 mb-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.471-2.471a1.286 1.286 0 00-1.82-1.82L11.42 15.17zm0 0L5.57 21a2.652 2.652 0 01-3.75-3.75l5.877-5.877m0 0l2.471 2.471" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <h1 class="text-3xl font-bold text-slate-800 mb-3">Aplikasi dalam Perbaikan</h1>
+                <p class="text-slate-500">Kami sedang melakukan beberapa pembaruan untuk meningkatkan pengalaman Anda. Aplikasi akan segera kembali normal. Mohon coba lagi nanti.</p>
+            </div>
         </div>`,
     confirmation: (message) => `
         <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
