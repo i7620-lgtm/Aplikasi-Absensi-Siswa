@@ -41,6 +41,20 @@ async function setupTables() {
         last_updated TIMESTAMPTZ DEFAULT NOW()
       );
     `;
+
+    // Membuat tabel konfigurasi aplikasi untuk fitur seperti mode perbaikan.
+    await sql`
+      CREATE TABLE IF NOT EXISTS app_config (
+        key VARCHAR(50) PRIMARY KEY,
+        value TEXT
+      );
+    `;
+    // Memastikan nilai default untuk mode perbaikan ada.
+    await sql`
+        INSERT INTO app_config (key, value)
+        VALUES ('maintenance_mode', 'false')
+        ON CONFLICT (key) DO NOTHING;
+    `;
 }
 
 async function loginOrRegisterUser(profile) {
@@ -72,7 +86,17 @@ async function loginOrRegisterUser(profile) {
             user.assigned_classes = [];
         }
     }
-    return user;
+
+    // --- Pemeriksaan Mode Perbaikan ---
+    const { rows: configRows } = await sql`SELECT value FROM app_config WHERE key = 'maintenance_mode'`;
+    const isMaintenance = configRows[0]?.value === 'true';
+
+    if (isMaintenance && user.role !== 'SUPER_ADMIN') {
+        // Jika mode perbaikan aktif dan pengguna bukan Super Admin, blokir akses.
+        return { maintenance: true };
+    }
+    
+    return { user };
 }
 
 
@@ -85,6 +109,13 @@ export default async function handler(request, response) {
 
             if (!action) {
                 return response.status(400).json({ error: 'Action is required' });
+            }
+
+            // Aksi yang tidak memerlukan otentikasi
+            if (action === 'getMaintenanceStatus') {
+                 const { rows: configRows } = await sql`SELECT value FROM app_config WHERE key = 'maintenance_mode'`;
+                 const isMaintenance = configRows[0]?.value === 'true';
+                 return response.status(200).json({ isMaintenance });
             }
 
             // Untuk semua tindakan KECUALI loginOrRegister, kita memerlukan email pengguna yang terotentikasi.
@@ -107,10 +138,27 @@ export default async function handler(request, response) {
                     if (!payload || !payload.profile) {
                         return response.status(400).json({ error: 'Profile payload is required for registration' });
                     }
-                    const user = await loginOrRegisterUser(payload.profile);
+                    const loginResult = await loginOrRegisterUser(payload.profile);
+                    
+                    if (loginResult.maintenance) {
+                        return response.status(200).json({ maintenance: true });
+                    }
+
+                    const { user } = loginResult;
                     const { rows: dataRows } = await sql`SELECT students_by_class, saved_logs FROM absensi_data WHERE user_email = ${user.email}`;
                     const userData = dataRows[0] || { students_by_class: {}, saved_logs: [] };
                     return response.status(200).json({ user, userData });
+
+                case 'setMaintenanceStatus':
+                    if (userRole !== 'SUPER_ADMIN') {
+                        return response.status(403).json({ error: 'Forbidden: Access denied' });
+                    }
+                    const { enabled } = payload;
+                    await sql`
+                        INSERT INTO app_config (key, value) VALUES ('maintenance_mode', ${String(enabled)})
+                        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+                    `;
+                    return response.status(200).json({ success: true, newState: enabled });
 
                 case 'getUserProfile':
                     const { rows: userProfileRows } = await sql`SELECT email, name, picture, role, assigned_classes FROM users WHERE email = ${userEmail}`;
