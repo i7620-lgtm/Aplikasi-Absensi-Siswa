@@ -1,5 +1,5 @@
 const CACHE_NAME = 'absensi-cache-v1';
-const urlsToCache = [
+const localUrlsToCache = [
   '/',
   '/index.html',
   '/terms.html',
@@ -10,6 +10,8 @@ const urlsToCache = [
   '/js/db.js',
   '/js/templates.js',
   '/js/ui.js',
+];
+const crossOriginUrlsToCache = [
   'https://cdn.tailwindcss.com',
   'https://rsms.me/inter/inter.css',
   'https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png'
@@ -18,11 +20,27 @@ const urlsToCache = [
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
+    caches.open(CACHE_NAME).then(cache => {
+      console.log('Opened cache');
+      
+      // 1. Cache local assets with addAll
+      const cacheLocal = cache.addAll(localUrlsToCache);
+
+      // 2. Cache cross-origin assets individually with 'no-cors' mode
+      const cacheCrossOrigin = Promise.all(
+        crossOriginUrlsToCache.map(url => {
+          const request = new Request(url, { mode: 'no-cors' });
+          return fetch(request).then(response => {
+            return cache.put(url, response);
+          }).catch(err => {
+              console.error(`Failed to fetch and cache cross-origin URL: ${url}`, err);
+          });
+        })
+      );
+
+      // Wait for both local and cross-origin caching to complete
+      return Promise.all([cacheLocal, cacheCrossOrigin]);
+    })
   );
 });
 
