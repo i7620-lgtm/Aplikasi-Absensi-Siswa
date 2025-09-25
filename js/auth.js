@@ -1,6 +1,7 @@
 import { state, setState, navigateTo } from './main.js';
 import { renderScreen, showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
+import { idb } from './db.js';
 
 // --- GSI CONFIG ---
 const CLIENT_ID = '584511730006-avkntpukucstgnf7c0otn3dt0lajtu43.apps.googleusercontent.com';
@@ -74,15 +75,8 @@ async function handleTokenResponse(tokenResponse) {
         // Register user with our backend and get their role and data
         const { user, userData } = await apiService.loginOrRegisterUser(profile);
         
-        try {
-            sessionStorage.setItem('userProfile', JSON.stringify(user));
-            sessionStorage.setItem('userData', JSON.stringify(userData));
-        } catch (e) {
-            console.warn("Tidak dapat menyimpan data sesi ke sessionStorage.", e);
-            showNotification("Gagal menyimpan sesi, Anda mungkin perlu login lagi.", "error");
-        }
-
-        setState({
+        // Use setState which now handles persistence to IndexedDB
+        await setState({
             userProfile: user,
             studentsByClass: userData.students_by_class,
             savedLogs: userData.saved_logs,
@@ -118,14 +112,15 @@ export function handleSignIn() {
     gsiClient.requestAccessToken({ prompt: 'consent' });
 }
 
-export function handleSignOut() {
-    sessionStorage.removeItem('userProfile');
-    sessionStorage.removeItem('userData');
+export async function handleSignOut() {
+    // Clear state from IDB
+    await idb.set('userProfile', null);
+    await idb.set('userData', null);
     
-    setState({
-        userProfile: null,
-        studentsByClass: {},
-        savedLogs: [],
-    });
+    // Reset runtime state
+    state.userProfile = null;
+    state.studentsByClass = {};
+    state.savedLogs = [];
+
     navigateTo('setup');
 }
