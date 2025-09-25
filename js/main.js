@@ -23,11 +23,16 @@ export let state = {
     adminPanel: {
         users: [],
         isLoading: true,
+        pollingIntervalId: null, // For real-time updates
     },
     dashboard: {
         allTeacherData: [],
         isLoading: true,
         selectedDate: new Date().toISOString().split('T')[0],
+        pollingIntervalId: null, // For real-time updates
+    },
+    setup: {
+        pollingIntervalId: null, // For real-time updates of teacher profile
     },
     adminAllLogsView: null,
 };
@@ -62,6 +67,25 @@ export function render() {
 }
 
 export function navigateTo(screen) {
+    // --- START: Real-time update cleanup ---
+    // A centralized place to stop all polling intervals when the user navigates away.
+    if (state.dashboard.pollingIntervalId) {
+        clearInterval(state.dashboard.pollingIntervalId);
+        setState({ dashboard: { ...state.dashboard, pollingIntervalId: null } });
+        console.log('Dashboard polling stopped.');
+    }
+    if (state.adminPanel.pollingIntervalId) {
+        clearInterval(state.adminPanel.pollingIntervalId);
+        setState({ adminPanel: { ...state.adminPanel, pollingIntervalId: null } });
+        console.log('Admin Panel polling stopped.');
+    }
+    if (state.setup.pollingIntervalId) {
+        clearInterval(state.setup.pollingIntervalId);
+        setState({ setup: { ...state.setup, pollingIntervalId: null } });
+        console.log('Setup Screen (Teacher) polling stopped.');
+    }
+    // --- END: Real-time update cleanup ---
+    
     state.currentScreen = screen;
     render();
 }
