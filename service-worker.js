@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'absensi-cache-v3';
+const CACHE_NAME = 'absensi-cache-v4';
 const localUrlsToCache = [
   '/',
   '/index.html',
@@ -46,14 +46,30 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
+  // Use a Network-first strategy for navigation and asset requests.
+  // This ensures the user always gets the latest UI when online.
+  if (event.request.method !== 'GET') {
+    return; // Don't handle non-GET requests
+  }
+
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Cache-First strategy
-        return response || fetch(event.request);
+    fetch(event.request)
+      .then(networkResponse => {
+        // If the fetch is successful, clone it, cache it, and return it.
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME)
+          .then(cache => {
+            cache.put(event.request, responseToCache);
+          });
+        return networkResponse;
+      })
+      .catch(() => {
+        // If the network request fails (offline), try to get it from the cache.
+        return caches.match(event.request);
       })
   );
 });
+
 
 // Clean up old caches
 self.addEventListener('activate', event => {
