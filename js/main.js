@@ -44,11 +44,14 @@ export async function setState(newState) {
             students_by_class: state.studentsByClass,
             saved_logs: state.savedLogs
         });
-        // Only sync if data that needs to be on the server has changed
-        if (JSON.stringify(oldState.studentsByClass) !== JSON.stringify(state.studentsByClass) ||
-            JSON.stringify(oldState.savedLogs) !== JSON.stringify(state.savedLogs))
-        {
-             syncData();
+        
+        const hasDataChanged = JSON.stringify(oldState.studentsByClass) !== JSON.stringify(state.studentsByClass) ||
+                               JSON.stringify(oldState.savedLogs) !== JSON.stringify(state.savedLogs);
+
+        if (hasDataChanged) {
+            // Fire-and-forget the sync process with its own error handling.
+            // This prevents sync errors from crashing the state update flow.
+            syncData().catch(err => console.error("Sync process failed:", err));
         }
     }
 }
@@ -64,36 +67,34 @@ export function navigateTo(screen) {
 }
 
 async function syncData() {
-    if (!state.userProfile) return; // Cannot sync without a logged in user
-
+    // 1. Always register a background sync. It's the most reliable method.
+    // The browser will deduplicate requests, so it's safe to call multiple times.
     if ('serviceWorker' in navigator && 'SyncManager' in window) {
         try {
             const registration = await navigator.serviceWorker.ready;
             await registration.sync.register('sync-data');
-            console.log('Background sync registered');
-             if (navigator.onLine) {
-                 showNotification('Menyinkronkan data ke cloud...', 'info');
-             } else {
-                 showNotification('Data disimpan lokal. Akan disinkronkan saat kembali online.');
-             }
+            console.log('Background sync registration successful.');
         } catch (e) {
-            console.error('Background sync registration failed, falling back to fetch:', e);
-            // Fallback for browsers that might fail to register sync
-            if(navigator.onLine) await apiService.saveData({ studentsByClass: state.studentsByClass, savedLogs: state.savedLogs });
+            console.error('Background sync registration failed:', e);
         }
-    } else {
-        // Fallback for browsers without Background Sync
-        if (navigator.onLine) {
-            try {
-                showNotification('Menyimpan data ke cloud...', 'info');
-                await apiService.saveData({ studentsByClass: state.studentsByClass, savedLogs: state.savedLogs });
-                showNotification('Data berhasil disinkronkan!', 'success');
-            } catch(e) {
-                showNotification(e.message, 'error');
-            }
-        } else {
-             showNotification('Anda offline. Data disimpan lokal dan akan disinkronkan nanti.', 'info');
+    }
+
+    // 2. If online and have a user, try an immediate sync for instant feedback.
+    if (navigator.onLine && state.userProfile) {
+        console.log('Online, attempting immediate sync...');
+        showNotification('Menyinkronkan data ke cloud...', 'info');
+        try {
+            await apiService.saveData({ studentsByClass: state.studentsByClass, savedLogs: state.savedLogs });
+            console.log('Immediate sync successful.');
+            showNotification('Data berhasil disinkronkan!', 'success');
+        } catch (error) {
+            console.error('Immediate sync failed, relying on background sync.', error);
+            // Notify user that it failed but will be handled in the background.
+            showNotification('Gagal sinkronisasi, akan dicoba lagi di latar belakang.', 'error');
         }
+    } else if (!navigator.onLine) {
+        // 3. If offline, just notify the user that data is saved locally.
+        showNotification('Anda offline. Data disimpan lokal dan akan disinkronkan nanti.');
     }
 }
 
