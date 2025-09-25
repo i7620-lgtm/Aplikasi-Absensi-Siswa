@@ -1,5 +1,4 @@
 
-
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -174,8 +173,21 @@ async function renderDashboardScreen() {
         const absentStudentsByClass = {};
 
         allData.forEach(teacherData => {
-            if (teacherData.saved_logs) {
-                teacherData.saved_logs.forEach(log => {
+            let logs = teacherData.saved_logs;
+
+            // Defensive check: If logs are a string, parse them. If parsing fails, treat as empty.
+            if (logs && typeof logs === 'string') {
+                try {
+                    logs = JSON.parse(logs);
+                } catch (e) {
+                    console.error("Could not parse saved_logs for teacher:", teacherData.user_name, logs);
+                    logs = [];
+                }
+            }
+
+            // Ensure we have a valid array before proceeding
+            if (Array.isArray(logs)) {
+                logs.forEach(log => {
                     if (log.date === selectedDate) {
                         if (!absentStudentsByClass[log.class]) {
                             absentStudentsByClass[log.class] = {
