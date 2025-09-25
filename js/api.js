@@ -32,8 +32,8 @@ export const apiService = {
         return await _fetch('saveData', data);
     },
 
-    async getDashboardData() {
-        return await _fetch('getDashboardData');
+    async getGlobalData() {
+        return await _fetch('getGlobalData');
     },
 
     async getAllUsers() {
