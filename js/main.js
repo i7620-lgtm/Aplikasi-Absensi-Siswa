@@ -28,7 +28,6 @@ export let state = {
         allTeacherData: [],
         isLoading: true,
         selectedDate: new Date().toISOString().split('T')[0],
-        activeView: 'summary', // 'summary' or 'report'
     },
     adminAllLogsView: null,
 };
