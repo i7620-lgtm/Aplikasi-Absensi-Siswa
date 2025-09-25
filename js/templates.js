@@ -166,23 +166,7 @@ export const templates = {
                     </div>
                 </div>
 
-                <div class="mb-6 flex border-b border-slate-200">
-                    <button id="view-summary-btn" class="dashboard-view-toggle border-b-2 px-4 py-2 text-sm font-semibold transition ${state.dashboard.activeView === 'summary' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}">
-                        Ringkasan per Kelas
-                    </button>
-                    <button id="view-report-btn" class="dashboard-view-toggle border-b-2 px-4 py-2 text-sm font-semibold transition ${state.dashboard.activeView === 'report' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}">
-                        Laporan Siswa Tidak Hadir
-                    </button>
-                </div>
-
-                <div id="summary-view-wrapper" class="${state.dashboard.activeView !== 'summary' ? 'hidden' : ''}">
-                    <h2 class="text-xl font-semibold text-slate-700 mb-4">Ringkasan Kehadiran per Kelas</h2>
-                    <div id="ks-summary-container" class="overflow-x-auto">
-                        <p class="text-center text-slate-500 py-8">Memuat ringkasan...</p>
-                    </div>
-                </div>
-
-                <div id="report-view-wrapper" class="${state.dashboard.activeView !== 'report' ? 'hidden' : ''}">
+                <div>
                     <h2 class="text-xl font-semibold text-slate-700 mb-4">Laporan Siswa Tidak Hadir</h2>
                     <div id="ks-report-container" class="space-y-6">
                         <p class="text-center text-slate-500 py-8">Memuat laporan harian...</p>
