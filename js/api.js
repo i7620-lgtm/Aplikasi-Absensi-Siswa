@@ -28,6 +28,10 @@ export const apiService = {
         return await _fetch('loginOrRegister', { profile });
     },
 
+    async getUserProfile() {
+        return await _fetch('getUserProfile');
+    },
+
     async saveData(data) {
         return await _fetch('saveData', data);
     },
