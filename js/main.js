@@ -1,3 +1,4 @@
+
 import { initializeGsi, handleSignIn, handleSignOut } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus } from './ui.js';
@@ -97,11 +98,55 @@ async function syncData() {
 }
 
 
+async function findAndLoadClassDataForAdmin(className) {
+    if (state.userProfile.role !== 'SUPER_ADMIN') return false;
+
+    showLoader('Mencari data kelas...');
+    try {
+        const { allData } = await apiService.getGlobalData();
+        for (const teacherData of allData) {
+            if (teacherData.students_by_class && teacherData.students_by_class[className]) {
+                const students = teacherData.students_by_class[className].students;
+                if (students && students.length > 0) {
+                    // Temporarily load this data into the admin's state for the current session.
+                    // This is not persisted to the admin's own data record.
+                    state.studentsByClass[className] = {
+                        ...(state.studentsByClass[className] || {}),
+                        students: students
+                    };
+                    state.students = students;
+                    hideLoader();
+                    return true; // Data found and loaded
+                }
+            }
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+        console.error("Gagal mengambil data global untuk admin", error);
+        hideLoader();
+        return false; // Error occurred
+    }
+    
+    hideLoader();
+    return false; // Not found anywhere
+}
+
+
 // --- EVENT HANDLERS & LOGIC ---
 export async function handleStartAttendance() {
     state.selectedClass = document.getElementById('class-select').value;
     state.selectedDate = document.getElementById('date-input').value;
-    state.students = (state.studentsByClass[state.selectedClass] || {}).students || [];
+    
+    let students = (state.studentsByClass[state.selectedClass] || {}).students || [];
+
+    // If no local students and user is Admin, try to fetch from other teachers
+    if (students.length === 0 && state.userProfile.role === 'SUPER_ADMIN') {
+        const found = await findAndLoadClassDataForAdmin(state.selectedClass);
+        if (found) {
+            students = state.students; // update students with the found data
+        }
+    }
+    state.students = students;
     
     const existingLog = state.savedLogs.find(log => log.class === state.selectedClass && log.date === state.selectedDate);
     if (existingLog) {
@@ -121,9 +166,14 @@ export async function handleStartAttendance() {
     }
 }
 
-export function handleManageStudents() {
+export async function handleManageStudents() {
     state.selectedClass = document.getElementById('class-select').value;
-    state.students = (state.studentsByClass[state.selectedClass] || {}).students || [];
+    let students = (state.studentsByClass[state.selectedClass] || {}).students || [];
+    if (students.length === 0 && state.userProfile.role === 'SUPER_ADMIN') {
+        const found = await findAndLoadClassDataForAdmin(state.selectedClass);
+        if (found) students = state.students;
+    }
+    state.students = students;
     state.newStudents = state.students.length > 0 ? [...state.students] : [''];
     navigateTo('add-students');
 }
@@ -180,7 +230,7 @@ export async function handleViewHistory(isClassSpecific = false) {
     if (state.userProfile.role === 'SUPER_ADMIN' && !isClassSpecific) {
         showLoader('Memuat semua riwayat guru...');
         try {
-            const { allData } = await apiService.getDashboardData();
+            const { allData } = await apiService.getGlobalData();
             // Flatten the data: each teacher has a saved_logs array.
             // We want one big array of log objects, with teacher name added.
             const flattenedLogs = allData.flatMap(teacher => 
@@ -218,8 +268,16 @@ export function handleExcelImport(event) {
     const reader = new FileReader();
     reader.onload = (e) => {
         try {
-            const data = new UintArray(e.target.result);
-            const workbook = XLSX.read(data, {type: 'array'});
+            let workbook;
+            // Cerdas menangani file: jika CSV, baca sebagai teks. Lainnya sebagai biner.
+            if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+                 workbook = XLSX.read(e.target.result, { type: 'string' });
+            } else {
+                 // Untuk format biner seperti .xlsx, .xls
+                 const data = new Uint8Array(e.target.result); // Memperbaiki kesalahan ketik dari UintArray
+                 workbook = XLSX.read(data, { type: 'array' });
+            }
+           
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
@@ -227,17 +285,23 @@ export function handleExcelImport(event) {
 
             if (studentNames.length > 0) {
                 state.newStudents = studentNames;
-                renderScreen('add-students'); // Re-render only the input part
+                renderScreen('add-students'); // Render ulang hanya bagian input
                 showNotification(`${studentNames.length} siswa berhasil diimpor & akan menggantikan daftar saat ini.`);
             } else {
                 showNotification('Tidak ada nama siswa yang ditemukan di file.', 'error');
             }
         } catch (error) {
-            showNotification('Gagal membaca file. Pastikan formatnya benar.', 'error');
+            showNotification('Gagal membaca file. Pastikan formatnya benar dan tidak rusak.', 'error');
             console.error("Excel import error:", error);
         }
     };
-    reader.readAsArrayBuffer(file);
+    
+    // Putuskan cara membaca file berdasarkan jenisnya
+    if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+        reader.readAsText(file);
+    } else {
+        reader.readAsArrayBuffer(file);
+    }
     event.target.value = ''; // Reset input
 }
 
