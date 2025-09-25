@@ -50,5 +50,14 @@ export const apiService = {
 
     async updateAssignedClasses(emailToUpdate, newClasses) {
         return await _fetch('updateAssignedClasses', { emailToUpdate, newClasses });
+    },
+
+    async getMaintenanceStatus() {
+        // Tidak memerlukan payload atau userEmail
+        return await _fetch('getMaintenanceStatus');
+    },
+
+    async setMaintenanceStatus(enabled) {
+        return await _fetch('setMaintenanceStatus', { enabled });
     }
 };
