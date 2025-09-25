@@ -156,81 +156,56 @@ async function renderDashboardScreen() {
     }
     
     document.getElementById('ks-date-picker').addEventListener('change', async (e) => {
+        // Update state and re-render the whole screen to reflect the new date and data
         await setState({ 
             dashboard: { 
                 ...state.dashboard, 
                 selectedDate: e.target.value 
             } 
         });
-        renderDashboardScreen(); 
-    });
-
-    document.getElementById('view-summary-btn').addEventListener('click', async () => {
-        if (state.dashboard.activeView !== 'summary') {
-            await setState({ dashboard: { ...state.dashboard, activeView: 'summary' } });
-            renderDashboardScreen();
-        }
-    });
-    document.getElementById('view-report-btn').addEventListener('click', async () => {
-        if (state.dashboard.activeView !== 'report') {
-            await setState({ dashboard: { ...state.dashboard, activeView: 'report' } });
-            renderDashboardScreen();
-        }
+        renderScreen('dashboard'); 
     });
 
     const reportContainer = document.getElementById('ks-report-container');
-    const summaryContainer = document.getElementById('ks-summary-container');
     reportContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Memuat laporan harian...</p>`;
-    summaryContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Memuat ringkasan...</p>`;
 
     try {
         const { allData } = await apiService.getGlobalData();
         const selectedDateStr = state.dashboard.selectedDate;
+
+        // Filter all logs from all teachers for the selected date
         const dateLogs = allData.flatMap(teacher => 
-            (teacher.saved_logs || []).filter(log => log.date === selectedDateStr).map(log => ({...log, teacherName: teacher.user_name}))
+            (teacher.saved_logs || [])
+                .filter(log => log.date === selectedDateStr)
+                .map(log => ({...log, teacherName: teacher.user_name}))
         );
 
         if (dateLogs.length === 0) {
-            const noDataMsg = `<p class="text-center text-slate-500 py-8">Tidak ada data absensi yang dicatat pada tanggal ini.</p>`;
-            reportContainer.innerHTML = noDataMsg;
-            summaryContainer.innerHTML = noDataMsg;
+            reportContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada data absensi yang dicatat pada tanggal ini.</p>`;
             return;
         }
 
-        // --- Process Data for Both Views ---
+        // Process data to find absent students, grouped by class
         const absentByClass = {};
-        const summaryByClass = {};
-
         dateLogs.forEach(log => {
             if (!log || !log.class || typeof log.attendance !== 'object') return;
             
-            // Process for Absentee Report
             if (!absentByClass[log.class]) {
                 absentByClass[log.class] = { students: [], teacher: log.teacherName || 'N/A' };
             }
+
             Object.entries(log.attendance).forEach(([studentName, status]) => {
                 if (status !== 'H') {
                     absentByClass[log.class].students.push({ name: studentName, status });
                 }
             });
-
-            // Process for Class Summary
-            if (!summaryByClass[log.class]) {
-                summaryByClass[log.class] = { H: 0, S: 0, I: 0, A: 0, total: 0, teacher: log.teacherName || 'N/A' };
-            }
-            summaryByClass[log.class].total = Object.keys(log.attendance).length;
-            Object.values(log.attendance).forEach(status => {
-                if (summaryByClass[log.class][status] !== undefined) {
-                    summaryByClass[log.class][status]++;
-                }
-            });
         });
 
-        // --- Build HTML for Report View (with sorting) ---
+        // Build HTML for the report, sorted by class name
         let reportHtml = Object.entries(absentByClass)
             .sort(([classA], [classB]) => classA.localeCompare(classB, undefined, { numeric: true }))
             .map(([className, data]) => {
-                if (data.students.length === 0) return '';
+                if (data.students.length === 0) return ''; // Don't show classes where everyone was present
                 return `
                     <div class="bg-slate-50 p-4 rounded-lg">
                         <div class="flex justify-between items-center mb-2">
@@ -254,49 +229,16 @@ async function renderDashboardScreen() {
                 `;
             }).join('');
 
+        // If after filtering, no one was absent, show a success message
         if (reportHtml.trim() === '') {
              reportHtml = `<div class="text-center py-8"><div class="inline-block p-4 bg-green-100 text-green-800 rounded-lg"><p class="font-semibold">Semua siswa di semua kelas yang tercatat hadir hari ini.</p></div></div>`;
         }
-
-        // --- Build HTML for Summary View (with sorting) ---
-        const summaryTableHtml = `
-            <table class="w-full text-left text-sm">
-                <thead>
-                    <tr class="border-b bg-slate-50">
-                        <th class="p-3 font-semibold text-slate-600">Kelas</th>
-                        <th class="p-3 font-semibold text-slate-600 text-center">Hadir</th>
-                        <th class="p-3 font-semibold text-slate-600 text-center">Sakit</th>
-                        <th class="p-3 font-semibold text-slate-600 text-center">Izin</th>
-                        <th class="p-3 font-semibold text-slate-600 text-center">Alpa</th>
-                        <th class="p-3 font-semibold text-slate-600 text-center">Total Siswa</th>
-                        <th class="p-3 font-semibold text-slate-600">Guru</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${Object.entries(summaryByClass).sort(([classA], [classB]) => classA.localeCompare(classB, undefined, { numeric: true })).map(([className, data]) => `
-                        <tr class="border-b hover:bg-slate-50 transition">
-                            <td class="p-3 font-bold text-blue-600">${className}</td>
-                            <td class="p-3 text-slate-700 text-center">${data.H}</td>
-                            <td class="p-3 text-slate-700 text-center">${data.S}</td>
-                            <td class="p-3 text-slate-700 text-center">${data.I}</td>
-                            <td class="p-3 text-slate-700 text-center">${data.A}</td>
-                            <td class="p-3 font-semibold text-slate-800 text-center">${data.total}</td>
-                            <td class="p-3 text-xs text-slate-500">${data.teacher}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        `;
-
-        // --- Render Both Views at the End ---
+        
         reportContainer.innerHTML = reportHtml;
-        summaryContainer.innerHTML = summaryTableHtml;
 
     } catch (error) {
         console.error('Error fetching dashboard data:', error);
-        const errorMsg = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
-        reportContainer.innerHTML = errorMsg;
-        summaryContainer.innerHTML = errorMsg;
+        reportContainer.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
     }
 }
 
