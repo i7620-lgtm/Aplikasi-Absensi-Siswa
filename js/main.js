@@ -1,7 +1,8 @@
 import { initializeGsi, handleSignIn, handleSignOut } from './auth.js';
 import { templates } from './templates.js';
-import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen } from './ui.js';
+import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus } from './ui.js';
 import { apiService } from './api.js';
+import { idb } from './db.js';
 
 // --- CONFIGURATION ---
 export const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5B", "6A", "6B"];
@@ -29,9 +30,25 @@ export let state = {
     }
 };
 
-// Function to update state (optional, for more complex state management later)
-export function setState(newState) {
+// Function to update state and persist it
+export async function setState(newState) {
+    const oldState = { ...state };
     state = { ...state, ...newState };
+
+    // Persist critical data for offline use
+    if (newState.userProfile || newState.studentsByClass || newState.savedLogs) {
+        await idb.set('userProfile', state.userProfile);
+        await idb.set('userData', {
+            students_by_class: state.studentsByClass,
+            saved_logs: state.savedLogs
+        });
+        // Only sync if data that needs to be on the server has changed
+        if (JSON.stringify(oldState.studentsByClass) !== JSON.stringify(state.studentsByClass) ||
+            JSON.stringify(oldState.savedLogs) !== JSON.stringify(state.savedLogs))
+        {
+             syncData();
+        }
+    }
 }
 
 // --- MAIN RENDER FUNCTION ---
@@ -42,6 +59,40 @@ export function render() {
 export function navigateTo(screen) {
     state.currentScreen = screen;
     render();
+}
+
+async function syncData() {
+    if (!state.userProfile) return; // Cannot sync without a logged in user
+
+    if ('serviceWorker' in navigator && 'SyncManager' in window) {
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            await registration.sync.register('sync-data');
+            console.log('Background sync registered');
+             if (navigator.onLine) {
+                 showNotification('Menyinkronkan data ke cloud...', 'info');
+             } else {
+                 showNotification('Data disimpan lokal. Akan disinkronkan saat kembali online.');
+             }
+        } catch (e) {
+            console.error('Background sync registration failed, falling back to fetch:', e);
+            // Fallback for browsers that might fail to register sync
+            if(navigator.onLine) await apiService.saveData({ studentsByClass: state.studentsByClass, savedLogs: state.savedLogs });
+        }
+    } else {
+        // Fallback for browsers without Background Sync
+        if (navigator.onLine) {
+            try {
+                showNotification('Menyimpan data ke cloud...', 'info');
+                await apiService.saveData({ studentsByClass: state.studentsByClass, savedLogs: state.savedLogs });
+                showNotification('Data berhasil disinkronkan!', 'success');
+            } catch(e) {
+                showNotification(e.message, 'error');
+            }
+        } else {
+             showNotification('Anda offline. Data disimpan lokal dan akan disinkronkan nanti.', 'info');
+        }
+    }
 }
 
 
@@ -80,22 +131,16 @@ export async function handleSaveNewStudents() {
     const finalStudentList = state.newStudents.map(s => s.trim()).filter(s => s);
     showLoader('Menyimpan data siswa...');
     
-    state.studentsByClass[state.selectedClass] = {
-        students: finalStudentList,
-        lastModified: new Date().toISOString()
+    const updatedStudentsByClass = {
+        ...state.studentsByClass,
+        [state.selectedClass]: {
+            students: finalStudentList,
+            lastModified: new Date().toISOString()
+        }
     };
     
-    try {
-        await apiService.saveData({
-            studentsByClass: state.studentsByClass,
-            savedLogs: state.savedLogs
-        });
-        showNotification('Data siswa berhasil disimpan ke cloud.');
-    } catch (e) {
-        console.error('Gagal menyimpan data siswa:', e);
-        showNotification(e.message, 'error');
-    }
-
+    await setState({ studentsByClass: updatedStudentsByClass });
+    
     hideLoader();
     navigateTo('setup');
 }
@@ -114,24 +159,14 @@ export async function handleSaveAttendance() {
         lastModified: new Date().toISOString()
     };
 
+    const updatedLogs = [...state.savedLogs];
     if (existingLogIndex > -1) { 
-        state.savedLogs[existingLogIndex] = newLog; 
+        updatedLogs[existingLogIndex] = newLog; 
     } else { 
-        state.savedLogs.push(newLog); 
+        updatedLogs.push(newLog); 
     }
 
-    try {
-        await apiService.saveData({
-            studentsByClass: state.studentsByClass,
-            savedLogs: state.savedLogs
-        });
-    } catch (error) {
-        console.error('Gagal menyimpan data absensi:', error);
-        navigateTo('success');
-        showNotification(error.message, 'error');
-        hideLoader();
-        return;
-    }
+    await setState({ savedLogs: updatedLogs });
     
     hideLoader();
     navigateTo('success');
@@ -264,41 +299,43 @@ export async function handleDownloadData() {
 
 
 // --- INITIALIZATION ---
-function checkSession() {
-    const storedProfile = sessionStorage.getItem('userProfile');
-    const storedData = sessionStorage.getItem('userData');
+async function loadInitialData() {
+    const userProfile = await idb.get('userProfile');
+    const userData = await idb.get('userData');
 
-    if (storedProfile && storedData) {
-        try {
-            const user = JSON.parse(storedProfile);
-            const userData = JSON.parse(storedData);
-            
-            setState({
-                userProfile: user,
-                studentsByClass: userData.students_by_class || {},
-                savedLogs: userData.saved_logs || [],
-            });
-
-            if (user.role === 'SUPER_ADMIN') {
-                state.currentScreen = 'adminHome';
-            } else if (user.role === 'KEPALA_SEKOLAH') {
-                state.currentScreen = 'dashboard';
-            } else {
-                state.currentScreen = 'setup';
-            }
-            console.log('Sesi dipulihkan untuk:', user.name);
-
-        } catch (e) {
-            console.error("Gagal mem-parsing data sesi, membersihkan penyimpanan.", e);
-            sessionStorage.clear();
+    if (userProfile && userData) {
+        state.userProfile = userProfile;
+        state.studentsByClass = userData.students_by_class || {};
+        state.savedLogs = userData.saved_logs || [];
+        
+        console.log('Data dipulihkan dari penyimpanan offline untuk:', userProfile.name);
+        
+        if (userProfile.role === 'SUPER_ADMIN') {
+            state.currentScreen = 'adminHome';
+        } else if (userProfile.role === 'KEPALA_SEKOLAH') {
+            state.currentScreen = 'dashboard';
+        } else {
+            state.currentScreen = 'setup';
         }
     }
 }
 
-function main() {
-    checkSession();
-    initializeGsi();
-    render();
+function initApp() {
+    loadInitialData().then(() => {
+        initializeGsi();
+        render();
+    });
+
+    // Handle online/offline status changes
+    window.addEventListener('online', () => {
+        updateOnlineStatus(true);
+        showNotification('Koneksi internet kembali pulih.', 'success');
+        syncData();
+    });
+    window.addEventListener('offline', () => updateOnlineStatus(false));
+    
+    // Set initial status
+    updateOnlineStatus(navigator.onLine);
 }
 
-main();
+initApp();
