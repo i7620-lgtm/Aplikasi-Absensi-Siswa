@@ -1,4 +1,3 @@
-
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -133,6 +132,42 @@ function renderSetupScreen() {
         const availableClasses = isAdmin ? state.CLASSES : (state.userProfile?.assigned_classes || []);
         document.getElementById('class-select').value = state.selectedClass || availableClasses[0] || '';
     }
+    
+    // --- START: Real-time update for Teacher's profile ---
+    if (isTeacher) {
+        const updateTeacherProfile = async () => {
+            console.log("Checking for teacher profile updates...");
+            try {
+                const { userProfile: latestProfile } = await apiService.getUserProfile();
+                const hasChanged = JSON.stringify(latestProfile.assigned_classes) !== JSON.stringify(state.userProfile.assigned_classes);
+                
+                if (hasChanged) {
+                    console.log("Teacher profile has changed, re-rendering.");
+                    // Stop the current interval before re-rendering
+                    if (state.setup.pollingIntervalId) {
+                        clearInterval(state.setup.pollingIntervalId);
+                    }
+                    await setState({ 
+                        userProfile: latestProfile,
+                        setup: { ...state.setup, pollingIntervalId: null }
+                    });
+                    showNotification('Hak akses kelas Anda telah diperbarui oleh admin.', 'info');
+                    renderScreen('setup'); // Re-render the screen which will start a new poll
+                }
+            } catch (error) {
+                console.error("Failed to fetch teacher profile update:", error);
+                // Don't show error to user to avoid disruption
+            }
+        };
+
+        if (state.setup.pollingIntervalId) {
+            clearInterval(state.setup.pollingIntervalId);
+        }
+        const newIntervalId = setInterval(updateTeacherProfile, 10000); // Check every 10 seconds
+        setState({ setup: { ...state.setup, pollingIntervalId: newIntervalId } });
+        console.log(`Setup (Teacher) polling started with ID: ${newIntervalId}.`);
+    }
+    // --- END: Real-time update for Teacher's profile ---
 }
 
 function renderAdminHomeScreen() {
@@ -155,114 +190,130 @@ async function renderDashboardScreen() {
     }
     
     document.getElementById('ks-date-picker').addEventListener('change', async (e) => {
+        // Stop the poll, update date, then re-render to start new poll.
+        navigateTo('dashboard'); 
         await setState({ 
             dashboard: { 
                 ...state.dashboard, 
-                selectedDate: e.target.value 
+                selectedDate: e.target.value,
+                pollingIntervalId: null 
             } 
         });
-        renderScreen('dashboard'); 
+        renderScreen('dashboard');
     });
 
     const dashboardContent = document.getElementById('dashboard-content');
 
-    try {
-        const { allData } = await apiService.getGlobalData();
-        const selectedDate = state.dashboard.selectedDate;
-        
-        const absentStudentsByClass = {};
-
-        allData.forEach(teacherData => {
-            let logs = teacherData.saved_logs;
-
-            // Defensive check: If logs are a string, parse them. If parsing fails, treat as empty.
-            if (logs && typeof logs === 'string') {
-                try {
-                    logs = JSON.parse(logs);
-                } catch (e) {
-                    console.error("Could not parse saved_logs for teacher:", teacherData.user_name, logs);
-                    logs = [];
-                }
-            }
-
-            // Ensure we have a valid array before proceeding
-            if (Array.isArray(logs)) {
-                logs.forEach(log => {
-                    if (log.date === selectedDate) {
-                        if (!absentStudentsByClass[log.class]) {
-                            absentStudentsByClass[log.class] = {
-                                students: [],
-                                teacherName: teacherData.user_name
-                            };
-                        }
-                        
-                        Object.entries(log.attendance).forEach(([studentName, status]) => {
-                            if (status !== 'H') {
-                                const existingStudent = absentStudentsByClass[log.class].students.find(s => s.name === studentName);
-                                if (!existingStudent) {
-                                    absentStudentsByClass[log.class].students.push({ name: studentName, status: status });
-                                }
-                            }
-                        });
-                    }
-                });
-            }
-        });
-
-        const classNames = Object.keys(absentStudentsByClass).sort();
-        const hasAbsentees = Object.values(absentStudentsByClass).some(classData => classData.students.length > 0);
-
-        if (!hasAbsentees) {
-            dashboardContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada siswa yang absen pada tanggal yang dipilih.</p>`;
-            return;
-        }
-
-        dashboardContent.innerHTML = classNames.map(className => {
-            const classData = absentStudentsByClass[className];
-            if (classData.students.length === 0) return '';
+    const updateDashboardContent = async () => {
+        console.log('Dashboard is refreshing...');
+        try {
+            const { allData } = await apiService.getGlobalData();
+            const selectedDate = state.dashboard.selectedDate;
             
-            classData.students.sort((a, b) => a.name.localeCompare(b.name));
+            const absentStudentsByClass = {};
 
-            const studentRows = classData.students.map(student => `
-                <tr class="border-t border-slate-200">
-                    <td class="py-2 pr-4 text-slate-700">${student.name}</td>
-                    <td class="py-2 px-2">
-                        <span class="px-2 py-1 rounded-full text-xs font-semibold ${
-                            student.status === 'S' ? 'bg-yellow-100 text-yellow-800' : 
-                            student.status === 'I' ? 'bg-blue-100 text-blue-800' : 
-                            'bg-red-100 text-red-800'
-                        }">${student.status}</span>
-                    </td>
-                </tr>
-            `).join('');
+            allData.forEach(teacherData => {
+                let logs = teacherData.saved_logs;
 
-            return `
-                <div class="bg-slate-50 p-4 rounded-lg">
-                    <div class="flex justify-between items-center mb-2">
-                        <h3 class="font-bold text-blue-600">Kelas ${className}</h3>
-                        <p class="text-xs text-slate-400 font-medium">Oleh: ${classData.teacherName}</p>
+                if (logs && typeof logs === 'string') {
+                    try {
+                        logs = JSON.parse(logs);
+                    } catch (e) {
+                        console.error("Could not parse saved_logs for teacher:", teacherData.user_name, logs);
+                        logs = [];
+                    }
+                }
+
+                if (Array.isArray(logs)) {
+                    logs.forEach(log => {
+                        if (log.date === selectedDate) {
+                            if (!absentStudentsByClass[log.class]) {
+                                absentStudentsByClass[log.class] = {
+                                    students: [],
+                                    teacherName: teacherData.user_name
+                                };
+                            }
+                            
+                            Object.entries(log.attendance).forEach(([studentName, status]) => {
+                                if (status !== 'H') {
+                                    const existingStudent = absentStudentsByClass[log.class].students.find(s => s.name === studentName);
+                                    if (!existingStudent) {
+                                        absentStudentsByClass[log.class].students.push({ name: studentName, status: status });
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+
+            const classNames = Object.keys(absentStudentsByClass).sort();
+            const hasAbsentees = Object.values(absentStudentsByClass).some(classData => classData.students.length > 0);
+
+            if (!hasAbsentees) {
+                dashboardContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada siswa yang absen pada tanggal yang dipilih.</p>`;
+                return;
+            }
+
+            dashboardContent.innerHTML = classNames.map(className => {
+                const classData = absentStudentsByClass[className];
+                if (classData.students.length === 0) return '';
+                
+                classData.students.sort((a, b) => a.name.localeCompare(b.name));
+
+                const studentRows = classData.students.map(student => `
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4 text-slate-700">${student.name}</td>
+                        <td class="py-2 px-2">
+                            <span class="px-2 py-1 rounded-full text-xs font-semibold ${
+                                student.status === 'S' ? 'bg-yellow-100 text-yellow-800' : 
+                                student.status === 'I' ? 'bg-blue-100 text-blue-800' : 
+                                'bg-red-100 text-red-800'
+                            }">${student.status}</span>
+                        </td>
+                    </tr>
+                `).join('');
+
+                return `
+                    <div class="bg-slate-50 p-4 rounded-lg">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-bold text-blue-600">Kelas ${className}</h3>
+                            <p class="text-xs text-slate-400 font-medium">Oleh: ${classData.teacherName}</p>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="text-left text-slate-500">
+                                        <th class="py-1 pr-4 font-medium">Nama Siswa</th>
+                                        <th class="py-1 px-2 font-medium">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${studentRows}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr class="text-left text-slate-500">
-                                    <th class="py-1 pr-4 font-medium">Nama Siswa</th>
-                                    <th class="py-1 px-2 font-medium">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${studentRows}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `;
-        }).join('');
+                `;
+            }).join('');
 
-    } catch (error) {
-        console.error("Failed to load dashboard data:", error);
-        dashboardContent.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
+        } catch (error) {
+            console.error("Failed to refresh dashboard data:", error);
+            if (!dashboardContent.innerHTML.includes('bg-slate-50')) {
+                 dashboardContent.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
+            }
+        }
+    };
+
+    updateDashboardContent();
+
+    if (state.dashboard.pollingIntervalId) {
+        clearInterval(state.dashboard.pollingIntervalId);
     }
+
+    const newIntervalId = setInterval(updateDashboardContent, 5000);
+    setState({ dashboard: { ...state.dashboard, pollingIntervalId: newIntervalId } });
+    console.log(`Dashboard polling started with ID: ${newIntervalId}.`);
 }
 
 
@@ -271,89 +322,110 @@ async function renderAdminPanelScreen() {
     document.getElementById('admin-panel-back-btn').addEventListener('click', () => navigateTo('adminHome'));
     const container = document.getElementById('admin-panel-container');
 
-    try {
-        const { allUsers } = await apiService.getAllUsers();
-        setState({ adminPanel: { users: allUsers, isLoading: false }});
-        
-        container.innerHTML = `
-            <table class="w-full text-left">
-                <thead>
-                    <tr class="border-b bg-slate-50">
-                        <th class="p-3 text-sm font-semibold text-slate-600">Pengguna</th>
-                        <th class="p-3 text-sm font-semibold text-slate-600">Peran</th>
-                        <th class="p-3 text-sm font-semibold text-slate-600">Tindakan</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${allUsers.map(user => `
-                        <tr class="border-b hover:bg-slate-50 transition">
-                            <td class="p-3">
-                                <div class="flex items-center gap-3">
-                                    <img src="${user.picture}" alt="${user.name}" class="w-10 h-10 rounded-full"/>
-                                    <div>
-                                        <p class="font-medium text-slate-800">${user.name}</p>
-                                        <p class="text-xs text-slate-500">${user.email}</p>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="p-3">
-                                <select data-email="${user.email}" class="role-select w-full max-w-xs p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                                    <option value="GURU" ${user.role === 'GURU' ? 'selected' : ''}>Guru</option>
-                                    <option value="KEPALA_SEKOLAH" ${user.role === 'KEPALA_SEKOLAH' ? 'selected' : ''}>Kepala Sekolah</option>
-                                    <option value="SUPER_ADMIN" ${user.role === 'SUPER_ADMIN' ? 'selected' : ''}>Super Admin</option>
-                                </select>
-                            </td>
-                             <td class="p-3">
-                                ${user.role === 'GURU' ? `
-                                <button class="manage-classes-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" 
-                                        data-email="${user.email}" 
-                                        data-name="${user.name}" 
-                                        data-assigned='${JSON.stringify(user.assigned_classes || [])}'>
-                                    Kelola Kelas
-                                </button>
-                                ` : ''}
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        `;
-        document.querySelectorAll('.role-select').forEach(select => {
-            select.addEventListener('change', async (e) => {
-                const targetEmail = e.target.dataset.email;
-                const newRole = e.target.value;
-                const confirmed = await showConfirmation(`Anda yakin ingin mengubah peran untuk ${targetEmail} menjadi ${newRole}?`);
-                if (confirmed) {
-                    showLoader('Mengubah peran...');
-                    try {
-                        await apiService.updateUserRole(targetEmail, newRole);
-                        showNotification('Peran berhasil diubah.');
-                        navigateTo('adminPanel'); // Refresh
-                    } catch (error) {
-                        showNotification(error.message, 'error');
-                        e.target.value = state.adminPanel.users.find(u => u.email === targetEmail).role; // revert dropdown
-                    } finally {
-                        hideLoader();
-                    }
-                } else {
-                     e.target.value = state.adminPanel.users.find(u => u.email === targetEmail).role; // revert dropdown
-                }
-            });
-        });
+    const updateAdminPanelContent = async () => {
+        console.log("Admin panel is refreshing...");
+        try {
+            const { allUsers } = await apiService.getAllUsers();
+            
+            // Only re-render if data has actually changed to prevent losing focus on dropdowns
+            const hasChanged = JSON.stringify(allUsers) !== JSON.stringify(state.adminPanel.users);
+            if (!hasChanged && !state.adminPanel.isLoading) {
+                console.log("Admin panel data unchanged.");
+                return;
+            }
 
-        document.querySelectorAll('.manage-classes-btn').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const user = {
-                    email: e.currentTarget.dataset.email,
-                    name: e.currentTarget.dataset.name,
-                    assigned_classes: JSON.parse(e.currentTarget.dataset.assigned)
-                };
-                showManageClassesModal(user);
+            setState({ adminPanel: { ...state.adminPanel, users: allUsers, isLoading: false }});
+            
+            container.innerHTML = `
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="border-b bg-slate-50">
+                            <th class="p-3 text-sm font-semibold text-slate-600">Pengguna</th>
+                            <th class="p-3 text-sm font-semibold text-slate-600">Peran</th>
+                            <th class="p-3 text-sm font-semibold text-slate-600">Tindakan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${allUsers.map(user => `
+                            <tr class="border-b hover:bg-slate-50 transition">
+                                <td class="p-3">
+                                    <div class="flex items-center gap-3">
+                                        <img src="${user.picture}" alt="${user.name}" class="w-10 h-10 rounded-full"/>
+                                        <div>
+                                            <p class="font-medium text-slate-800">${user.name}</p>
+                                            <p class="text-xs text-slate-500">${user.email}</p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="p-3">
+                                    <select data-email="${user.email}" class="role-select w-full max-w-xs p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                        <option value="GURU" ${user.role === 'GURU' ? 'selected' : ''}>Guru</option>
+                                        <option value="KEPALA_SEKOLAH" ${user.role === 'KEPALA_SEKOLAH' ? 'selected' : ''}>Kepala Sekolah</option>
+                                        <option value="SUPER_ADMIN" ${user.role === 'SUPER_ADMIN' ? 'selected' : ''}>Super Admin</option>
+                                    </select>
+                                </td>
+                                 <td class="p-3">
+                                    ${user.role === 'GURU' ? `
+                                    <button class="manage-classes-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" 
+                                            data-email="${user.email}" 
+                                            data-name="${user.name}" 
+                                            data-assigned='${JSON.stringify(user.assigned_classes || [])}'>
+                                        Kelola Kelas
+                                    </button>
+                                    ` : ''}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            document.querySelectorAll('.role-select').forEach(select => {
+                select.addEventListener('change', async (e) => {
+                    const targetEmail = e.target.dataset.email;
+                    const newRole = e.target.value;
+                    const confirmed = await showConfirmation(`Anda yakin ingin mengubah peran untuk ${targetEmail} menjadi ${newRole}?`);
+                    if (confirmed) {
+                        showLoader('Mengubah peran...');
+                        try {
+                            await apiService.updateUserRole(targetEmail, newRole);
+                            showNotification('Peran berhasil diubah.');
+                            // Manually trigger an update instead of full navigation to avoid flicker
+                            await updateAdminPanelContent();
+                        } catch (error) {
+                            showNotification(error.message, 'error');
+                            e.target.value = state.adminPanel.users.find(u => u.email === targetEmail).role; // revert dropdown
+                        } finally {
+                            hideLoader();
+                        }
+                    } else {
+                         e.target.value = state.adminPanel.users.find(u => u.email === targetEmail).role; // revert dropdown
+                    }
+                });
             });
-        });
-    } catch(error) {
-         container.innerHTML = `<p class="text-center text-red-500 py-8">${error.message}</p>`;
+
+            document.querySelectorAll('.manage-classes-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const user = {
+                        email: e.currentTarget.dataset.email,
+                        name: e.currentTarget.dataset.name,
+                        assigned_classes: JSON.parse(e.currentTarget.dataset.assigned)
+                    };
+                    showManageClassesModal(user);
+                });
+            });
+        } catch(error) {
+             container.innerHTML = `<p class="text-center text-red-500 py-8">${error.message}</p>`;
+        }
+    };
+
+    updateAdminPanelContent();
+
+    if (state.adminPanel.pollingIntervalId) {
+        clearInterval(state.adminPanel.pollingIntervalId);
     }
+    const newIntervalId = setInterval(updateAdminPanelContent, 10000); // Check every 10 seconds
+    setState({ adminPanel: { ...state.adminPanel, pollingIntervalId: newIntervalId } });
+    console.log(`Admin Panel polling started with ID: ${newIntervalId}.`);
 }
 
 function showManageClassesModal(user) {
