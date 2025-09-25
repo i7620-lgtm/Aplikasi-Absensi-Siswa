@@ -34,6 +34,10 @@ export let state = {
     setup: {
         pollingIntervalId: null, // For real-time updates of teacher profile
     },
+    maintenanceMode: {
+        isActive: false,
+        statusChecked: false,
+    },
     adminAllLogsView: null,
 };
 
@@ -432,11 +436,30 @@ async function loadInitialData() {
     }
 }
 
-function initApp() {
-    loadInitialData().then(() => {
+async function initApp() {
+    // 1. Periksa status perbaikan terlebih dahulu
+    try {
+        const { isMaintenance } = await apiService.getMaintenanceStatus();
+        state.maintenanceMode.isActive = isMaintenance;
+    } catch (e) {
+        console.error("Tidak dapat memeriksa status perbaikan:", e);
+        // Jika API gagal, anggap tidak dalam mode perbaikan agar aplikasi tetap bisa dicoba.
+    } finally {
+        state.maintenanceMode.statusChecked = true;
+    }
+
+    // 2. Muat data pengguna yang ada dari offline
+    await loadInitialData();
+    
+    // 3. Tentukan layar berikutnya
+    if (state.maintenanceMode.isActive && state.userProfile?.role !== 'SUPER_ADMIN') {
+        // Jika mode perbaikan aktif dan pengguna bukan admin, paksa ke layar perbaikan.
+        navigateTo('maintenance');
+    } else {
+        // Jika tidak, lanjutkan alur normal
         initializeGsi();
         render();
-    });
+    }
 
     // Handle online/offline status changes
     window.addEventListener('online', () => {
