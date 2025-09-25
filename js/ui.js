@@ -398,11 +398,17 @@ function renderDataScreen() {
     const container = document.getElementById('data-container');
     const titleEl = document.getElementById('data-title');
     
-    const logsToShow = state.historyClassFilter 
-        ? state.savedLogs.filter(log => log.class === state.historyClassFilter)
-        : state.savedLogs;
+    const isAdminGlobalView = state.userProfile.role === 'SUPER_ADMIN' && state.adminAllLogsView;
+
+    const logsToShow = isAdminGlobalView 
+        ? state.adminAllLogsView
+        : (state.historyClassFilter 
+            ? state.savedLogs.filter(log => log.class === state.historyClassFilter)
+            : state.savedLogs);
         
-    if (state.historyClassFilter) {
+    if (isAdminGlobalView) {
+        titleEl.textContent = `Semua Riwayat Absensi (Tampilan Admin)`;
+    } else if (state.historyClassFilter) {
         titleEl.textContent = `Riwayat Absensi Kelas ${state.historyClassFilter}`;
     } else {
          titleEl.textContent = `Semua Riwayat Absensi`;
@@ -435,7 +441,15 @@ function renderDataScreen() {
                     contentHtml = `<p class="text-sm text-slate-500 italic px-1 py-2">Semua siswa hadir.</p>`;
                 }
 
-                return `<div class="bg-slate-50 p-4 rounded-lg"><h3 class="font-bold text-blue-600 mb-2">Kelas ${log.class}</h3>${contentHtml}</div>`;
+                const teacherInfo = log.teacherName ? `<p class="text-xs text-slate-400 font-medium">Oleh: ${log.teacherName}</p>` : '';
+
+                return `<div class="bg-slate-50 p-4 rounded-lg">
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="font-bold text-blue-600">Kelas ${log.class}</h3>
+                                ${teacherInfo}
+                            </div>
+                            ${contentHtml}
+                        </div>`;
             }).join('');
 
             return `<div><h2 class="text-lg font-semibold text-slate-700 mb-3">${displayDate}</h2><div class="space-y-4">${logsHtml}</div></div>`;
