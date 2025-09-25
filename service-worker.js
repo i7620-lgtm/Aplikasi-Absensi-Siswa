@@ -1,3 +1,4 @@
+
 const CACHE_NAME = 'absensi-cache-v1';
 const localUrlsToCache = [
   '/',
@@ -136,10 +137,12 @@ async function syncDataToServer() {
     }
 
     console.log('Service Worker: Data synced successfully.');
-    self.registration.showNotification('Absensi Online', {
-      body: 'Data Anda berhasil disinkronkan ke cloud.',
-      icon: 'https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png'
-    });
+    if (self.Notification && self.Notification.permission === 'granted') {
+      self.registration.showNotification('Absensi Online', {
+        body: 'Data Anda berhasil disinkronkan ke cloud.',
+        icon: 'https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png'
+      });
+    }
 
   } catch (error) {
     console.error('Service Worker: Sync failed, will retry later.', error);
