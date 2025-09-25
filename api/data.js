@@ -112,6 +112,18 @@ export default async function handler(request, response) {
                     const userData = dataRows[0] || { students_by_class: {}, saved_logs: [] };
                     return response.status(200).json({ user, userData });
 
+                case 'getUserProfile':
+                    const { rows: userProfileRows } = await sql`SELECT email, name, picture, role, assigned_classes FROM users WHERE email = ${userEmail}`;
+                    if (userProfileRows.length === 0) {
+                        return response.status(404).json({ error: 'User profile not found' });
+                    }
+                    // Pemeriksaan defensif: pastikan assigned_classes adalah array.
+                    const userProfile = userProfileRows[0];
+                    if (userProfile.assigned_classes === null) {
+                        userProfile.assigned_classes = [];
+                    }
+                    return response.status(200).json({ userProfile });
+
                 case 'saveData':
                     if (userRole === 'KEPALA_SEKOLAH') {
                          return response.status(403).json({ error: 'Akun Kepala Sekolah bersifat hanya-baca.' });
