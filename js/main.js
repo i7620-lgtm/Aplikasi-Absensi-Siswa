@@ -27,7 +27,8 @@ export let state = {
     dashboard: {
         allTeacherData: [],
         isLoading: true,
-    }
+    },
+    adminAllLogsView: null,
 };
 
 // Function to update state and persist it
@@ -172,8 +173,30 @@ export async function handleSaveAttendance() {
     navigateTo('success');
 }
 
-export function handleViewHistory(isClassSpecific = false) {
+export async function handleViewHistory(isClassSpecific = false) {
     state.historyClassFilter = isClassSpecific ? document.getElementById('class-select').value : null;
+
+    // Special logic for SUPER_ADMIN viewing all teacher logs
+    if (state.userProfile.role === 'SUPER_ADMIN' && !isClassSpecific) {
+        showLoader('Memuat semua riwayat guru...');
+        try {
+            const { allData } = await apiService.getDashboardData();
+            // Flatten the data: each teacher has a saved_logs array.
+            // We want one big array of log objects, with teacher name added.
+            const flattenedLogs = allData.flatMap(teacher => 
+                (teacher.saved_logs || []).map(log => ({ ...log, teacherName: teacher.user_name }))
+            );
+            state.adminAllLogsView = flattenedLogs;
+        } catch (error) {
+            showNotification(error.message, 'error');
+            hideLoader();
+            return; // Stop navigation if fetch fails
+        }
+    } else {
+        // Ensure this is cleared when not in admin global view mode
+        state.adminAllLogsView = null;
+    }
+
     navigateTo('data');
 }
 
@@ -195,7 +218,7 @@ export function handleExcelImport(event) {
     const reader = new FileReader();
     reader.onload = (e) => {
         try {
-            const data = new Uint8Array(e.target.result);
+            const data = new UintArray(e.target.result);
             const workbook = XLSX.read(data, {type: 'array'});
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
