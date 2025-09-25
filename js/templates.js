@@ -1,4 +1,5 @@
 
+
 import { state, CLASSES } from './main.js';
 import { getGsiReadyState } from './auth.js';
 
@@ -139,26 +140,36 @@ export const templates = {
         </div>`;
     },
     dashboard: () => {
-        const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const displayDate = new Date(state.dashboard.selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const canGoBack = state.userProfile?.role === 'SUPER_ADMIN';
         const backTarget = canGoBack ? 'adminHome' : 'setup';
         return `
         <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
              <div class="bg-white p-8 rounded-2xl shadow-lg">
-                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 pb-4 border-b border-slate-200">
+                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 pb-4 border-b border-slate-200 gap-4">
                     <div>
                         <h1 class="text-2xl font-bold text-slate-800">Dasbor Kepala Sekolah</h1>
-                        <p class="text-slate-500">${today}</p>
+                        <p class="text-slate-500">${displayDate}</p>
                     </div>
-                    <div class="flex items-center gap-4 mt-4 sm:mt-0">
-                        ${canGoBack ? `<button id="dashboard-back-btn" data-target="${backTarget}" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>` : ''}
-                        <button id="logoutBtn-ks" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full flex items-center gap-2 text-sm font-semibold">
-                            <span>Logout</span>
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                        </button>
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
+                        <div class="flex items-center gap-2 w-full">
+                             <label for="ks-date-picker" class="text-sm font-medium text-slate-600 flex-shrink-0">Pilih Tanggal:</label>
+                             <input type="date" id="ks-date-picker" value="${state.dashboard.selectedDate}" class="w-full sm:w-auto p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm"/>
+                        </div>
+                        <div class="flex items-center gap-2">
+                           ${canGoBack ? `<button id="dashboard-back-btn" data-target="${backTarget}" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>` : ''}
+                           <button id="logoutBtn-ks" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full flex items-center gap-2 text-sm font-semibold">
+                               <span>Logout</span>
+                               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                           </button>
+                        </div>
                     </div>
                 </div>
-                <h2 class="text-xl font-semibold text-slate-700 mb-4">Laporan Absensi Hari Ini</h2>
+                <h2 class="text-xl font-semibold text-slate-700 mb-4">Ringkasan Kehadiran per Kelas</h2>
+                <div id="ks-summary-container" class="overflow-x-auto">
+                    <p class="text-center text-slate-500 py-8">Memuat ringkasan...</p>
+                </div>
+                <h2 class="text-xl font-semibold text-slate-700 mt-8 mb-4">Laporan Siswa Tidak Hadir</h2>
                 <div id="ks-report-container" class="space-y-6">
                     <p class="text-center text-slate-500 py-8">Memuat laporan harian...</p>
                 </div>
