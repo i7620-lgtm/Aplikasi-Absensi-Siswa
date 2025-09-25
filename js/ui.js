@@ -228,7 +228,7 @@ async function renderDashboardScreen() {
 
         // --- Build HTML for Report View (with sorting) ---
         let reportHtml = Object.entries(absentByClass)
-            .sort(([classA], [classB]) => classA.localeCompare(classB))
+            .sort(([classA], [classB]) => classA.localeCompare(classB, undefined, { numeric: true }))
             .map(([className, data]) => {
                 if (data.students.length === 0) return '';
                 return `
@@ -241,7 +241,7 @@ async function renderDashboardScreen() {
                             <table class="w-full text-sm">
                                 <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
                                 <tbody>
-                                    ${data.students.map(student => `
+                                    ${data.students.sort((a,b) => a.name.localeCompare(b.name)).map(student => `
                                         <tr class="border-t border-slate-200">
                                             <td class="py-2 pr-4 text-slate-700">${student.name}</td>
                                             <td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${student.status === 'S' ? 'bg-yellow-100 text-yellow-800' : student.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${student.status}</span></td>
@@ -273,7 +273,7 @@ async function renderDashboardScreen() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${Object.entries(summaryByClass).sort(([classA], [classB]) => classA.localeCompare(classB)).map(([className, data]) => `
+                    ${Object.entries(summaryByClass).sort(([classA], [classB]) => classA.localeCompare(classB, undefined, { numeric: true })).map(([className, data]) => `
                         <tr class="border-b hover:bg-slate-50 transition">
                             <td class="p-3 font-bold text-blue-600">${className}</td>
                             <td class="p-3 text-slate-700 text-center">${data.H}</td>
