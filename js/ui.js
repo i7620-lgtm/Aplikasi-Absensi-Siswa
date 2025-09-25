@@ -85,6 +85,40 @@ function renderSetupScreen() {
         if (isAdmin) {
             document.getElementById('back-to-admin-home-btn').addEventListener('click', () => navigateTo('adminHome'));
         }
+
+        // Handle notification permission banner
+        const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
+        if (enableNotificationsBtn) {
+            enableNotificationsBtn.addEventListener('click', () => {
+                Notification.requestPermission().then(permission => {
+                    const banner = document.getElementById('notification-permission-banner');
+                    if (banner) {
+                        banner.style.opacity = '0';
+                        setTimeout(() => banner.remove(), 300);
+                    }
+                    if (permission === 'granted') {
+                        showNotification('Notifikasi diaktifkan!', 'success');
+                    } else {
+                        // If denied, don't ask again. Treat as dismissed.
+                        localStorage.setItem('notificationBannerDismissed', 'true'); 
+                        showNotification('Izin notifikasi tidak diberikan. Anda bisa mengubahnya di pengaturan browser.', 'info');
+                    }
+                });
+            });
+        }
+
+        const dismissBannerBtn = document.getElementById('dismiss-notification-banner-btn');
+        if (dismissBannerBtn) {
+            dismissBannerBtn.addEventListener('click', () => {
+                localStorage.setItem('notificationBannerDismissed', 'true');
+                const banner = document.getElementById('notification-permission-banner');
+                if (banner) {
+                    banner.style.opacity = '0';
+                    setTimeout(() => banner.remove(), 300);
+                }
+            });
+        }
+
     } else {
         document.getElementById('loginBtn').addEventListener('click', handleSignIn);
     }
