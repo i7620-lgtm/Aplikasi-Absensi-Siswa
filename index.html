@@ -61,12 +61,37 @@
             z-index: 10002;
             transition: top 0.5s ease-in-out;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-width: 90%;
+            text-align: center;
         }
         #notification.show {
             top: 20px;
         }
         #notification.error { background-color: #ef4444; }
         #notification.success { background-color: #22c55e; }
+        #notification.info { background-color: #3b82f6; }
+
+        /* --- Offline Indicator --- */
+        #offline-indicator {
+            position: fixed;
+            bottom: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #475569;
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            z-index: 10001;
+            transition: bottom 0.5s ease-in-out;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        #offline-indicator.show {
+            bottom: 20px;
+        }
     </style>
 <script type="importmap">
 {
@@ -92,12 +117,33 @@
         <div id="app-container"></div>
     </div>
 
+    <!-- Offline Status Indicator -->
+    <div id="offline-indicator">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+        </svg>
+        <span>Anda sedang offline. Perubahan disimpan lokal.</span>
+    </div>
+
     <footer class="text-center py-4 px-4 text-xs text-slate-500">
         <a href="./terms.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</a> &
         <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a>
     </footer>
 
     <script type="module" src="./js/main.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('ServiceWorker registration failed: ', error);
+                    });
+            });
+        }
+    </script>
 
 </body>
 </html>
