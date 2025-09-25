@@ -56,6 +56,21 @@ export const templates = {
                         </div>
                     `
                 }
+                ${
+                    (state.userProfile && ('Notification' in window) && Notification.permission === 'default' && !localStorage.getItem('notificationBannerDismissed'))
+                    ? `
+                        <div id="notification-permission-banner" class="bg-indigo-50 border border-indigo-200 p-4 rounded-lg my-6 text-sm text-indigo-800 flex items-start justify-between gap-4">
+                            <div>
+                                <p class="font-semibold mb-1">Dapatkan Notifikasi Latar Belakang</p>
+                                <p>Izinkan notifikasi untuk mengetahui saat data Anda berhasil disinkronkan, bahkan saat aplikasi ditutup.</p>
+                            </div>
+                            <div class="flex-shrink-0 flex items-center gap-2">
+                                <button id="enable-notifications-btn" class="font-bold text-indigo-600 hover:text-indigo-800 focus:outline-none">Aktifkan</button>
+                                <button id="dismiss-notification-banner-btn" class="text-2xl leading-none text-indigo-400 hover:text-indigo-600 focus:outline-none" title="Tutup">&times;</button>
+                            </div>
+                        </div>
+                    ` : ''
+                }
                 ${ needsAssignment ? `
                     <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
                         <div class="flex">
