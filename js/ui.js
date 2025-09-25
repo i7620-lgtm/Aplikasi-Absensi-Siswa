@@ -1,3 +1,4 @@
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -90,7 +91,7 @@ function renderSetupScreen() {
     
     if (!needsAssignment && state.userProfile) {
         document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
-        document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(false));
+        document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(true));
         document.getElementById('recapBtn').addEventListener('click', () => navigateTo('recap'));
         document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
         document.getElementById('downloadDataBtn').addEventListener('click', handleDownloadData);
