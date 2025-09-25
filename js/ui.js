@@ -6,6 +6,8 @@ import { apiService } from './api.js';
 const appContainer = document.getElementById('app-container');
 const loaderWrapper = document.getElementById('loader-wrapper');
 const notificationEl = document.getElementById('notification');
+const offlineIndicator = document.getElementById('offline-indicator');
+
 
 export function showLoader(message) {
     loaderWrapper.querySelector('.loader-text').textContent = message;
@@ -23,12 +25,22 @@ export function hideLoader() {
 
 export function showNotification(message, type = 'success') {
     notificationEl.textContent = message;
-    notificationEl.className = type === 'error' ? 'error' : 'success';
+    notificationEl.className = ''; // Clear previous classes
+    notificationEl.classList.add(type);
     notificationEl.classList.add('show');
     setTimeout(() => {
         notificationEl.classList.remove('show');
     }, 5000);
 }
+
+export function updateOnlineStatus(isOnline) {
+    if (isOnline) {
+        offlineIndicator.classList.remove('show');
+    } else {
+        offlineIndicator.classList.add('show');
+    }
+}
+
 
 export function showConfirmation(message) {
     return new Promise(resolve => {
