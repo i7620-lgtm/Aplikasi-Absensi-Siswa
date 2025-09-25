@@ -1,4 +1,5 @@
 
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -153,23 +154,39 @@ async function renderDashboardScreen() {
         const target = backBtn.dataset.target;
         backBtn.addEventListener('click', () => navigateTo(target));
     }
+    
+    document.getElementById('ks-date-picker').addEventListener('change', async (e) => {
+        await setState({ 
+            dashboard: { 
+                ...state.dashboard, 
+                selectedDate: e.target.value 
+            } 
+        });
+        renderDashboardScreen(); 
+    });
 
-    const container = document.getElementById('ks-report-container');
+    const reportContainer = document.getElementById('ks-report-container');
+    const summaryContainer = document.getElementById('ks-summary-container');
+    reportContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Memuat laporan...</p>`;
+    summaryContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Memuat ringkasan...</p>`;
+
     try {
         const { allData } = await apiService.getGlobalData();
-        const todayStr = new Date().toISOString().split('T')[0];
+        const selectedDateStr = state.dashboard.selectedDate;
 
-        const todaysLogs = allData.flatMap(teacher => 
-            (teacher.saved_logs || []).filter(log => log.date === todayStr).map(log => ({...log, teacherName: teacher.user_name}))
+        const dateLogs = allData.flatMap(teacher => 
+            (teacher.saved_logs || []).filter(log => log.date === selectedDateStr).map(log => ({...log, teacherName: teacher.user_name}))
         );
 
-        if (todaysLogs.length === 0) {
-            container.innerHTML = `<p class="text-center text-slate-500 py-8">Belum ada data absensi yang dicatat hari ini.</p>`;
+        if (dateLogs.length === 0) {
+            reportContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada data absensi yang dicatat pada tanggal ini.</p>`;
+            summaryContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada data untuk ditampilkan.</p>`;
             return;
         }
-
+        
+        // --- 1. PROSES UNTUK LAPORAN SISWA TIDAK HADIR ---
         const absentByClass = {};
-        todaysLogs.forEach(log => {
+        dateLogs.forEach(log => {
             if (!absentByClass[log.class]) {
                 absentByClass[log.class] = { students: [], teacher: log.teacherName };
             }
@@ -206,14 +223,59 @@ async function renderDashboardScreen() {
         }).join('');
 
         if (reportHtml.trim() === '') {
-             container.innerHTML = `<div class="text-center py-8"><div class="inline-block p-4 bg-green-100 text-green-800 rounded-lg"><p class="font-semibold">Semua siswa di semua kelas yang tercatat hadir hari ini.</p></div></div>`;
+             reportContainer.innerHTML = `<div class="text-center py-8"><div class="inline-block p-4 bg-green-100 text-green-800 rounded-lg"><p class="font-semibold">Semua siswa di semua kelas yang tercatat hadir hari ini.</p></div></div>`;
         } else {
-            container.innerHTML = reportHtml;
+            reportContainer.innerHTML = reportHtml;
         }
+        
+        // --- 2. PROSES UNTUK RINGKASAN PER KELAS ---
+        const summaryByClass = {};
+        dateLogs.forEach(log => {
+            if (!summaryByClass[log.class]) {
+                summaryByClass[log.class] = { H: 0, S: 0, I: 0, A: 0, total: 0, teacher: log.teacherName };
+            }
+            summaryByClass[log.class].total = Object.keys(log.attendance).length;
+            Object.values(log.attendance).forEach(status => {
+                if (summaryByClass[log.class][status] !== undefined) {
+                    summaryByClass[log.class][status]++;
+                }
+            });
+        });
+
+        const summaryTableHtml = `
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b bg-slate-50">
+                        <th class="p-3 font-semibold text-slate-600">Kelas</th>
+                        <th class="p-3 font-semibold text-slate-600 text-center">Hadir</th>
+                        <th class="p-3 font-semibold text-slate-600 text-center">Sakit</th>
+                        <th class="p-3 font-semibold text-slate-600 text-center">Izin</th>
+                        <th class="p-3 font-semibold text-slate-600 text-center">Alpa</th>
+                        <th class="p-3 font-semibold text-slate-600 text-center">Total Siswa</th>
+                        <th class="p-3 font-semibold text-slate-600">Guru</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${Object.entries(summaryByClass).sort(([classA], [classB]) => classA.localeCompare(classB)).map(([className, data]) => `
+                        <tr class="border-b hover:bg-slate-50 transition">
+                            <td class="p-3 font-bold text-blue-600">${className}</td>
+                            <td class="p-3 text-slate-700 text-center">${data.H}</td>
+                            <td class="p-3 text-slate-700 text-center">${data.S}</td>
+                            <td class="p-3 text-slate-700 text-center">${data.I}</td>
+                            <td class="p-3 text-slate-700 text-center">${data.A}</td>
+                            <td class="p-3 font-semibold text-slate-800 text-center">${data.total}</td>
+                            <td class="p-3 text-xs text-slate-500">${data.teacher}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        summaryContainer.innerHTML = summaryTableHtml;
 
     } catch (error) {
         console.error('Error fetching dashboard data:', error);
-        container.innerHTML = `<p class="text-center text-red-500 py-8">${error.message}</p>`;
+        reportContainer.innerHTML = `<p class="text-center text-red-500 py-8">${error.message}</p>`;
+        summaryContainer.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat ringkasan.</p>`;
     }
 }
 
