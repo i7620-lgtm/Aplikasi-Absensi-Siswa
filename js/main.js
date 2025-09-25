@@ -1,4 +1,5 @@
 
+
 import { initializeGsi, handleSignIn, handleSignOut } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus } from './ui.js';
@@ -28,6 +29,7 @@ export let state = {
     dashboard: {
         allTeacherData: [],
         isLoading: true,
+        selectedDate: new Date().toISOString().split('T')[0],
     },
     adminAllLogsView: null,
 };
