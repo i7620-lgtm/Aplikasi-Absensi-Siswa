@@ -73,7 +73,17 @@ async function handleTokenResponse(tokenResponse) {
         const profile = await userInfoResponse.json();
 
         // Register user with our backend and get their role and data
-        const { user, userData } = await apiService.loginOrRegisterUser(profile);
+        const loginResponse = await apiService.loginOrRegisterUser(profile);
+
+        if (loginResponse.maintenance) {
+            // App is in maintenance mode for this user, navigate to maintenance screen.
+            await setState({ maintenanceMode: { ...state.maintenanceMode, isActive: true } });
+            hideLoader();
+            navigateTo('maintenance');
+            return;
+        }
+        
+        const { user, userData } = loginResponse;
         
         // Use setState which now handles persistence to IndexedDB
         await setState({
