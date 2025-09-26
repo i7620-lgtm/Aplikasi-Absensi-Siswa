@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 import { initializeGsi, handleSignIn, handleSignOut } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus } from './ui.js';
@@ -6,10 +7,13 @@ import { idb } from './db.js';
 
 // --- CONFIGURATION ---
 export const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5B", "6A", "6B"];
+const API_KEY = process.env.API_KEY;
+const ai = new GoogleGenAI({apiKey: API_KEY});
+
 
 // --- APPLICATION STATE ---
 export let state = {
-    userProfile: null, // will contain { name, email, picture, role }
+    userProfile: null, // will contain { name, email, picture, role, school_id }
     currentScreen: 'setup',
     selectedClass: '',
     selectedDate: new Date().toISOString().split('T')[0],
@@ -22,6 +26,7 @@ export let state = {
     recapSortOrder: 'total',
     adminPanel: {
         users: [],
+        schools: [], // To store list of all schools
         isLoading: true,
         pollingIntervalId: null, // For real-time updates
     },
@@ -30,6 +35,12 @@ export let state = {
         isLoading: true,
         selectedDate: new Date().toISOString().split('T')[0],
         pollingIntervalId: null, // For real-time updates
+        activeView: 'report', // 'report', 'percentage', 'ai'
+        aiRecommendation: {
+            isLoading: false,
+            result: null,
+            error: null,
+        },
     },
     setup: {
         pollingIntervalId: null, // For real-time updates of teacher profile
@@ -86,7 +97,7 @@ export function navigateTo(screen) {
     if (state.setup.pollingIntervalId) {
         clearInterval(state.setup.pollingIntervalId);
         setState({ setup: { ...state.setup, pollingIntervalId: null } });
-        console.log('Setup Screen (Teacher) polling stopped.');
+        console.log('Setup Screen (Teacher/Admin) polling stopped.');
     }
     // --- END: Real-time update cleanup ---
     
@@ -278,6 +289,87 @@ export async function handleViewHistory(isClassSpecific = false) {
 
     navigateTo('data');
 }
+
+export async function handleGenerateAiRecommendation() {
+    await setState({ dashboard: { ...state.dashboard, aiRecommendation: { isLoading: true, result: null, error: null } } });
+    render(); // Re-render to show loader
+    
+    try {
+        const { allData } = await apiService.getGlobalData();
+
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+        const recentLogs = allData.flatMap(teacher =>
+            (teacher.saved_logs || []).filter(log => log.date >= thirtyDaysAgoStr)
+        );
+
+        if (recentLogs.length === 0) {
+            throw new Error("Tidak ada data absensi dalam 30 hari terakhir untuk dianalisis.");
+        }
+
+        const studentData = {};
+        recentLogs.forEach(log => {
+            Object.entries(log.attendance).forEach(([studentName, status]) => {
+                if (status !== 'H') {
+                    if (!studentData[studentName]) {
+                        studentData[studentName] = { name: studentName, class: log.class, absences: [] };
+                    }
+                    studentData[studentName].absences.push({ date: log.date, status });
+                }
+            });
+        });
+
+        const prompt = `
+            Anda adalah seorang asisten kepala sekolah virtual yang cerdas dan proaktif. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir dan memberikan rekomendasi yang tajam, ringkas, dan dapat ditindaklanjuti.
+
+            Berikut adalah data absensi mentah dalam format JSON. Setiap siswa memiliki daftar absensi dengan tanggal dan status (S=Sakit, I=Izin, A=Alpa).
+            Data: ${JSON.stringify(Object.values(studentData))}
+
+            Berdasarkan data di atas, lakukan hal berikut:
+            1.  **Identifikasi Peringatan Dini:** Cari 5 siswa dengan jumlah absensi tertinggi. Tampilkan dalam format daftar bernomor. Untuk setiap siswa, sebutkan NAMA LENGKAP, KELAS, dan rincian jumlah absensi (Contoh: Total 8 kali: 5 Alpa, 2 Sakit, 1 Izin).
+            2.  **Temukan Pola Tersembunyi:** Apakah ada tren yang menarik? Misalnya, siswa yang sering absen di hari tertentu, atau peningkatan absensi 'Sakit' di kelas tertentu yang mungkin mengindikasikan masalah kesehatan. Sebutkan 1-2 pola paling signifikan yang Anda temukan.
+            3.  **Berikan Rekomendasi Konkret:** Berikan 2-3 rekomendasi yang jelas dan dapat langsung ditindaklanjuti oleh kepala sekolah atau guru BK. Rekomendasi harus berhubungan langsung dengan temuan Anda di atas.
+
+            Gunakan format Markdown untuk jawaban Anda dengan heading, bold, dan list agar mudah dibaca.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt
+        });
+        
+        const textResult = response.text;
+
+        await setState({ dashboard: { ...state.dashboard, aiRecommendation: { isLoading: false, result: textResult, error: null } } });
+
+    } catch(error) {
+        console.error("Gemini API Error:", error);
+        const errorMessage = error.message || 'Gagal menghasilkan rekomendasi. Coba lagi nanti.';
+        await setState({ dashboard: { ...state.dashboard, aiRecommendation: { isLoading: false, result: null, error: errorMessage } } });
+    } finally {
+        render(); // Re-render to show result or error
+    }
+}
+
+export async function handleCreateSchool() {
+    const schoolName = prompt("Masukkan nama sekolah baru:");
+    if (schoolName && schoolName.trim()) {
+        showLoader('Menambahkan sekolah...');
+        try {
+            await apiService.createSchool(schoolName.trim());
+            showNotification(`Sekolah "${schoolName.trim()}" berhasil ditambahkan.`);
+            // Refresh the admin panel to show the new school in options
+            navigateTo('adminPanel');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            hideLoader();
+        }
+    }
+}
+
 
 export function handleDownloadTemplate() {
     const csvContent = "data:text/csv;charset=utf-8," + "Nama Siswa\nContoh Siswa 1\nContoh Siswa 2";
