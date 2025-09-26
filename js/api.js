@@ -44,12 +44,16 @@ export const apiService = {
         return await _fetch('getAllUsers');
     },
 
-    async updateUserRole(targetEmail, newRole) {
-        return await _fetch('updateUserRole', { targetEmail, newRole });
+    async getAllSchools() {
+        return await _fetch('getAllSchools');
     },
 
-    async updateAssignedClasses(emailToUpdate, newClasses) {
-        return await _fetch('updateAssignedClasses', { emailToUpdate, newClasses });
+    async createSchool(schoolName) {
+        return await _fetch('createSchool', { schoolName });
+    },
+
+    async updateUserConfiguration(targetEmail, newRole, newSchoolId, newClasses) {
+        return await _fetch('updateUserConfiguration', { targetEmail, newRole, newSchoolId, newClasses });
     },
 
     async getMaintenanceStatus() {
