@@ -33,7 +33,11 @@ export const apiService = {
     },
 
     async saveData(data) {
-        return await _fetch('saveData', data);
+        const payload = {
+            ...data,
+            actingAsSchoolId: state.adminActingAsSchool?.id || null,
+        };
+        return await _fetch('saveData', payload);
     },
 
     async getGlobalData(schoolId = null) {
