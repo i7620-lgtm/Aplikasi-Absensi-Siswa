@@ -96,7 +96,7 @@ async function handleTokenResponse(tokenResponse) {
         showNotification(`Selamat datang, ${state.userProfile.name}!`);
 
         // Navigate based on role
-        if (user.role === 'SUPER_ADMIN') {
+        if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN_SEKOLAH') {
             navigateTo('adminHome');
         } else if (user.role === 'KEPALA_SEKOLAH') {
             navigateTo('dashboard');
