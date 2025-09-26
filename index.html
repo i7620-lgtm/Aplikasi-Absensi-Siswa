@@ -11,6 +11,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         @import url('https://rsms.me/inter/inter.css');
@@ -92,11 +94,16 @@
         #offline-indicator.show {
             bottom: 20px;
         }
+        /* AI Response Formatting */
+        .gemini-response {
+             prose-p:text-slate-600; prose-ul:list-disc; prose-ul:pl-5; prose-li:mb-2; prose-strong:font-semibold; prose-strong:text-slate-700
+        }
     </style>
 <script type="importmap">
 {
   "imports": {
-    "@vercel/postgres": "https://aistudiocdn.com/@vercel/postgres@^0.10.0"
+    "@vercel/postgres": "https://aistudiocdn.com/@vercel/postgres@^0.10.0",
+    "@google/genai": "https://esm.run/@google/genai"
   }
 }
 </script>
