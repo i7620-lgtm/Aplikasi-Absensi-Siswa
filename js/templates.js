@@ -20,6 +20,9 @@ export const templates = {
         const assignedClasses = state.userProfile?.assigned_classes || [];
         const needsAssignment = isTeacher && assignedClasses.length === 0;
         const availableClasses = isAdmin ? CLASSES : assignedClasses;
+        const title = state.userProfile?.role === 'SUPER_ADMIN' && state.adminActingAsSchool 
+            ? `Absensi (Konteks: ${state.adminActingAsSchool.name})`
+            : "Absensi Online Siswa";
         
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
@@ -28,7 +31,7 @@ export const templates = {
                     state.userProfile
                     ? `
                         <div class="flex items-center justify-between mb-6">
-                            <h1 class="text-xl font-bold text-slate-800">Absensi Online Siswa</h1>
+                            <h1 class="text-xl font-bold text-slate-800">${title}</h1>
                             <div>
                                 ${isAdmin ? `<button id="back-to-admin-home-btn" class="text-slate-500 hover:text-blue-500 transition duration-300 p-2 rounded-full -mr-2" title="Kembali ke Dasbor Admin"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg></button>` : ''}
                                 <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
@@ -161,13 +164,17 @@ export const templates = {
                 ? 'bg-blue-600 text-white'
                 : 'bg-white text-slate-600 hover:bg-slate-100';
         };
+        
+        const title = state.userProfile?.role === 'SUPER_ADMIN' && state.adminActingAsSchool 
+            ? `Dasbor (Konteks: ${state.adminActingAsSchool.name})`
+            : "Dasbor Kepala Sekolah";
 
         return `
         <div class="screen active p-4 md:p-8 max-w-7xl mx-auto">
              <div class="bg-white p-8 rounded-2xl shadow-lg">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 pb-4 border-b border-slate-200 gap-4">
                     <div>
-                        <h1 class="text-2xl font-bold text-slate-800">Dasbor Kepala Sekolah</h1>
+                        <h1 class="text-2xl font-bold text-slate-800">${title}</h1>
                         <p class="text-slate-500">${displayDate}</p>
                     </div>
                     <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
@@ -357,6 +364,7 @@ export const templates = {
         const assignedClasses = user.assigned_classes || [];
         const currentUserRole = state.userProfile.role;
         const isSuperAdmin = currentUserRole === 'SUPER_ADMIN';
+        const isTargetSuperAdmin = user.role === 'SUPER_ADMIN';
 
         const availableRoles = [
             { value: 'GURU', text: 'Guru' },
@@ -383,10 +391,11 @@ export const templates = {
                     ${isSuperAdmin ? `
                     <div>
                         <label for="school-select-modal" class="block text-sm font-medium text-slate-700 mb-1">Tugaskan ke Sekolah</label>
-                        <select id="school-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <select id="school-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${isTargetSuperAdmin ? 'bg-slate-100 cursor-not-allowed' : ''}" ${isTargetSuperAdmin ? 'disabled' : ''}>
                             <option value="">-- Tidak Ditugaskan --</option>
                             ${schools.map(school => `<option value="${school.id}" ${user.school_id === school.id ? 'selected' : ''}>${school.name}</option>`).join('')}
                         </select>
+                        ${isTargetSuperAdmin ? '<p class="text-xs text-slate-500 mt-1">Super Admin adalah peran global dan tidak dapat ditugaskan ke sekolah tertentu.</p>' : ''}
                     </div>` : ''}
                 </div>
 
@@ -408,5 +417,22 @@ export const templates = {
                 </div>
             </div>
         </div>`;
-    }
+    },
+    schoolSelectorModal: (schools, title) => `
+        <div id="school-selector-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
+             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
+                <h2 class="text-xl font-bold text-slate-800 mb-4">${title}</h2>
+                <p class="text-slate-600 mb-6">Pilih salah satu sekolah di bawah ini untuk melanjutkan.</p>
+                <div id="school-list-container" class="space-y-2 max-h-60 overflow-y-auto mb-6 border-t border-b py-4">
+                    ${schools.length > 0 
+                        ? schools.map(school => `<button class="school-select-btn w-full text-left p-3 rounded-lg hover:bg-slate-100 transition" data-school-id="${school.id}" data-school-name="${school.name}">${school.name}</button>`).join('')
+                        : '<p class="text-slate-500 text-center">Belum ada sekolah yang ditambahkan.</p>'
+                    }
+                </div>
+                <div class="flex justify-end">
+                    <button id="school-selector-cancel-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Batal</button>
+                </div>
+            </div>
+        </div>
+    `
 };
