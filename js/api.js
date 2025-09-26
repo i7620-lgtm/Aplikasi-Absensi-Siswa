@@ -36,8 +36,8 @@ export const apiService = {
         return await _fetch('saveData', data);
     },
 
-    async getGlobalData() {
-        return await _fetch('getGlobalData');
+    async getGlobalData(schoolId = null) {
+        return await _fetch('getGlobalData', { schoolId });
     },
 
     async getAllUsers() {
@@ -65,7 +65,7 @@ export const apiService = {
         return await _fetch('setMaintenanceStatus', { enabled });
     },
 
-    async generateAiRecommendation() {
-        return await _fetch('generateAiRecommendation');
+    async generateAiRecommendation(schoolId = null) {
+        return await _fetch('generateAiRecommendation', { schoolId });
     }
 };
