@@ -135,7 +135,8 @@ async function syncData() {
 
 
 async function findAndLoadClassDataForAdmin(className) {
-    if (state.userProfile.role !== 'SUPER_ADMIN') return false;
+    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
+    if (!isAdmin) return false;
 
     showLoader('Mencari data kelas...');
     try {
@@ -174,9 +175,10 @@ export async function handleStartAttendance() {
     state.selectedDate = document.getElementById('date-input').value;
     
     let students = (state.studentsByClass[state.selectedClass] || {}).students || [];
+    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
 
     // If no local students and user is Admin, try to fetch from other teachers
-    if (students.length === 0 && state.userProfile.role === 'SUPER_ADMIN') {
+    if (students.length === 0 && isAdmin) {
         const found = await findAndLoadClassDataForAdmin(state.selectedClass);
         if (found) {
             students = state.students; // update students with the found data
@@ -205,7 +207,8 @@ export async function handleStartAttendance() {
 export async function handleManageStudents() {
     state.selectedClass = document.getElementById('class-select').value;
     let students = (state.studentsByClass[state.selectedClass] || {}).students || [];
-    if (students.length === 0 && state.userProfile.role === 'SUPER_ADMIN') {
+    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
+    if (students.length === 0 && isAdmin) {
         const found = await findAndLoadClassDataForAdmin(state.selectedClass);
         if (found) students = state.students;
     }
