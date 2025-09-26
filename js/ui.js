@@ -459,6 +459,9 @@ async function renderAdminPanelScreen() {
     document.getElementById('add-school-btn').addEventListener('click', handleCreateSchool);
     const container = document.getElementById('admin-panel-container');
 
+    // Reset loading state every time we render this screen to ensure it always fetches fresh data.
+    await setState({ adminPanel: { ...state.adminPanel, isLoading: true } });
+
     const updateAdminPanelContent = async () => {
         console.log("Admin panel is refreshing...");
         try {
