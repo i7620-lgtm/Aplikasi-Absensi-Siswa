@@ -79,13 +79,16 @@ export function render() {
 }
 
 export function navigateTo(screen) {
-    const screensToClearContext = ['setup', 'dashboard', 'adminHome'];
-    if (screensToClearContext.includes(state.currentScreen) && screen !== 'setup' && screen !== 'dashboard') {
+    // New, more robust logic for clearing SUPER_ADMIN's school context.
+    // The context should persist across all screens that are part of a school-specific workflow.
+    const schoolContextScreens = ['setup', 'dashboard', 'add-students', 'attendance', 'data', 'recap'];
+    if (schoolContextScreens.includes(state.currentScreen) && !schoolContextScreens.includes(screen)) {
         if (state.adminActingAsSchool) {
-            console.log("Clearing Super Admin school context.");
+            console.log("Leaving school context flow. Clearing Super Admin context.");
             setState({ adminActingAsSchool: null });
         }
     }
+
 
     // --- START: Real-time update cleanup ---
     if (state.dashboard.pollingIntervalId) {
