@@ -46,6 +46,7 @@ export let state = {
         statusChecked: false,
     },
     adminAllLogsView: null,
+    adminActingAsSchool: null, // Stores {id, name} for SUPER_ADMIN context
 };
 
 // Function to update state and persist it
@@ -78,8 +79,15 @@ export function render() {
 }
 
 export function navigateTo(screen) {
+    const screensToClearContext = ['setup', 'dashboard', 'adminHome'];
+    if (screensToClearContext.includes(state.currentScreen) && screen !== 'setup' && screen !== 'dashboard') {
+        if (state.adminActingAsSchool) {
+            console.log("Clearing Super Admin school context.");
+            setState({ adminActingAsSchool: null });
+        }
+    }
+
     // --- START: Real-time update cleanup ---
-    // A centralized place to stop all polling intervals when the user navigates away.
     if (state.dashboard.pollingIntervalId) {
         clearInterval(state.dashboard.pollingIntervalId);
         setState({ dashboard: { ...state.dashboard, pollingIntervalId: null } });
@@ -102,8 +110,6 @@ export function navigateTo(screen) {
 }
 
 async function syncData() {
-    // 1. Always register a background sync. It's the most reliable method.
-    // The browser will deduplicate requests, so it's safe to call multiple times.
     if ('serviceWorker' in navigator && 'SyncManager' in window) {
         try {
             const registration = await navigator.serviceWorker.ready;
@@ -114,7 +120,6 @@ async function syncData() {
         }
     }
 
-    // 2. If online and have a user, try an immediate sync for instant feedback.
     if (navigator.onLine && state.userProfile) {
         console.log('Online, attempting immediate sync...');
         showNotification('Menyinkronkan data ke cloud...', 'info');
@@ -124,11 +129,9 @@ async function syncData() {
             showNotification('Data berhasil disinkronkan!', 'success');
         } catch (error) {
             console.error('Immediate sync failed, relying on background sync.', error);
-            // Notify user that it failed but will be handled in the background.
             showNotification('Gagal sinkronisasi, akan dicoba lagi di latar belakang.', 'error');
         }
     } else if (!navigator.onLine) {
-        // 3. If offline, just notify the user that data is saved locally.
         showNotification('Anda offline. Data disimpan lokal dan akan disinkronkan nanti.');
     }
 }
@@ -138,34 +141,39 @@ async function findAndLoadClassDataForAdmin(className) {
     const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
     if (!isAdmin) return false;
 
+    // SUPER_ADMIN must have a school context to perform this action.
+    const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+    if (!schoolId) {
+        showNotification('Konteks sekolah tidak dipilih.', 'error');
+        return false;
+    }
+
     showLoader('Mencari data kelas...');
     try {
-        const { allData } = await apiService.getGlobalData();
+        // Fetch data specifically for the school context.
+        const { allData } = await apiService.getGlobalData(schoolId);
         for (const teacherData of allData) {
             if (teacherData.students_by_class && teacherData.students_by_class[className]) {
                 const students = teacherData.students_by_class[className].students;
                 if (students && students.length > 0) {
-                    // Temporarily load this data into the admin's state for the current session.
-                    // This is not persisted to the admin's own data record.
                     state.studentsByClass[className] = {
                         ...(state.studentsByClass[className] || {}),
                         students: students
                     };
                     state.students = students;
                     hideLoader();
-                    return true; // Data found and loaded
+                    return true;
                 }
             }
         }
     } catch (error) {
         showNotification(error.message, 'error');
         console.error("Gagal mengambil data global untuk admin", error);
+    } finally {
         hideLoader();
-        return false; // Error occurred
     }
     
-    hideLoader();
-    return false; // Not found anywhere
+    return false;
 }
 
 
@@ -177,11 +185,10 @@ export async function handleStartAttendance() {
     let students = (state.studentsByClass[state.selectedClass] || {}).students || [];
     const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
 
-    // If no local students and user is Admin, try to fetch from other teachers
     if (students.length === 0 && isAdmin) {
         const found = await findAndLoadClassDataForAdmin(state.selectedClass);
         if (found) {
-            students = state.students; // update students with the found data
+            students = state.students;
         }
     }
     state.students = students;
@@ -265,13 +272,10 @@ export async function handleSaveAttendance() {
 export async function handleViewHistory(isClassSpecific = false) {
     state.historyClassFilter = isClassSpecific ? document.getElementById('class-select').value : null;
 
-    // Special logic for SUPER_ADMIN viewing all teacher logs
     if (state.userProfile.role === 'SUPER_ADMIN' && !isClassSpecific) {
         showLoader('Memuat semua riwayat guru...');
         try {
             const { allData } = await apiService.getGlobalData();
-            // Flatten the data: each teacher has a saved_logs array.
-            // We want one big array of log objects, with teacher name added.
             const flattenedLogs = allData.flatMap(teacher => 
                 (teacher.saved_logs || []).map(log => ({ ...log, teacherName: teacher.user_name }))
             );
@@ -279,10 +283,9 @@ export async function handleViewHistory(isClassSpecific = false) {
         } catch (error) {
             showNotification(error.message, 'error');
             hideLoader();
-            return; // Stop navigation if fetch fails
+            return;
         }
     } else {
-        // Ensure this is cleared when not in admin global view mode
         state.adminAllLogsView = null;
     }
 
@@ -291,17 +294,18 @@ export async function handleViewHistory(isClassSpecific = false) {
 
 export async function handleGenerateAiRecommendation() {
     await setState({ dashboard: { ...state.dashboard, aiRecommendation: { isLoading: true, result: null, error: null } } });
-    render(); // Re-render to show loader
+    render();
     
     try {
-        const { recommendation } = await apiService.generateAiRecommendation();
+        const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+        const { recommendation } = await apiService.generateAiRecommendation(schoolId);
         await setState({ dashboard: { ...state.dashboard, aiRecommendation: { isLoading: false, result: recommendation, error: null } } });
     } catch(error) {
         console.error("AI Recommendation Error:", error);
         const errorMessage = error.message || 'Gagal menghasilkan rekomendasi. Coba lagi nanti.';
         await setState({ dashboard: { ...state.dashboard, aiRecommendation: { isLoading: false, result: null, error: errorMessage } } });
     } finally {
-        render(); // Re-render to show result or error
+        render();
     }
 }
 
@@ -312,7 +316,6 @@ export async function handleCreateSchool() {
         try {
             await apiService.createSchool(schoolName.trim());
             showNotification(`Sekolah "${schoolName.trim()}" berhasil ditambahkan.`);
-            // Refresh the admin panel to show the new school in options
             navigateTo('adminPanel');
         } catch (error) {
             showNotification(error.message, 'error');
@@ -342,12 +345,10 @@ export function handleExcelImport(event) {
     reader.onload = (e) => {
         try {
             let workbook;
-            // Cerdas menangani file: jika CSV, baca sebagai teks. Lainnya sebagai biner.
             if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
                  workbook = XLSX.read(e.target.result, { type: 'string' });
             } else {
-                 // Untuk format biner seperti .xlsx, .xls
-                 const data = new Uint8Array(e.target.result); // Memperbaiki kesalahan ketik dari UintArray
+                 const data = new Uint8Array(e.target.result);
                  workbook = XLSX.read(data, { type: 'array' });
             }
            
@@ -358,7 +359,7 @@ export function handleExcelImport(event) {
 
             if (studentNames.length > 0) {
                 state.newStudents = studentNames;
-                renderScreen('add-students'); // Render ulang hanya bagian input
+                renderScreen('add-students');
                 showNotification(`${studentNames.length} siswa berhasil diimpor & akan menggantikan daftar saat ini.`);
             } else {
                 showNotification('Tidak ada nama siswa yang ditemukan di file.', 'error');
@@ -369,13 +370,12 @@ export function handleExcelImport(event) {
         }
     };
     
-    // Putuskan cara membaca file berdasarkan jenisnya
     if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
         reader.readAsText(file);
     } else {
         reader.readAsArrayBuffer(file);
     }
-    event.target.value = ''; // Reset input
+    event.target.value = '';
 }
 
 export async function handleDownloadData() {
@@ -481,31 +481,24 @@ async function loadInitialData() {
 }
 
 async function initApp() {
-    // 1. Periksa status perbaikan terlebih dahulu
     try {
         const { isMaintenance } = await apiService.getMaintenanceStatus();
         state.maintenanceMode.isActive = isMaintenance;
     } catch (e) {
         console.error("Tidak dapat memeriksa status perbaikan:", e);
-        // Jika API gagal, anggap tidak dalam mode perbaikan agar aplikasi tetap bisa dicoba.
     } finally {
         state.maintenanceMode.statusChecked = true;
     }
 
-    // 2. Muat data pengguna yang ada dari offline
     await loadInitialData();
     
-    // 3. Tentukan layar berikutnya
     if (state.maintenanceMode.isActive && state.userProfile?.role !== 'SUPER_ADMIN') {
-        // Jika mode perbaikan aktif dan pengguna bukan admin, paksa ke layar perbaikan.
         navigateTo('maintenance');
     } else {
-        // Jika tidak, lanjutkan alur normal
         initializeGsi();
         render();
     }
 
-    // Handle online/offline status changes
     window.addEventListener('online', () => {
         updateOnlineStatus(true);
         showNotification('Koneksi internet kembali pulih.', 'success');
@@ -513,7 +506,6 @@ async function initApp() {
     });
     window.addEventListener('offline', () => updateOnlineStatus(false));
     
-    // Set initial status
     updateOnlineStatus(navigator.onLine);
 }
 
