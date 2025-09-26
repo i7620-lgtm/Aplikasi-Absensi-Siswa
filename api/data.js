@@ -290,13 +290,14 @@ export default async function handler(request, response) {
                         }
                     }
                     
+                    const finalSchoolId = newSchoolId ? newSchoolId : null;
                     const assignedClasses = newRole === 'GURU' ? newClasses : '{}';
                     
                     await sql`
                         UPDATE users 
                         SET 
                             role = ${newRole}, 
-                            school_id = ${newSchoolId}, 
+                            school_id = ${finalSchoolId}, 
                             assigned_classes = ${assignedClasses}
                         WHERE email = ${targetEmail}`;
                     
