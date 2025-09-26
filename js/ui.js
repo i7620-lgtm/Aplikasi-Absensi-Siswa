@@ -1,4 +1,4 @@
-import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance } from './main.js';
+import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
 import { apiService } from './api.js';
@@ -166,8 +166,61 @@ function renderSetupScreen() {
         const newIntervalId = setInterval(updateTeacherProfile, 10000); // Check every 10 seconds
         setState({ setup: { ...state.setup, pollingIntervalId: newIntervalId } });
         console.log(`Setup (Teacher) polling started with ID: ${newIntervalId}.`);
+    } else if (isAdmin) {
+        // --- START: Real-time update for Admin viewing a class ---
+        const updateAdminClassData = async () => {
+            const selectElement = document.getElementById('class-select');
+            // Make sure the select element exists and has a value before proceeding.
+            if (!selectElement || !selectElement.value) return;
+
+            const selectedClass = selectElement.value;
+            console.log(`Admin polling for class: ${selectedClass}...`);
+
+            try {
+                const { allData } = await apiService.getGlobalData();
+                let latestStudents = null;
+
+                // Find the authoritative student list for the selected class from all teachers' data
+                for (const teacherData of allData) {
+                    if (teacherData.students_by_class && teacherData.students_by_class[selectedClass]) {
+                        latestStudents = teacherData.students_by_class[selectedClass].students;
+                        break; // Found the first one, assuming it's the right one
+                    }
+                }
+
+                const currentStudents = state.studentsByClass[selectedClass]?.students || [];
+                
+                // Only update if a list was found and it's different from the current one.
+                if (latestStudents && JSON.stringify(latestStudents) !== JSON.stringify(currentStudents)) {
+                    console.log(`Data for class ${selectedClass} has changed. Updating state.`);
+                    
+                    const updatedStudentsByClass = {
+                        ...state.studentsByClass,
+                        [selectedClass]: {
+                            ...(state.studentsByClass[selectedClass] || {}),
+                            students: latestStudents,
+                        }
+                    };
+
+                    await setState({ studentsByClass: updatedStudentsByClass });
+                    
+                    showNotification(`Data untuk kelas ${selectedClass} telah diperbarui secara otomatis.`, 'info');
+                }
+
+            } catch (error) {
+                console.error(`Failed to fetch class data update for admin:`, error);
+            }
+        };
+
+        if (state.setup.pollingIntervalId) {
+            clearInterval(state.setup.pollingIntervalId);
+        }
+        const newIntervalId = setInterval(updateAdminClassData, 10000);
+        setState({ setup: { ...state.setup, pollingIntervalId: newIntervalId } });
+        console.log(`Setup (Admin) polling started with ID: ${newIntervalId}.`);
+        // --- END: Real-time update for Admin viewing a class ---
     }
-    // --- END: Real-time update for Teacher's profile ---
+    // --- END: Real-time update logic ---
 }
 
 function renderMaintenanceToggle(container, isMaintenance) {
@@ -234,8 +287,22 @@ async function renderDashboardScreen() {
         backBtn.addEventListener('click', () => navigateTo(target));
     }
     
+    // Tab listeners
+    document.getElementById('db-view-report').addEventListener('click', () => {
+        setState({ dashboard: { ...state.dashboard, activeView: 'report' } });
+        renderScreen('dashboard');
+    });
+    document.getElementById('db-view-percentage').addEventListener('click', () => {
+        setState({ dashboard: { ...state.dashboard, activeView: 'percentage' } });
+        renderScreen('dashboard');
+    });
+    document.getElementById('db-view-ai').addEventListener('click', () => {
+        setState({ dashboard: { ...state.dashboard, activeView: 'ai' } });
+        renderScreen('dashboard');
+    });
+
+
     document.getElementById('ks-date-picker').addEventListener('change', async (e) => {
-        // Stop the poll, update date, then re-render to start new poll.
         navigateTo('dashboard'); 
         await setState({ 
             dashboard: { 
@@ -247,7 +314,9 @@ async function renderDashboardScreen() {
         renderScreen('dashboard');
     });
 
-    const dashboardContent = document.getElementById('dashboard-content');
+    const reportContent = document.getElementById('dashboard-content-report');
+    const percentageContent = document.getElementById('dashboard-content-percentage');
+    const aiContent = document.getElementById('dashboard-content-ai');
 
     const updateDashboardContent = async () => {
         console.log('Dashboard is refreshing...');
@@ -255,97 +324,119 @@ async function renderDashboardScreen() {
             const { allData } = await apiService.getGlobalData();
             const selectedDate = state.dashboard.selectedDate;
             
-            const absentStudentsByClass = {};
+            // --- DATA PREPARATION ---
+            const logsForDate = [];
+            const studentListsByClass = {};
 
             allData.forEach(teacherData => {
-                let logs = teacherData.saved_logs;
-
-                if (logs && typeof logs === 'string') {
-                    try {
-                        logs = JSON.parse(logs);
-                    } catch (e) {
-                        console.error("Could not parse saved_logs for teacher:", teacherData.user_name, logs);
-                        logs = [];
+                // Collect student lists
+                if(teacherData.students_by_class) {
+                    for(const className in teacherData.students_by_class) {
+                        if (!studentListsByClass[className]) {
+                            studentListsByClass[className] = teacherData.students_by_class[className].students || [];
+                        }
                     }
                 }
-
-                if (Array.isArray(logs)) {
-                    logs.forEach(log => {
-                        if (log.date === selectedDate) {
-                            if (!absentStudentsByClass[log.class]) {
-                                absentStudentsByClass[log.class] = {
-                                    students: [],
-                                    teacherName: teacherData.user_name
-                                };
-                            }
-                            
-                            Object.entries(log.attendance).forEach(([studentName, status]) => {
-                                if (status !== 'H') {
-                                    const existingStudent = absentStudentsByClass[log.class].students.find(s => s.name === studentName);
-                                    if (!existingStudent) {
-                                        absentStudentsByClass[log.class].students.push({ name: studentName, status: status });
-                                    }
-                                }
-                            });
-                        }
-                    });
-                }
+                // Collect logs for the selected date
+                (teacherData.saved_logs || []).forEach(log => {
+                    if (log.date === selectedDate) {
+                        logsForDate.push({ ...log, teacherName: teacherData.user_name });
+                    }
+                });
             });
 
-            const classNames = Object.keys(absentStudentsByClass).sort();
-            const hasAbsentees = Object.values(absentStudentsByClass).some(classData => classData.students.length > 0);
+            // --- RENDER REPORT VIEW ---
+            if (state.dashboard.activeView === 'report') {
+                const absentStudentsByClass = {};
+                logsForDate.forEach(log => {
+                    if (!absentStudentsByClass[log.class]) {
+                         absentStudentsByClass[log.class] = { students: [], teacherName: log.teacherName };
+                    }
+                    Object.entries(log.attendance).forEach(([studentName, status]) => {
+                        if (status !== 'H') {
+                           absentStudentsByClass[log.class].students.push({ name: studentName, status: status });
+                        }
+                    });
+                });
 
-            if (!hasAbsentees) {
-                dashboardContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada siswa yang absen pada tanggal yang dipilih.</p>`;
-                return;
+                const classNames = Object.keys(absentStudentsByClass).sort();
+                if (classNames.length === 0 || classNames.every(c => absentStudentsByClass[c].students.length === 0)) {
+                    reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada siswa yang absen pada tanggal yang dipilih.</p>`;
+                } else {
+                    reportContent.innerHTML = classNames.map(className => {
+                        const classData = absentStudentsByClass[className];
+                        if (classData.students.length === 0) return '';
+                        classData.students.sort((a, b) => a.name.localeCompare(b.name));
+
+                        return `<div class="bg-slate-50 p-4 rounded-lg">
+                            <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${className}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${classData.teacherName}</p></div>
+                            <div class="overflow-x-auto"><table class="w-full text-sm">
+                                <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
+                                <tbody>${classData.students.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${s.name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
+                            </table></div></div>`;
+                    }).join('');
+                }
             }
+            // --- RENDER PERCENTAGE VIEW ---
+            else if (state.dashboard.activeView === 'percentage') {
+                if (logsForDate.length === 0) {
+                     percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8 col-span-full">Tidak ada data absensi untuk ditampilkan pada tanggal ini.</p>`;
+                } else {
+                    percentageContent.innerHTML = ''; // Clear loading message
+                    logsForDate.sort((a,b) => a.class.localeCompare(b.class)).forEach(log => {
+                        const totalStudents = studentListsByClass[log.class]?.length || Object.keys(log.attendance).length;
+                        if (totalStudents === 0) return;
 
-            dashboardContent.innerHTML = classNames.map(className => {
-                const classData = absentStudentsByClass[className];
-                if (classData.students.length === 0) return '';
-                
-                classData.students.sort((a, b) => a.name.localeCompare(b.name));
+                        const absentCount = Object.values(log.attendance).filter(s => s !== 'H').length;
+                        const presentCount = totalStudents - absentCount;
+                        
+                        const chartContainer = document.createElement('div');
+                        chartContainer.className = 'bg-slate-50 p-4 rounded-lg flex flex-col items-center';
+                        chartContainer.innerHTML = `<h3 class="font-bold text-blue-600 mb-2">Kelas ${log.class}</h3><canvas id="chart-${log.class}"></canvas>`;
+                        percentageContent.appendChild(chartContainer);
 
-                const studentRows = classData.students.map(student => `
-                    <tr class="border-t border-slate-200">
-                        <td class="py-2 pr-4 text-slate-700">${student.name}</td>
-                        <td class="py-2 px-2">
-                            <span class="px-2 py-1 rounded-full text-xs font-semibold ${
-                                student.status === 'S' ? 'bg-yellow-100 text-yellow-800' : 
-                                student.status === 'I' ? 'bg-blue-100 text-blue-800' : 
-                                'bg-red-100 text-red-800'
-                            }">${student.status}</span>
-                        </td>
-                    </tr>
-                `).join('');
-
-                return `
-                    <div class="bg-slate-50 p-4 rounded-lg">
-                        <div class="flex justify-between items-center mb-2">
-                            <h3 class="font-bold text-blue-600">Kelas ${className}</h3>
-                            <p class="text-xs text-slate-400 font-medium">Oleh: ${classData.teacherName}</p>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-sm">
-                                <thead>
-                                    <tr class="text-left text-slate-500">
-                                        <th class="py-1 pr-4 font-medium">Nama Siswa</th>
-                                        <th class="py-1 px-2 font-medium">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${studentRows}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+                        const ctx = document.getElementById(`chart-${log.class}`).getContext('2d');
+                        new Chart(ctx, {
+                            type: 'pie',
+                            data: {
+                                labels: ['Hadir', 'Tidak Hadir'],
+                                datasets: [{
+                                    data: [presentCount, absentCount],
+                                    backgroundColor: ['#22c55e', '#ef4444'],
+                                    borderColor: '#f8fafc',
+                                    borderWidth: 2,
+                                }]
+                            },
+                            options: { responsive: true, plugins: { legend: { position: 'top' } } }
+                        });
+                    });
+                }
+            }
+            // --- RENDER AI VIEW ---
+            else if (state.dashboard.activeView === 'ai') {
+                const { isLoading, result, error } = state.dashboard.aiRecommendation;
+                if (isLoading) {
+                    aiContent.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div><p class="loader-text">Menganalisis data absensi...</p></div>`;
+                } else if (error) {
+                    aiContent.innerHTML = `<div class="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200"><p class="font-bold">Terjadi Kesalahan</p><p>${error}</p><button id="retry-ai-btn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Coba Lagi</button></div>`;
+                    document.getElementById('retry-ai-btn').addEventListener('click', handleGenerateAiRecommendation);
+                } else if (result) {
+                    aiContent.innerHTML = `<div class="bg-slate-50 p-6 rounded-lg prose max-w-none gemini-response">${marked.parse(result)}</div>`;
+                } else {
+                    aiContent.innerHTML = `<div class="text-center p-8 bg-slate-50 rounded-lg">
+                        <h3 class="text-lg font-bold text-slate-800">Dapatkan Wawasan dengan AI</h3>
+                        <p class="text-slate-500 my-4">Klik tombol di bawah untuk meminta Gemini menganalisis data absensi 30 hari terakhir. AI akan menemukan pola, mengidentifikasi siswa yang perlu perhatian, dan memberikan rekomendasi yang dapat ditindaklanjuti.</p>
+                        <button id="generate-ai-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition">Buat Rekomendasi Sekarang</button>
+                    </div>`;
+                    document.getElementById('generate-ai-btn').addEventListener('click', handleGenerateAiRecommendation);
+                }
+            }
 
         } catch (error) {
             console.error("Failed to refresh dashboard data:", error);
-            if (!dashboardContent.innerHTML.includes('bg-slate-50')) {
-                 dashboardContent.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
+            const currentContent = document.querySelector(`#dashboard-content-${state.dashboard.activeView}`);
+            if (currentContent) {
+                currentContent.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
             }
         }
     };
@@ -356,7 +447,7 @@ async function renderDashboardScreen() {
         clearInterval(state.dashboard.pollingIntervalId);
     }
 
-    const newIntervalId = setInterval(updateDashboardContent, 5000);
+    const newIntervalId = setInterval(updateDashboardContent, 10000);
     setState({ dashboard: { ...state.dashboard, pollingIntervalId: newIntervalId } });
     console.log(`Dashboard polling started with ID: ${newIntervalId}.`);
 }
@@ -365,21 +456,38 @@ async function renderDashboardScreen() {
 async function renderAdminPanelScreen() {
     appContainer.innerHTML = templates.adminPanel();
     document.getElementById('admin-panel-back-btn').addEventListener('click', () => navigateTo('adminHome'));
+    document.getElementById('add-school-btn').addEventListener('click', handleCreateSchool);
     const container = document.getElementById('admin-panel-container');
 
     const updateAdminPanelContent = async () => {
         console.log("Admin panel is refreshing...");
         try {
-            const { allUsers } = await apiService.getAllUsers();
+            const [{ allUsers }, { allSchools }] = await Promise.all([
+                apiService.getAllUsers(),
+                apiService.getAllSchools()
+            ]);
+
+            const oldData = { users: state.adminPanel.users, schools: state.adminPanel.schools };
+            const newData = { users: allUsers, schools: allSchools };
             
-            // Only re-render if data has actually changed to prevent losing focus on dropdowns
-            const hasChanged = JSON.stringify(allUsers) !== JSON.stringify(state.adminPanel.users);
+            // --- Notifikasi Pengguna Baru ---
+            // Hanya jalankan jika panel sudah dimuat sebelumnya (untuk menghindari notifikasi saat pertama kali dibuka)
+            if (oldData.users.length > 0) {
+                const oldUserEmails = new Set(oldData.users.map(u => u.email));
+                newData.users.forEach(newUser => {
+                    if (!oldUserEmails.has(newUser.email)) {
+                        showNotification(`${newUser.name} baru saja mendaftar.`, 'info');
+                    }
+                });
+            }
+
+            const hasChanged = JSON.stringify(oldData) !== JSON.stringify(newData);
             if (!hasChanged && !state.adminPanel.isLoading) {
                 console.log("Admin panel data unchanged.");
                 return;
             }
 
-            setState({ adminPanel: { ...state.adminPanel, users: allUsers, isLoading: false }});
+            await setState({ adminPanel: { ...state.adminPanel, ...newData, isLoading: false } });
             
             container.innerHTML = `
                 <table class="w-full text-left">
@@ -387,75 +495,45 @@ async function renderAdminPanelScreen() {
                         <tr class="border-b bg-slate-50">
                             <th class="p-3 text-sm font-semibold text-slate-600">Pengguna</th>
                             <th class="p-3 text-sm font-semibold text-slate-600">Peran</th>
-                            <th class="p-3 text-sm font-semibold text-slate-600">Tindakan</th>
+                            <th class="p-3 text-sm font-semibold text-slate-600">Sekolah</th>
+                            <th class="p-3 text-sm font-semibold text-slate-600 text-center">Tindakan</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${allUsers.map(user => `
+                        ${allUsers.map(user => {
+                            const school = allSchools.find(s => s.id === user.school_id);
+                            const isNew = user.is_unmanaged;
+                            const newBadge = isNew ? `<span class="ml-2 px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full">BARU</span>` : '';
+
+                            return `
                             <tr class="border-b hover:bg-slate-50 transition">
                                 <td class="p-3">
                                     <div class="flex items-center gap-3">
                                         <img src="${user.picture}" alt="${user.name}" class="w-10 h-10 rounded-full"/>
                                         <div>
-                                            <p class="font-medium text-slate-800">${user.name}</p>
+                                            <p class="font-medium text-slate-800">${user.name}${newBadge}</p>
                                             <p class="text-xs text-slate-500">${user.email}</p>
                                         </div>
                                     </div>
                                 </td>
-                                <td class="p-3">
-                                    <select data-email="${user.email}" class="role-select w-full max-w-xs p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                                        <option value="GURU" ${user.role === 'GURU' ? 'selected' : ''}>Guru</option>
-                                        <option value="KEPALA_SEKOLAH" ${user.role === 'KEPALA_SEKOLAH' ? 'selected' : ''}>Kepala Sekolah</option>
-                                        <option value="SUPER_ADMIN" ${user.role === 'SUPER_ADMIN' ? 'selected' : ''}>Super Admin</option>
-                                    </select>
-                                </td>
-                                 <td class="p-3">
-                                    ${user.role === 'GURU' ? `
-                                    <button class="manage-classes-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" 
-                                            data-email="${user.email}" 
-                                            data-name="${user.name}" 
-                                            data-assigned='${JSON.stringify(user.assigned_classes || [])}'>
-                                        Kelola Kelas
+                                <td class="p-3 text-sm text-slate-600">${user.role}</td>
+                                <td class="p-3 text-sm text-slate-600">${school ? school.name : '<span class="italic text-slate-400">Belum Ditugaskan</span>'}</td>
+                                <td class="p-3 text-center">
+                                    <button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" 
+                                            data-user='${JSON.stringify(user)}'>
+                                        Kelola
                                     </button>
-                                    ` : ''}
                                 </td>
                             </tr>
-                        `).join('')}
+                        `}).join('')}
                     </tbody>
                 </table>
             `;
-            document.querySelectorAll('.role-select').forEach(select => {
-                select.addEventListener('change', async (e) => {
-                    const targetEmail = e.target.dataset.email;
-                    const newRole = e.target.value;
-                    const confirmed = await showConfirmation(`Anda yakin ingin mengubah peran untuk ${targetEmail} menjadi ${newRole}?`);
-                    if (confirmed) {
-                        showLoader('Mengubah peran...');
-                        try {
-                            await apiService.updateUserRole(targetEmail, newRole);
-                            showNotification('Peran berhasil diubah.');
-                            // Manually trigger an update instead of full navigation to avoid flicker
-                            await updateAdminPanelContent();
-                        } catch (error) {
-                            showNotification(error.message, 'error');
-                            e.target.value = state.adminPanel.users.find(u => u.email === targetEmail).role; // revert dropdown
-                        } finally {
-                            hideLoader();
-                        }
-                    } else {
-                         e.target.value = state.adminPanel.users.find(u => u.email === targetEmail).role; // revert dropdown
-                    }
-                });
-            });
 
-            document.querySelectorAll('.manage-classes-btn').forEach(button => {
+            document.querySelectorAll('.manage-user-btn').forEach(button => {
                 button.addEventListener('click', (e) => {
-                    const user = {
-                        email: e.currentTarget.dataset.email,
-                        name: e.currentTarget.dataset.name,
-                        assigned_classes: JSON.parse(e.currentTarget.dataset.assigned)
-                    };
-                    showManageClassesModal(user);
+                    const user = JSON.parse(e.currentTarget.dataset.user);
+                    showManageUserModal(user, allSchools);
                 });
             });
         } catch(error) {
@@ -473,12 +551,12 @@ async function renderAdminPanelScreen() {
     console.log(`Admin Panel polling started with ID: ${newIntervalId}.`);
 }
 
-function showManageClassesModal(user) {
-    const existingModal = document.getElementById('manage-classes-modal');
+function showManageUserModal(user, schools) {
+    const existingModal = document.getElementById('manage-user-modal');
     if (existingModal) existingModal.parentElement.remove();
     
     const modalContainer = document.createElement('div');
-    modalContainer.innerHTML = templates.manageClassesModal(user);
+    modalContainer.innerHTML = templates.manageUserModal(user, schools);
     document.body.appendChild(modalContainer);
 
     const closeModal = () => {
@@ -487,13 +565,27 @@ function showManageClassesModal(user) {
         }
     };
 
-    document.getElementById('manage-classes-cancel-btn').onclick = closeModal;
-    document.getElementById('manage-classes-save-btn').onclick = async () => {
-        const selectedClasses = Array.from(document.querySelectorAll('#class-checkbox-container input:checked')).map(cb => cb.value);
+    const roleSelect = document.getElementById('role-select-modal');
+    const classesContainer = document.getElementById('manage-classes-container');
+
+    roleSelect.addEventListener('change', () => {
+        if (roleSelect.value === 'GURU') {
+            classesContainer.classList.remove('hidden');
+        } else {
+            classesContainer.classList.add('hidden');
+        }
+    });
+
+    document.getElementById('manage-user-cancel-btn').onclick = closeModal;
+    document.getElementById('manage-user-save-btn').onclick = async () => {
+        const newRole = document.getElementById('role-select-modal').value;
+        const newSchoolId = document.getElementById('school-select-modal').value || null; // Send null if empty
+        const newClasses = Array.from(document.querySelectorAll('.class-checkbox:checked')).map(cb => cb.value);
+
         showLoader('Menyimpan perubahan...');
         try {
-            await apiService.updateAssignedClasses(user.email, selectedClasses);
-            showNotification('Kelas berhasil diperbarui.');
+            await apiService.updateUserConfiguration(user.email, newRole, newSchoolId, newClasses);
+            showNotification('Konfigurasi pengguna berhasil diperbarui.');
             closeModal();
             navigateTo('adminPanel'); // Refresh to show updated data
         } catch (error) {
