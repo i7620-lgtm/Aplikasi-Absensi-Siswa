@@ -8,13 +8,14 @@ function getRoleDisplayName(role) {
         case 'GURU': return 'Guru';
         case 'KEPALA_SEKOLAH': return 'Kepala Sekolah';
         case 'SUPER_ADMIN': return 'Super Admin';
+        case 'ADMIN_SEKOLAH': return 'Admin Sekolah';
         default: return role;
     }
 }
 
 export const templates = {
     setup: () => {
-        const isAdmin = state.userProfile?.role === 'SUPER_ADMIN';
+        const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
         const isTeacher = state.userProfile?.role === 'GURU';
         const assignedClasses = state.userProfile?.assigned_classes || [];
         const needsAssignment = isTeacher && assignedClasses.length === 0;
@@ -112,12 +113,13 @@ export const templates = {
         </div>`;
     },
     adminHome: () => {
-        const isAdmin = state.userProfile?.role === 'SUPER_ADMIN';
+        const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
+        const title = state.userProfile?.role === 'SUPER_ADMIN' ? 'Dasbor Super Admin' : 'Dasbor Admin Sekolah';
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
                 <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-xl font-bold text-slate-800">Dasbor Super Admin</h1>
+                    <h1 class="text-xl font-bold text-slate-800">${title}</h1>
                     <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                     </button>
@@ -131,25 +133,27 @@ export const templates = {
                     </div>
                 </div>
                 <div class="space-y-3 pt-4 border-t border-slate-200">
-                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center">Menu Super Admin</h2>
+                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center">Menu Admin</h2>
                     <button id="go-to-attendance-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lakukan Absensi</button>
                     <button id="view-dashboard-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Dasbor Kepala Sekolah</button>
-                    <button id="view-admin-panel-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Panel Admin</button>
+                    <button id="view-admin-panel-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Panel Manajemen Pengguna</button>
                 </div>
 
+                ${state.userProfile?.role === 'SUPER_ADMIN' ? `
                 <div class="pt-4 mt-3 border-t border-slate-200">
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center mb-3">Mode Perbaikan</h2>
                     <div id="maintenance-toggle-container" class="flex items-center justify-center p-3 bg-slate-50 rounded-lg">
                         <p class="text-sm text-slate-500">Memuat status...</p>
                     </div>
                 </div>
+                ` : ''}
             </div>
         </div>`;
     },
     dashboard: () => {
         const displayDate = new Date(state.dashboard.selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        const canGoBack = state.userProfile?.role === 'SUPER_ADMIN';
-        const backTarget = canGoBack ? 'adminHome' : 'setup';
+        const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
+        const backTarget = isAdmin ? 'adminHome' : 'setup';
         const { activeView } = state.dashboard;
 
         const getButtonClass = (viewName) => {
@@ -172,7 +176,7 @@ export const templates = {
                              <input type="date" id="ks-date-picker" value="${state.dashboard.selectedDate}" class="w-full sm:w-auto p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm"/>
                         </div>
                         <div class="flex items-center gap-2">
-                           ${canGoBack ? `<button id="dashboard-back-btn" data-target="${backTarget}" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>` : ''}
+                           ${isAdmin ? `<button id="dashboard-back-btn" data-target="${backTarget}" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>` : ''}
                            <button id="logoutBtn-ks" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full flex items-center gap-2 text-sm font-semibold">
                                <span>Logout</span>
                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
@@ -201,7 +205,9 @@ export const templates = {
              </div>
         </div>`;
     },
-    adminPanel: () => `
+    adminPanel: () => {
+        const isSuperAdmin = state.userProfile?.role === 'SUPER_ADMIN';
+        return `
         <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
              <div class="bg-white p-8 rounded-2xl shadow-lg">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 pb-4 border-b border-slate-200">
@@ -210,7 +216,7 @@ export const templates = {
                         <p class="text-slate-500">Kelola pengguna dan sekolah dari satu tempat.</p>
                     </div>
                     <div class="flex items-center gap-2 mt-4 sm:mt-0">
-                         <button id="add-school-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition text-sm">Tambah Sekolah</button>
+                         ${isSuperAdmin ? `<button id="add-school-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition text-sm">Tambah Sekolah</button>` : ''}
                          <button id="admin-panel-back-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
                     </div>
                 </div>
@@ -219,7 +225,7 @@ export const templates = {
                 </div>
              </div>
         </div>
-    `,
+    `},
     addStudents: (className) => {
         const isEditing = (state.students && state.students.length > 0);
         const message = isEditing
@@ -349,6 +355,18 @@ export const templates = {
         </div>`,
     manageUserModal: (user, schools) => {
         const assignedClasses = user.assigned_classes || [];
+        const currentUserRole = state.userProfile.role;
+        const isSuperAdmin = currentUserRole === 'SUPER_ADMIN';
+
+        const availableRoles = [
+            { value: 'GURU', text: 'Guru' },
+            { value: 'KEPALA_SEKOLAH', text: 'Kepala Sekolah' },
+        ];
+        if (isSuperAdmin) {
+            availableRoles.push({ value: 'ADMIN_SEKOLAH', text: 'Admin Sekolah' });
+            availableRoles.push({ value: 'SUPER_ADMIN', text: 'Super Admin' });
+        }
+
         return `
         <div id="manage-user-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
              <div class="bg-white p-8 rounded-2xl shadow-lg max-w-lg w-full animate-fade-in">
@@ -359,18 +377,17 @@ export const templates = {
                     <div>
                         <label for="role-select-modal" class="block text-sm font-medium text-slate-700 mb-1">Peran Pengguna</label>
                         <select id="role-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                            <option value="GURU" ${user.role === 'GURU' ? 'selected' : ''}>Guru</option>
-                            <option value="KEPALA_SEKOLAH" ${user.role === 'KEPALA_SEKOLAH' ? 'selected' : ''}>Kepala Sekolah</option>
-                            <option value="SUPER_ADMIN" ${user.role === 'SUPER_ADMIN' ? 'selected' : ''}>Super Admin</option>
+                           ${availableRoles.map(role => `<option value="${role.value}" ${user.role === role.value ? 'selected' : ''}>${role.text}</option>`).join('')}
                         </select>
                     </div>
+                    ${isSuperAdmin ? `
                     <div>
                         <label for="school-select-modal" class="block text-sm font-medium text-slate-700 mb-1">Tugaskan ke Sekolah</label>
                         <select id="school-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                             <option value="">-- Tidak Ditugaskan --</option>
                             ${schools.map(school => `<option value="${school.id}" ${user.school_id === school.id ? 'selected' : ''}>${school.name}</option>`).join('')}
                         </select>
-                    </div>
+                    </div>` : ''}
                 </div>
 
                 <div id="manage-classes-container" class="mt-6 pt-4 border-t border-slate-200 ${user.role !== 'GURU' ? 'hidden' : ''}">
