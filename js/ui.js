@@ -62,6 +62,51 @@ export function showConfirmation(message) {
     });
 }
 
+export function showSchoolSelectorModal(title) {
+    return new Promise(async (resolve) => {
+        showLoader('Memuat daftar sekolah...');
+        try {
+            const { allSchools } = await apiService.getAllSchools();
+            hideLoader();
+
+            const existingModal = document.getElementById('school-selector-modal');
+            if (existingModal) existingModal.remove();
+
+            const modalContainer = document.createElement('div');
+            modalContainer.innerHTML = templates.schoolSelectorModal(allSchools, title);
+            document.body.appendChild(modalContainer);
+
+            const cleanup = () => {
+                if(document.body.contains(modalContainer)){
+                    document.body.removeChild(modalContainer);
+                }
+            };
+
+            document.querySelectorAll('.school-select-btn').forEach(button => {
+                button.onclick = (e) => {
+                    const school = {
+                        id: e.currentTarget.dataset.schoolId,
+                        name: e.currentTarget.dataset.schoolName,
+                    };
+                    cleanup();
+                    resolve(school);
+                };
+            });
+
+            document.getElementById('school-selector-cancel-btn').onclick = () => {
+                cleanup();
+                resolve(null);
+            };
+
+        } catch (error) {
+            hideLoader();
+            showNotification(error.message, 'error');
+            resolve(null);
+        }
+    });
+}
+
+
 export function displayAuthError(message, error = null) {
     const errorContainer = document.getElementById('auth-error-container');
     if (!errorContainer) return;
@@ -98,7 +143,6 @@ function renderSetupScreen() {
                     if (permission === 'granted') {
                         showNotification('Notifikasi diaktifkan!', 'success');
                     } else {
-                        // If denied, don't ask again. Treat as dismissed.
                         localStorage.setItem('notificationBannerDismissed', 'true'); 
                         showNotification('Izin notifikasi tidak diberikan. Anda bisa mengubahnya di pengaturan browser.', 'info');
                     }
@@ -143,7 +187,6 @@ function renderSetupScreen() {
                 
                 if (hasChanged) {
                     console.log("Teacher profile has changed, re-rendering.");
-                    // Stop the current interval before re-rendering
                     if (state.setup.pollingIntervalId) {
                         clearInterval(state.setup.pollingIntervalId);
                     }
@@ -152,45 +195,43 @@ function renderSetupScreen() {
                         setup: { ...state.setup, pollingIntervalId: null }
                     });
                     showNotification('Hak akses kelas Anda telah diperbarui oleh admin.', 'info');
-                    renderScreen('setup'); // Re-render the screen which will start a new poll
+                    renderScreen('setup');
                 }
             } catch (error) {
                 console.error("Failed to fetch teacher profile update:", error);
-                // Don't show error to user to avoid disruption
             }
         };
 
         if (state.setup.pollingIntervalId) {
             clearInterval(state.setup.pollingIntervalId);
         }
-        const newIntervalId = setInterval(updateTeacherProfile, 10000); // Check every 10 seconds
+        const newIntervalId = setInterval(updateTeacherProfile, 10000);
         setState({ setup: { ...state.setup, pollingIntervalId: newIntervalId } });
         console.log(`Setup (Teacher) polling started with ID: ${newIntervalId}.`);
     } else if (isAdmin) {
-        // --- START: Real-time update for Admin viewing a class ---
         const updateAdminClassData = async () => {
             const selectElement = document.getElementById('class-select');
-            // Make sure the select element exists and has a value before proceeding.
             if (!selectElement || !selectElement.value) return;
 
             const selectedClass = selectElement.value;
             console.log(`Admin polling for class: ${selectedClass}...`);
 
             try {
-                const { allData } = await apiService.getGlobalData();
+                const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+                if (!schoolId) return;
+
+                const { allData } = await apiService.getGlobalData(schoolId);
                 let latestStudents = null;
 
-                // Find the authoritative student list for the selected class from all teachers' data
                 for (const teacherData of allData) {
                     if (teacherData.students_by_class && teacherData.students_by_class[selectedClass]) {
                         latestStudents = teacherData.students_by_class[selectedClass].students;
-                        break; // Found the first one, assuming it's the right one
+                        break;
                     }
                 }
 
                 const currentStudents = state.studentsByClass[selectedClass]?.students || [];
                 
-                // Only update if a list was found and it's different from the current one.
                 if (latestStudents && JSON.stringify(latestStudents) !== JSON.stringify(currentStudents)) {
                     console.log(`Data for class ${selectedClass} has changed. Updating state.`);
                     
@@ -218,9 +259,7 @@ function renderSetupScreen() {
         const newIntervalId = setInterval(updateAdminClassData, 10000);
         setState({ setup: { ...state.setup, pollingIntervalId: newIntervalId } });
         console.log(`Setup (Admin) polling started with ID: ${newIntervalId}.`);
-        // --- END: Real-time update for Admin viewing a class ---
     }
-    // --- END: Real-time update logic ---
 }
 
 function renderMaintenanceToggle(container, isMaintenance) {
@@ -248,7 +287,7 @@ function renderMaintenanceToggle(container, isMaintenance) {
             try {
                 const { newState } = await apiService.setMaintenanceStatus(enable);
                 showNotification(`Mode perbaikan berhasil di${actionVerb}.`);
-                renderMaintenanceToggle(container, newState); // Re-render toggle with new state
+                renderMaintenanceToggle(container, newState);
             } catch (error) {
                 showNotification(error.message, 'error');
             } finally {
@@ -262,17 +301,42 @@ function renderMaintenanceToggle(container, isMaintenance) {
 async function renderAdminHomeScreen() {
     appContainer.innerHTML = templates.adminHome();
     document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
-    document.getElementById('go-to-attendance-btn').addEventListener('click', () => navigateTo('setup'));
-    document.getElementById('view-dashboard-btn').addEventListener('click', () => navigateTo('dashboard'));
     document.getElementById('view-admin-panel-btn').addEventListener('click', () => navigateTo('adminPanel'));
 
-    // Render dan kelola tombol mode perbaikan
-    const maintenanceContainer = document.getElementById('maintenance-toggle-container');
-    try {
-        const { isMaintenance } = await apiService.getMaintenanceStatus();
-        renderMaintenanceToggle(maintenanceContainer, isMaintenance);
-    } catch (e) {
-        maintenanceContainer.innerHTML = `<p class="text-sm text-red-500">Gagal memuat status mode perbaikan.</p>`;
+    const isSuperAdmin = state.userProfile.role === 'SUPER_ADMIN';
+
+    document.getElementById('go-to-attendance-btn').addEventListener('click', async () => {
+        if (isSuperAdmin) {
+            const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Absensi');
+            if (selectedSchool) {
+                await setState({ adminActingAsSchool: selectedSchool });
+                navigateTo('setup');
+            }
+        } else {
+            navigateTo('setup');
+        }
+    });
+
+    document.getElementById('view-dashboard-btn').addEventListener('click', async () => {
+        if (isSuperAdmin) {
+            const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Dasbor');
+            if (selectedSchool) {
+                await setState({ adminActingAsSchool: selectedSchool });
+                navigateTo('dashboard');
+            }
+        } else {
+            navigateTo('dashboard');
+        }
+    });
+
+    if (isSuperAdmin) {
+        const maintenanceContainer = document.getElementById('maintenance-toggle-container');
+        try {
+            const { isMaintenance } = await apiService.getMaintenanceStatus();
+            renderMaintenanceToggle(maintenanceContainer, isMaintenance);
+        } catch (e) {
+            maintenanceContainer.innerHTML = `<p class="text-sm text-red-500">Gagal memuat status mode perbaikan.</p>`;
+        }
     }
 }
 
@@ -287,7 +351,6 @@ async function renderDashboardScreen() {
         backBtn.addEventListener('click', () => navigateTo(target));
     }
     
-    // Tab listeners
     document.getElementById('db-view-report').addEventListener('click', () => {
         setState({ dashboard: { ...state.dashboard, activeView: 'report' } });
         renderScreen('dashboard');
@@ -321,15 +384,26 @@ async function renderDashboardScreen() {
     const updateDashboardContent = async () => {
         console.log('Dashboard is refreshing...');
         try {
-            const { allData } = await apiService.getGlobalData();
+            const schoolId = state.userProfile.role === 'SUPER_ADMIN' 
+                ? state.adminActingAsSchool?.id 
+                : state.userProfile.school_id;
+
+            if (!schoolId && state.userProfile.role !== 'SUPER_ADMIN') {
+                 reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Anda belum ditugaskan ke sekolah manapun.</p>`;
+                 return;
+            }
+            if (!schoolId && state.userProfile.role === 'SUPER_ADMIN') {
+                 reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Konteks sekolah belum dipilih.</p>`;
+                 return;
+            }
+
+            const { allData } = await apiService.getGlobalData(schoolId);
             const selectedDate = state.dashboard.selectedDate;
             
-            // --- DATA PREPARATION ---
             const logsForDate = [];
             const studentListsByClass = {};
 
             allData.forEach(teacherData => {
-                // Collect student lists
                 if(teacherData.students_by_class) {
                     for(const className in teacherData.students_by_class) {
                         if (!studentListsByClass[className]) {
@@ -337,7 +411,6 @@ async function renderDashboardScreen() {
                         }
                     }
                 }
-                // Collect logs for the selected date
                 (teacherData.saved_logs || []).forEach(log => {
                     if (log.date === selectedDate) {
                         logsForDate.push({ ...log, teacherName: teacherData.user_name });
@@ -345,7 +418,6 @@ async function renderDashboardScreen() {
                 });
             });
 
-            // --- RENDER REPORT VIEW ---
             if (state.dashboard.activeView === 'report') {
                 const absentStudentsByClass = {};
                 logsForDate.forEach(log => {
@@ -377,12 +449,11 @@ async function renderDashboardScreen() {
                     }).join('');
                 }
             }
-            // --- RENDER PERCENTAGE VIEW ---
             else if (state.dashboard.activeView === 'percentage') {
                 if (logsForDate.length === 0) {
                      percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8 col-span-full">Tidak ada data absensi untuk ditampilkan pada tanggal ini.</p>`;
                 } else {
-                    percentageContent.innerHTML = ''; // Clear loading message
+                    percentageContent.innerHTML = '';
                     logsForDate.sort((a,b) => a.class.localeCompare(b.class)).forEach(log => {
                         const totalStudents = studentListsByClass[log.class]?.length || Object.keys(log.attendance).length;
                         if (totalStudents === 0) return;
@@ -412,7 +483,6 @@ async function renderDashboardScreen() {
                     });
                 }
             }
-            // --- RENDER AI VIEW ---
             else if (state.dashboard.activeView === 'ai') {
                 const { isLoading, result, error } = state.dashboard.aiRecommendation;
                 if (isLoading) {
@@ -461,7 +531,6 @@ async function renderAdminPanelScreen() {
     }
     const container = document.getElementById('admin-panel-container');
 
-    // Reset loading state every time we render this screen to ensure it always fetches fresh data.
     await setState({ adminPanel: { ...state.adminPanel, isLoading: true } });
 
     const updateAdminPanelContent = async () => {
@@ -475,8 +544,6 @@ async function renderAdminPanelScreen() {
             const oldData = { users: state.adminPanel.users, schools: state.adminPanel.schools };
             const newData = { users: allUsers, schools: allSchools };
             
-            // --- Notifikasi Pengguna Baru ---
-            // Hanya jalankan jika panel sudah dimuat sebelumnya (untuk menghindari notifikasi saat pertama kali dibuka)
             if (oldData.users.length > 0) {
                 const oldUserEmails = new Set(oldData.users.map(u => u.email));
                 newData.users.forEach(newUser => {
@@ -551,7 +618,7 @@ async function renderAdminPanelScreen() {
     if (state.adminPanel.pollingIntervalId) {
         clearInterval(state.adminPanel.pollingIntervalId);
     }
-    const newIntervalId = setInterval(updateAdminPanelContent, 10000); // Check every 10 seconds
+    const newIntervalId = setInterval(updateAdminPanelContent, 10000);
     setState({ adminPanel: { ...state.adminPanel, pollingIntervalId: newIntervalId } });
     console.log(`Admin Panel polling started with ID: ${newIntervalId}.`);
 }
@@ -572,19 +639,24 @@ function showManageUserModal(user, schools) {
 
     const roleSelect = document.getElementById('role-select-modal');
     const classesContainer = document.getElementById('manage-classes-container');
+    const schoolSelect = document.getElementById('school-select-modal');
 
     roleSelect.addEventListener('change', () => {
-        if (roleSelect.value === 'GURU') {
-            classesContainer.classList.remove('hidden');
-        } else {
-            classesContainer.classList.add('hidden');
+        classesContainer.classList.toggle('hidden', roleSelect.value !== 'GURU');
+        if (schoolSelect) {
+            const isTargetSuperAdmin = roleSelect.value === 'SUPER_ADMIN';
+            schoolSelect.disabled = isTargetSuperAdmin;
+            schoolSelect.classList.toggle('bg-slate-100', isTargetSuperAdmin);
+            schoolSelect.classList.toggle('cursor-not-allowed', isTargetSuperAdmin);
+             if (isTargetSuperAdmin) {
+                schoolSelect.value = ""; // Auto-set to unassigned
+            }
         }
     });
 
     document.getElementById('manage-user-cancel-btn').onclick = closeModal;
     document.getElementById('manage-user-save-btn').onclick = async () => {
         const newRole = document.getElementById('role-select-modal').value;
-        const schoolSelect = document.getElementById('school-select-modal');
         const newSchoolId = schoolSelect ? schoolSelect.value : state.userProfile.school_id.toString();
         const newClasses = Array.from(document.querySelectorAll('.class-checkbox:checked')).map(cb => cb.value);
 
@@ -593,7 +665,7 @@ function showManageUserModal(user, schools) {
             await apiService.updateUserConfiguration(user.email, newRole, newSchoolId, newClasses);
             showNotification('Konfigurasi pengguna berhasil diperbarui.');
             closeModal();
-            navigateTo('adminPanel'); // Refresh to show updated data
+            navigateTo('adminPanel');
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
@@ -842,7 +914,6 @@ function renderRecapScreen() {
 
 // This function orchestrates which screen to render
 export function renderScreen(screen) {
-    // Clear previous content
     appContainer.innerHTML = '';
     
     switch(screen) {
