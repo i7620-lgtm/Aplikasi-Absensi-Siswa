@@ -1,4 +1,4 @@
-import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool } from './main.js';
+import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
 import { apiService } from './api.js';
@@ -75,7 +75,7 @@ export function displayAuthError(message, error = null) {
 
 function renderSetupScreen() {
     appContainer.innerHTML = templates.setup();
-    const isAdmin = state.userProfile?.role === 'SUPER_ADMIN';
+    const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
     const isTeacher = state.userProfile?.role === 'GURU';
     const needsAssignment = isTeacher && (!state.userProfile.assigned_classes || state.userProfile.assigned_classes.length === 0);
 
@@ -129,7 +129,7 @@ function renderSetupScreen() {
         document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
         document.getElementById('downloadDataBtn').addEventListener('click', handleDownloadData);
 
-        const availableClasses = isAdmin ? state.CLASSES : (state.userProfile?.assigned_classes || []);
+        const availableClasses = isAdmin ? CLASSES : (state.userProfile?.assigned_classes || []);
         document.getElementById('class-select').value = state.selectedClass || availableClasses[0] || '';
     }
     
@@ -456,7 +456,9 @@ async function renderDashboardScreen() {
 async function renderAdminPanelScreen() {
     appContainer.innerHTML = templates.adminPanel();
     document.getElementById('admin-panel-back-btn').addEventListener('click', () => navigateTo('adminHome'));
-    document.getElementById('add-school-btn').addEventListener('click', handleCreateSchool);
+    if (document.getElementById('add-school-btn')) {
+        document.getElementById('add-school-btn').addEventListener('click', handleCreateSchool);
+    }
     const container = document.getElementById('admin-panel-container');
 
     // Reset loading state every time we render this screen to ensure it always fetches fresh data.
@@ -467,7 +469,7 @@ async function renderAdminPanelScreen() {
         try {
             const [{ allUsers }, { allSchools }] = await Promise.all([
                 apiService.getAllUsers(),
-                apiService.getAllSchools()
+                state.userProfile.role === 'SUPER_ADMIN' ? apiService.getAllSchools() : Promise.resolve({ allSchools: [] })
             ]);
 
             const oldData = { users: state.adminPanel.users, schools: state.adminPanel.schools };
@@ -582,7 +584,8 @@ function showManageUserModal(user, schools) {
     document.getElementById('manage-user-cancel-btn').onclick = closeModal;
     document.getElementById('manage-user-save-btn').onclick = async () => {
         const newRole = document.getElementById('role-select-modal').value;
-        const newSchoolId = document.getElementById('school-select-modal').value || null; // Send null if empty
+        const schoolSelect = document.getElementById('school-select-modal');
+        const newSchoolId = schoolSelect ? schoolSelect.value : state.userProfile.school_id.toString();
         const newClasses = Array.from(document.querySelectorAll('.class-checkbox:checked')).map(cb => cb.value);
 
         showLoader('Menyimpan perubahan...');
