@@ -1,3 +1,4 @@
+
 import { sql } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 
@@ -138,7 +139,7 @@ export default async function handler(request, response) {
             }
             
             switch (action) {
-                case 'loginOrRegister':
+                case 'loginOrRegister': {
                     if (!payload || !payload.profile) {
                         return response.status(400).json({ error: 'Profile payload is required' });
                     }
@@ -152,8 +153,8 @@ export default async function handler(request, response) {
                     const { rows: dataRows } = await sql`SELECT students_by_class, saved_logs FROM absensi_data WHERE user_email = ${loggedInUser.email}`;
                     const userData = dataRows[0] || { students_by_class: {}, saved_logs: [] };
                     return response.status(200).json({ user: loggedInUser, userData });
-
-                case 'setMaintenanceStatus':
+                }
+                case 'setMaintenanceStatus': {
                     if (user.role !== 'SUPER_ADMIN') {
                         return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
@@ -163,8 +164,8 @@ export default async function handler(request, response) {
                         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
                     `;
                     return response.status(200).json({ success: true, newState: enabled });
-
-                case 'getUserProfile':
+                }
+                case 'getUserProfile': {
                     const { rows: userProfileRows } = await sql`SELECT email, name, picture, role, school_id, assigned_classes FROM users WHERE email = ${userEmail}`;
                     if (userProfileRows.length === 0) {
                         return response.status(404).json({ error: 'User profile not found' });
@@ -172,27 +173,37 @@ export default async function handler(request, response) {
                     const userProfile = userProfileRows[0];
                     userProfile.assigned_classes = userProfile.assigned_classes || [];
                     return response.status(200).json({ userProfile });
-
-                case 'saveData':
+                }
+                case 'saveData': {
                     if (user.role === 'KEPALA_SEKOLAH') {
                          return response.status(403).json({ error: 'Akun Kepala Sekolah bersifat hanya-baca.' });
                     }
-                    const { studentsByClass, savedLogs } = payload;
+                    const { studentsByClass, savedLogs, actingAsSchoolId } = payload;
+                    
+                    // FIX: Enclosed case in a block to correctly scope this variable.
+                    let finalSchoolId;
+                    if (user.role === 'SUPER_ADMIN' && actingAsSchoolId) {
+                        finalSchoolId = actingAsSchoolId;
+                    } else {
+                        finalSchoolId = user.school_id;
+                    }
+
                     const studentsByClassJson = JSON.stringify(studentsByClass);
                     const savedLogsJson = JSON.stringify(savedLogs);
+                    
                     await sql`
                         INSERT INTO absensi_data (user_email, school_id, students_by_class, saved_logs, last_updated)
-                        VALUES (${userEmail}, ${user.school_id}, ${studentsByClassJson}, ${savedLogsJson}, NOW())
+                        VALUES (${userEmail}, ${finalSchoolId}, ${studentsByClassJson}, ${savedLogsJson}, NOW())
                         ON CONFLICT (user_email)
                         DO UPDATE SET
-                          school_id = EXCLUDED.school_id,
+                          school_id = ${finalSchoolId},
                           students_by_class = EXCLUDED.students_by_class,
                           saved_logs = EXCLUDED.saved_logs,
                           last_updated = NOW();
                     `;
                     return response.status(200).json({ success: true });
-
-                case 'getGlobalData':
+                }
+                case 'getGlobalData': {
                      if (user.role !== 'SUPER_ADMIN' && user.role !== 'KEPALA_SEKOLAH') {
                         return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
@@ -229,8 +240,8 @@ export default async function handler(request, response) {
                     
                     const { rows: allData } = await query;
                     return response.status(200).json({ allData });
-
-                case 'getAllUsers':
+                }
+                case 'getAllUsers': {
                     if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN_SEKOLAH') {
                          return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
@@ -257,23 +268,23 @@ export default async function handler(request, response) {
                     }
                     const { rows: allUsers } = await usersQuery;
                     return response.status(200).json({ allUsers });
-
-                case 'getAllSchools':
+                }
+                case 'getAllSchools': {
                     if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN_SEKOLAH') {
                          return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
                     const { rows: allSchools } = await sql`SELECT id, name FROM schools ORDER BY name;`;
                     return response.status(200).json({ allSchools });
-
-                case 'createSchool':
+                }
+                case 'createSchool': {
                     if (user.role !== 'SUPER_ADMIN') {
                          return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
                     const { schoolName } = payload;
                     const { rows: newSchool } = await sql`INSERT INTO schools (name) VALUES (${schoolName}) RETURNING id, name;`;
                     return response.status(201).json({ success: true, school: newSchool[0] });
-
-                case 'updateUserConfiguration':
+                }
+                case 'updateUserConfiguration': {
                      if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN_SEKOLAH') {
                          return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
@@ -298,6 +309,7 @@ export default async function handler(request, response) {
                         }
                     }
                     
+                    // FIX: Enclosed case in a block to correctly scope this variable.
                     let finalSchoolId = newSchoolId === "" ? null : newSchoolId;
 
                     if (newRole === 'SUPER_ADMIN') {
@@ -315,8 +327,8 @@ export default async function handler(request, response) {
                         WHERE email = ${targetEmail}`;
                     
                     return response.status(200).json({ success: true });
-                
-                case 'generateAiRecommendation':
+                }
+                case 'generateAiRecommendation': {
                     if (user.role !== 'SUPER_ADMIN' && user.role !== 'KEPALA_SEKOLAH') {
                         return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
@@ -391,7 +403,7 @@ export default async function handler(request, response) {
                         console.error('Gemini API call failed:', error);
                         return response.status(500).json({ error: 'Gagal menghasilkan rekomendasi AI.', details: error.message });
                     }
-
+                }
                 default:
                     return response.status(400).json({ error: 'Invalid action' });
             }
