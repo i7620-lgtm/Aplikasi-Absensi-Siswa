@@ -197,15 +197,12 @@ export default async function handler(request, response) {
                         return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
                     
-                    let query = sql`
-                        SELECT ad.saved_logs, ad.students_by_class, u.name as user_name 
-                        FROM absensi_data ad 
-                        JOIN users u ON ad.user_email = u.email
-                    `;
+                    const { schoolId } = payload;
 
+                    let query;
                     if (user.role === 'KEPALA_SEKOLAH') {
                         if (!user.school_id) {
-                             return response.status(200).json({ allData: [] }); // Kepala sekolah tanpa sekolah tidak melihat data apa pun.
+                             return response.status(200).json({ allData: [] });
                         }
                         query = sql`
                             SELECT ad.saved_logs, ad.students_by_class, u.name as user_name 
@@ -213,6 +210,21 @@ export default async function handler(request, response) {
                             JOIN users u ON ad.user_email = u.email
                             WHERE ad.school_id = ${user.school_id}
                         `;
+                    } else { // SUPER_ADMIN
+                        if (schoolId) {
+                            query = sql`
+                                SELECT ad.saved_logs, ad.students_by_class, u.name as user_name 
+                                FROM absensi_data ad 
+                                JOIN users u ON ad.user_email = u.email
+                                WHERE ad.school_id = ${schoolId}
+                            `;
+                        } else {
+                            query = sql`
+                                SELECT ad.saved_logs, ad.students_by_class, u.name as user_name 
+                                FROM absensi_data ad 
+                                JOIN users u ON ad.user_email = u.email
+                            `;
+                        }
                     }
                     
                     const { rows: allData } = await query;
@@ -247,7 +259,7 @@ export default async function handler(request, response) {
                     return response.status(200).json({ allUsers });
 
                 case 'getAllSchools':
-                    if (user.role !== 'SUPER_ADMIN') {
+                    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN_SEKOLAH') {
                          return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
                     const { rows: allSchools } = await sql`SELECT id, name FROM schools ORDER BY name;`;
@@ -268,20 +280,16 @@ export default async function handler(request, response) {
                     const { targetEmail, newRole, newSchoolId, newClasses } = payload;
                     
                     if (user.role === 'ADMIN_SEKOLAH') {
-                        // Security check for School Admin
                         if (!user.school_id) return response.status(403).json({ error: 'Admin Sekolah tidak ditugaskan ke sekolah manapun.' });
 
-                        // 1. Can only manage users in their own school
                         const { rows: targetUserRows } = await sql`SELECT school_id FROM users WHERE email = ${targetEmail}`;
                         if (targetUserRows.length === 0 || targetUserRows[0].school_id !== user.school_id) {
                             return response.status(403).json({ error: 'Anda hanya dapat mengelola pengguna di sekolah Anda sendiri.' });
                         }
-                        // 2. Cannot promote users to admin roles
                         if (newRole === 'SUPER_ADMIN' || newRole === 'ADMIN_SEKOLAH') {
                              return response.status(403).json({ error: 'Anda tidak memiliki izin untuk menetapkan peran admin.' });
                         }
-                        // 3. Cannot change a user's school
-                        if (newSchoolId !== user.school_id.toString()) {
+                        if (newSchoolId && newSchoolId !== user.school_id.toString()) {
                              return response.status(403).json({ error: 'Anda tidak dapat memindahkan pengguna ke sekolah lain.' });
                         }
                     } else { // SUPER_ADMIN checks
@@ -290,7 +298,12 @@ export default async function handler(request, response) {
                         }
                     }
                     
-                    const finalSchoolId = newSchoolId ? newSchoolId : null;
+                    let finalSchoolId = newSchoolId === "" ? null : newSchoolId;
+
+                    if (newRole === 'SUPER_ADMIN') {
+                        finalSchoolId = null;
+                    }
+                    
                     const assignedClasses = newRole === 'GURU' ? newClasses : '{}';
                     
                     await sql`
@@ -310,13 +323,19 @@ export default async function handler(request, response) {
     
                     try {
                         let dataQuery;
+                        const { schoolId: contextSchoolId } = payload;
+
                         if (user.role === 'KEPALA_SEKOLAH') {
                             if (!user.school_id) {
                                 return response.status(404).json({ error: "Kepala Sekolah belum ditugaskan ke sekolah manapun." });
                             }
                             dataQuery = sql`SELECT ad.saved_logs FROM absensi_data ad WHERE ad.school_id = ${user.school_id}`;
                         } else { // SUPER_ADMIN
-                            dataQuery = sql`SELECT ad.saved_logs FROM absensi_data ad`;
+                            if (contextSchoolId) {
+                                dataQuery = sql`SELECT ad.saved_logs FROM absensi_data ad WHERE ad.school_id = ${contextSchoolId}`;
+                            } else {
+                                dataQuery = sql`SELECT ad.saved_logs FROM absensi_data ad`;
+                            }
                         }
                         
                         const { rows: allData } = await dataQuery;
