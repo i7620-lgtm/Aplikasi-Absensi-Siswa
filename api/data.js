@@ -1,4 +1,5 @@
 import { sql } from '@vercel/postgres';
+import { GoogleGenAI } from "@google/genai";
 
 // --- KONFIGURASI ---
 // Daftar email yang akan otomatis menjadi SUPER_ADMIN saat pertama kali login.
@@ -269,6 +270,76 @@ export default async function handler(request, response) {
                     
                     return response.status(200).json({ success: true });
                 
+                case 'generateAiRecommendation':
+                    if (user.role !== 'SUPER_ADMIN' && user.role !== 'KEPALA_SEKOLAH') {
+                        return response.status(403).json({ error: 'Forbidden: Access denied' });
+                    }
+    
+                    try {
+                        let dataQuery;
+                        if (user.role === 'KEPALA_SEKOLAH') {
+                            if (!user.school_id) {
+                                return response.status(404).json({ error: "Kepala Sekolah belum ditugaskan ke sekolah manapun." });
+                            }
+                            dataQuery = sql`SELECT ad.saved_logs FROM absensi_data ad WHERE ad.school_id = ${user.school_id}`;
+                        } else { // SUPER_ADMIN
+                            dataQuery = sql`SELECT ad.saved_logs FROM absensi_data ad`;
+                        }
+                        
+                        const { rows: allData } = await dataQuery;
+                        
+                        const thirtyDaysAgo = new Date();
+                        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                        const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
+    
+                        const recentLogs = allData.flatMap(teacher =>
+                            (teacher.saved_logs || []).filter(log => log.date >= thirtyDaysAgoStr)
+                        );
+    
+                        if (recentLogs.length === 0) {
+                             return response.status(200).json({ success: true, recommendation: "Tidak ada data absensi dalam 30 hari terakhir untuk dianalisis." });
+                        }
+    
+                        const studentData = {};
+                        recentLogs.forEach(log => {
+                            Object.entries(log.attendance).forEach(([studentName, status]) => {
+                                if (status !== 'H') {
+                                    if (!studentData[studentName]) {
+                                        studentData[studentName] = { name: studentName, class: log.class, absences: [] };
+                                    }
+                                    studentData[studentName].absences.push({ date: log.date, status });
+                                }
+                            });
+                        });
+    
+                        const prompt = `
+                            Anda adalah seorang asisten kepala sekolah virtual yang cerdas dan proaktif. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir dan memberikan rekomendasi yang tajam, ringkas, dan dapat ditindaklanjuti.
+
+                            Berikut adalah data absensi mentah dalam format JSON. Setiap siswa memiliki daftar absensi dengan tanggal dan status (S=Sakit, I=Izin, A=Alpa).
+                            Data: ${JSON.stringify(Object.values(studentData))}
+
+                            Berdasarkan data di atas, lakukan hal berikut:
+                            1.  **Identifikasi Peringatan Dini:** Cari 5 siswa dengan jumlah absensi tertinggi. Tampilkan dalam format daftar bernomor. Untuk setiap siswa, sebutkan NAMA LENGKAP, KELAS, dan rincian jumlah absensi (Contoh: Total 8 kali: 5 Alpa, 2 Sakit, 1 Izin).
+                            2.  **Temukan Pola Tersembunyi:** Apakah ada tren yang menarik? Misalnya, siswa yang sering absen di hari tertentu, atau peningkatan absensi 'Sakit' di kelas tertentu yang mungkin mengindikasikan masalah kesehatan. Sebutkan 1-2 pola paling signifikan yang Anda temukan.
+                            3.  **Berikan Rekomendasi Konkret:** Berikan 2-3 rekomendasi yang jelas dan dapat langsung ditindaklanjuti oleh kepala sekolah atau guru BK. Rekomendasi harus berhubungan langsung dengan temuan Anda di atas.
+
+                            Gunakan format Markdown untuk jawaban Anda dengan heading, bold, dan list agar mudah dibaca.
+                        `;
+                        
+                        const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+                        const geminiResponse = await ai.models.generateContent({
+                            model: 'gemini-2.5-flash',
+                            contents: prompt
+                        });
+            
+                        const recommendation = geminiResponse.text;
+                        return response.status(200).json({ success: true, recommendation });
+    
+                    } catch (error) {
+                        console.error('Gemini API call failed:', error);
+                        return response.status(500).json({ error: 'Gagal menghasilkan rekomendasi AI.', details: error.message });
+                    }
+
                 default:
                     return response.status(400).json({ error: 'Invalid action' });
             }
