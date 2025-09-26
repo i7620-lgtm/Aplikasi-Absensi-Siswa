@@ -5,51 +5,68 @@ import { sql } from '@vercel/postgres';
 const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
 
 async function setupTables() {
-    // Membuat tabel 'users' jika belum ada.
+    // 1. Membuat tabel 'schools' untuk arsitektur multi-tenant.
+    await sql`
+      CREATE TABLE IF NOT EXISTS schools (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `;
+
+    // 2. Membuat tabel 'users' jika belum ada.
     await sql`
       CREATE TABLE IF NOT EXISTS users (
         email VARCHAR(255) PRIMARY KEY,
         name VARCHAR(255),
         picture TEXT,
         role VARCHAR(50) DEFAULT 'GURU',
+        school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL,
+        assigned_classes TEXT[] DEFAULT '{}',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         last_login TIMESTAMPTZ
       );
     `;
 
-    // Bagian ini menangani migrasi skema untuk tabel yang sudah ada.
-    // Aman untuk dijalankan berulang kali (idempotent).
+    // 3. Menangani migrasi untuk tabel pengguna yang sudah ada.
     try {
-        // Mencoba menambahkan kolom untuk kelas yang ditugaskan.
+        await sql`ALTER TABLE users ADD COLUMN school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL;`;
+    } catch (error) {
+        if (error.code !== '42701') throw error; // Abaikan jika kolom sudah ada
+    }
+     try {
         await sql`ALTER TABLE users ADD COLUMN assigned_classes TEXT[] DEFAULT '{}'`;
     } catch (error) {
-        // Abaikan error jika kolom sudah ada (kode error Postgres: 42701)
-        if (error.code !== '42701') {
-            throw error;
-        }
+        if (error.code !== '42701') throw error; // Abaikan jika kolom sudah ada
     }
-
-    // Ini memastikan setiap pengguna yang dibuat sebelum kolom memiliki nilai default diperbaiki.
-    await sql`UPDATE users SET assigned_classes = '{}' WHERE assigned_classes IS NULL`;
     
-    // Membuat tabel 'absensi_data' jika belum ada.
+    // Memastikan nilai default untuk kolom yang baru ditambahkan tidak null.
+    await sql`UPDATE users SET assigned_classes = '{}' WHERE assigned_classes IS NULL`;
+
+    // 4. Membuat tabel 'absensi_data' dengan isolasi data per sekolah.
     await sql`
       CREATE TABLE IF NOT EXISTS absensi_data (
         user_email VARCHAR(255) PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
+        school_id INTEGER, 
         students_by_class JSONB,
         saved_logs JSONB,
         last_updated TIMESTAMPTZ DEFAULT NOW()
       );
     `;
+     try {
+        await sql`ALTER TABLE absensi_data ADD COLUMN school_id INTEGER;`;
+    } catch (error) {
+        if (error.code !== '42701') throw error;
+    }
 
-    // Membuat tabel konfigurasi aplikasi untuk fitur seperti mode perbaikan.
+
+    // 5. Membuat tabel konfigurasi aplikasi.
     await sql`
       CREATE TABLE IF NOT EXISTS app_config (
         key VARCHAR(50) PRIMARY KEY,
         value TEXT
       );
     `;
-    // Memastikan nilai default untuk mode perbaikan ada.
     await sql`
         INSERT INTO app_config (key, value)
         VALUES ('maintenance_mode', 'false')
@@ -60,39 +77,28 @@ async function setupTables() {
 async function loginOrRegisterUser(profile) {
     const { email, name, picture } = profile;
     
-    // Dengan setupTables memastikan kolom ada dan tidak null, query ini lebih aman.
-    const { rows } = await sql`SELECT email, name, picture, role, assigned_classes FROM users WHERE email = ${email}`;
+    const { rows } = await sql`SELECT email, name, picture, role, school_id, assigned_classes FROM users WHERE email = ${email}`;
     let user = rows[0];
 
     if (user) {
-        // Pengguna ada, perbarui login terakhir
         await sql`UPDATE users SET last_login = NOW(), name = ${name}, picture = ${picture} WHERE email = ${email}`;
         user.last_login = new Date();
-        // Pemeriksaan defensif: pastikan assigned_classes adalah array, bukan null.
-        if (user.assigned_classes === null) {
-            user.assigned_classes = [];
-        }
+        user.assigned_classes = user.assigned_classes || []; // Pastikan tidak null
     } else {
-        // Pengguna baru, tentukan peran
         const role = SUPER_ADMIN_EMAILS.includes(email) ? 'SUPER_ADMIN' : 'GURU';
         const { rows: newRows } = await sql`
             INSERT INTO users (email, name, picture, role, last_login, assigned_classes)
             VALUES (${email}, ${name}, ${picture}, ${role}, NOW(), '{}')
-            RETURNING email, name, picture, role, assigned_classes;
+            RETURNING email, name, picture, role, school_id, assigned_classes;
         `;
         user = newRows[0];
-        // Klausa RETURNING harus memberikan array karena DEFAULT, tetapi periksa untuk jaga-jaga.
-         if (user.assigned_classes === null) {
-            user.assigned_classes = [];
-        }
+        user.assigned_classes = user.assigned_classes || [];
     }
 
-    // --- Pemeriksaan Mode Perbaikan ---
     const { rows: configRows } = await sql`SELECT value FROM app_config WHERE key = 'maintenance_mode'`;
     const isMaintenance = configRows[0]?.value === 'true';
 
     if (isMaintenance && user.role !== 'SUPER_ADMIN') {
-        // Jika mode perbaikan aktif dan pengguna bukan Super Admin, blokir akses.
         return { maintenance: true };
     }
     
@@ -111,32 +117,29 @@ export default async function handler(request, response) {
                 return response.status(400).json({ error: 'Action is required' });
             }
 
-            // Aksi yang tidak memerlukan otentikasi
             if (action === 'getMaintenanceStatus') {
                  const { rows: configRows } = await sql`SELECT value FROM app_config WHERE key = 'maintenance_mode'`;
                  const isMaintenance = configRows[0]?.value === 'true';
                  return response.status(200).json({ isMaintenance });
             }
 
-            // Untuk semua tindakan KECUALI loginOrRegister, kita memerlukan email pengguna yang terotentikasi.
             if (action !== 'loginOrRegister' && !userEmail) {
                 return response.status(400).json({ error: 'userEmail is required for this action' });
             }
             
-            // Otentikasi pengguna untuk semua tindakan (kecuali login yang ditangani di dalam switch)
-            let userRole = null;
+            let user = null;
             if (action !== 'loginOrRegister') {
-                const { rows: userRows } = await sql`SELECT role FROM users WHERE email = ${userEmail}`;
+                const { rows: userRows } = await sql`SELECT email, role, school_id FROM users WHERE email = ${userEmail}`;
                 if (userRows.length === 0) {
                     return response.status(403).json({ error: 'Forbidden: User not found' });
                 }
-                userRole = userRows[0].role;
+                user = userRows[0];
             }
             
             switch (action) {
                 case 'loginOrRegister':
                     if (!payload || !payload.profile) {
-                        return response.status(400).json({ error: 'Profile payload is required for registration' });
+                        return response.status(400).json({ error: 'Profile payload is required' });
                     }
                     const loginResult = await loginOrRegisterUser(payload.profile);
                     
@@ -144,13 +147,13 @@ export default async function handler(request, response) {
                         return response.status(200).json({ maintenance: true });
                     }
 
-                    const { user } = loginResult;
-                    const { rows: dataRows } = await sql`SELECT students_by_class, saved_logs FROM absensi_data WHERE user_email = ${user.email}`;
+                    const loggedInUser = loginResult.user;
+                    const { rows: dataRows } = await sql`SELECT students_by_class, saved_logs FROM absensi_data WHERE user_email = ${loggedInUser.email}`;
                     const userData = dataRows[0] || { students_by_class: {}, saved_logs: [] };
-                    return response.status(200).json({ user, userData });
+                    return response.status(200).json({ user: loggedInUser, userData });
 
                 case 'setMaintenanceStatus':
-                    if (userRole !== 'SUPER_ADMIN') {
+                    if (user.role !== 'SUPER_ADMIN') {
                         return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
                     const { enabled } = payload;
@@ -161,29 +164,27 @@ export default async function handler(request, response) {
                     return response.status(200).json({ success: true, newState: enabled });
 
                 case 'getUserProfile':
-                    const { rows: userProfileRows } = await sql`SELECT email, name, picture, role, assigned_classes FROM users WHERE email = ${userEmail}`;
+                    const { rows: userProfileRows } = await sql`SELECT email, name, picture, role, school_id, assigned_classes FROM users WHERE email = ${userEmail}`;
                     if (userProfileRows.length === 0) {
                         return response.status(404).json({ error: 'User profile not found' });
                     }
-                    // Pemeriksaan defensif: pastikan assigned_classes adalah array.
                     const userProfile = userProfileRows[0];
-                    if (userProfile.assigned_classes === null) {
-                        userProfile.assigned_classes = [];
-                    }
+                    userProfile.assigned_classes = userProfile.assigned_classes || [];
                     return response.status(200).json({ userProfile });
 
                 case 'saveData':
-                    if (userRole === 'KEPALA_SEKOLAH') {
+                    if (user.role === 'KEPALA_SEKOLAH') {
                          return response.status(403).json({ error: 'Akun Kepala Sekolah bersifat hanya-baca.' });
                     }
                     const { studentsByClass, savedLogs } = payload;
                     const studentsByClassJson = JSON.stringify(studentsByClass);
                     const savedLogsJson = JSON.stringify(savedLogs);
                     await sql`
-                        INSERT INTO absensi_data (user_email, students_by_class, saved_logs, last_updated)
-                        VALUES (${userEmail}, ${studentsByClassJson}, ${savedLogsJson}, NOW())
+                        INSERT INTO absensi_data (user_email, school_id, students_by_class, saved_logs, last_updated)
+                        VALUES (${userEmail}, ${user.school_id}, ${studentsByClassJson}, ${savedLogsJson}, NOW())
                         ON CONFLICT (user_email)
                         DO UPDATE SET
+                          school_id = EXCLUDED.school_id,
                           students_by_class = EXCLUDED.students_by_class,
                           saved_logs = EXCLUDED.saved_logs,
                           last_updated = NOW();
@@ -191,37 +192,81 @@ export default async function handler(request, response) {
                     return response.status(200).json({ success: true });
 
                 case 'getGlobalData':
-                     if (userRole !== 'SUPER_ADMIN' && userRole !== 'KEPALA_SEKOLAH') {
+                     if (user.role !== 'SUPER_ADMIN' && user.role !== 'KEPALA_SEKOLAH') {
                         return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
-                    const { rows: allData } = await sql`SELECT ad.saved_logs, ad.students_by_class, u.name as user_name FROM absensi_data ad JOIN users u ON ad.user_email = u.email;`;
+                    
+                    let query = sql`
+                        SELECT ad.saved_logs, ad.students_by_class, u.name as user_name 
+                        FROM absensi_data ad 
+                        JOIN users u ON ad.user_email = u.email
+                    `;
+
+                    if (user.role === 'KEPALA_SEKOLAH') {
+                        if (!user.school_id) {
+                             return response.status(200).json({ allData: [] }); // Kepala sekolah tanpa sekolah tidak melihat data apa pun.
+                        }
+                        query = sql`
+                            SELECT ad.saved_logs, ad.students_by_class, u.name as user_name 
+                            FROM absensi_data ad 
+                            JOIN users u ON ad.user_email = u.email
+                            WHERE ad.school_id = ${user.school_id}
+                        `;
+                    }
+                    
+                    const { rows: allData } = await query;
                     return response.status(200).json({ allData });
 
                 case 'getAllUsers':
-                    if (userRole !== 'SUPER_ADMIN') {
+                    if (user.role !== 'SUPER_ADMIN') {
                          return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
-                    const { rows: allUsers } = await sql`SELECT email, name, picture, role, assigned_classes FROM users ORDER BY name;`;
+                    const { rows: allUsers } = await sql`
+                        SELECT 
+                            email, name, picture, role, school_id, assigned_classes,
+                            (role = 'GURU' AND school_id IS NULL) AS is_unmanaged
+                        FROM users 
+                        ORDER BY name;
+                    `;
                     return response.status(200).json({ allUsers });
 
-                case 'updateUserRole':
-                     if (userRole !== 'SUPER_ADMIN') {
+                case 'getAllSchools':
+                    if (user.role !== 'SUPER_ADMIN') {
                          return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
-                    const { targetEmail, newRole } = payload;
+                    const { rows: allSchools } = await sql`SELECT id, name FROM schools ORDER BY name;`;
+                    return response.status(200).json({ allSchools });
+
+                case 'createSchool':
+                    if (user.role !== 'SUPER_ADMIN') {
+                         return response.status(403).json({ error: 'Forbidden: Access denied' });
+                    }
+                    const { schoolName } = payload;
+                    const { rows: newSchool } = await sql`INSERT INTO schools (name) VALUES (${schoolName}) RETURNING id, name;`;
+                    return response.status(201).json({ success: true, school: newSchool[0] });
+
+                case 'updateUserConfiguration':
+                     if (user.role !== 'SUPER_ADMIN') {
+                         return response.status(403).json({ error: 'Forbidden: Access denied' });
+                    }
+                    const { targetEmail, newRole, newSchoolId, newClasses } = payload;
+                    
+                    // Validasi: Jangan demote SUPER_ADMIN bawaan
                     if (SUPER_ADMIN_EMAILS.includes(targetEmail) && newRole !== 'SUPER_ADMIN') {
                         return response.status(400).json({ error: 'Cannot demote a bootstrapped Super Admin.' });
                     }
-                    await sql`UPDATE users SET role = ${newRole} WHERE email = ${targetEmail}`;
-                    return response.status(200).json({ success: true });
-
-                case 'updateAssignedClasses':
-                    if (userRole !== 'SUPER_ADMIN') {
-                        return response.status(403).json({ error: 'Forbidden: Access denied' });
-                    }
-                    const { emailToUpdate, newClasses } = payload;
-                    // newClasses harus berupa array string
-                    await sql`UPDATE users SET assigned_classes = ${newClasses} WHERE email = ${emailToUpdate}`;
+                    
+                    // Pastikan kelas hanya diatur untuk GURU
+                    const assignedClasses = newRole === 'GURU' ? newClasses : '{}';
+                    
+                    await sql`
+                        UPDATE users 
+                        SET 
+                            role = ${newRole}, 
+                            school_id = ${newSchoolId}, 
+                            assigned_classes = ${assignedClasses}
+                        WHERE email = ${targetEmail}`;
+                    
                     return response.status(200).json({ success: true });
                 
                 default:
