@@ -150,8 +150,16 @@ export const templates = {
         const displayDate = new Date(state.dashboard.selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const canGoBack = state.userProfile?.role === 'SUPER_ADMIN';
         const backTarget = canGoBack ? 'adminHome' : 'setup';
+        const { activeView } = state.dashboard;
+
+        const getButtonClass = (viewName) => {
+            return activeView === viewName
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-100';
+        };
+
         return `
-        <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
+        <div class="screen active p-4 md:p-8 max-w-7xl mx-auto">
              <div class="bg-white p-8 rounded-2xl shadow-lg">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 pb-4 border-b border-slate-200 gap-4">
                     <div>
@@ -173,9 +181,22 @@ export const templates = {
                     </div>
                 </div>
 
-                <h2 class="text-xl font-bold text-slate-800 mb-4">Laporan Siswa Tidak Hadir</h2>
-                <div id="dashboard-content" class="space-y-6">
-                     <p class="text-center text-slate-500 py-8">Memuat ringkasan...</p>
+                <!-- Dashboard Navigation Tabs -->
+                <div class="mb-6 p-1 bg-slate-100 rounded-lg flex flex-col sm:flex-row gap-1">
+                    <button id="db-view-report" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${getButtonClass('report')}">Laporan Siswa Tidak Hadir</button>
+                    <button id="db-view-percentage" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${getButtonClass('percentage')}">Persentase Kehadiran</button>
+                    <button id="db-view-ai" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${getButtonClass('ai')}">Rekomendasi AI</button>
+                </div>
+
+                <!-- Content Area -->
+                <div id="dashboard-content-report" class="space-y-6 ${activeView === 'report' ? '' : 'hidden'}">
+                    <p class="text-center text-slate-500 py-8">Memuat laporan...</p>
+                </div>
+                <div id="dashboard-content-percentage" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 ${activeView === 'percentage' ? '' : 'hidden'}">
+                     <p class="text-center text-slate-500 py-8 col-span-full">Memuat visualisasi...</p>
+                </div>
+                <div id="dashboard-content-ai" class="${activeView === 'ai' ? '' : 'hidden'}">
+                     <p class="text-center text-slate-500 py-8">Memuat fitur rekomendasi...</p>
                 </div>
              </div>
         </div>`;
@@ -184,8 +205,14 @@ export const templates = {
         <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
              <div class="bg-white p-8 rounded-2xl shadow-lg">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 pb-4 border-b border-slate-200">
-                    <h1 class="text-2xl font-bold text-slate-800">Panel Admin: Manajemen Pengguna</h1>
-                    <button id="admin-panel-back-btn" class="mt-4 sm:mt-0 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-800">Panel Admin: Manajemen Pengguna</h1>
+                        <p class="text-slate-500">Kelola pengguna dan sekolah dari satu tempat.</p>
+                    </div>
+                    <div class="flex items-center gap-2 mt-4 sm:mt-0">
+                         <button id="add-school-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition text-sm">Tambah Sekolah</button>
+                         <button id="admin-panel-back-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
+                    </div>
                 </div>
                 <div id="admin-panel-container" class="overflow-x-auto">
                      <p class="text-center text-slate-500 py-8">Memuat daftar pengguna...</p>
@@ -320,24 +347,47 @@ export const templates = {
                 </div>
             </div>
         </div>`,
-    manageClassesModal: (user) => {
-        const assigned = user.assigned_classes || [];
+    manageUserModal: (user, schools) => {
+        const assignedClasses = user.assigned_classes || [];
         return `
-        <div id="manage-classes-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
-             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
-                <h2 class="text-xl font-bold text-slate-800 mb-2">Kelola Kelas untuk</h2>
+        <div id="manage-user-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
+             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-lg w-full animate-fade-in">
+                <h2 class="text-xl font-bold text-slate-800 mb-2">Kelola Pengguna</h2>
                 <p class="text-slate-600 mb-6 font-semibold">${user.name}</p>
-                <div id="class-checkbox-container" class="grid grid-cols-3 gap-4 max-h-60 overflow-y-auto border p-4 rounded-lg mb-6">
-                    ${CLASSES.map(c => `
-                        <label class="flex items-center space-x-2 text-slate-700">
-                            <input type="checkbox" value="${c}" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${assigned.includes(c) ? 'checked' : ''}>
-                            <span>${c}</span>
-                        </label>
-                    `).join('')}
+                
+                <div class="space-y-4">
+                    <div>
+                        <label for="role-select-modal" class="block text-sm font-medium text-slate-700 mb-1">Peran Pengguna</label>
+                        <select id="role-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="GURU" ${user.role === 'GURU' ? 'selected' : ''}>Guru</option>
+                            <option value="KEPALA_SEKOLAH" ${user.role === 'KEPALA_SEKOLAH' ? 'selected' : ''}>Kepala Sekolah</option>
+                            <option value="SUPER_ADMIN" ${user.role === 'SUPER_ADMIN' ? 'selected' : ''}>Super Admin</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="school-select-modal" class="block text-sm font-medium text-slate-700 mb-1">Tugaskan ke Sekolah</label>
+                        <select id="school-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="">-- Tidak Ditugaskan --</option>
+                            ${schools.map(school => `<option value="${school.id}" ${user.school_id === school.id ? 'selected' : ''}>${school.name}</option>`).join('')}
+                        </select>
+                    </div>
                 </div>
-                <div class="flex justify-end gap-4">
-                    <button id="manage-classes-cancel-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Batal</button>
-                    <button id="manage-classes-save-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition">Simpan</button>
+
+                <div id="manage-classes-container" class="mt-6 pt-4 border-t border-slate-200 ${user.role !== 'GURU' ? 'hidden' : ''}">
+                     <label class="block text-sm font-medium text-slate-700 mb-2">Tugaskan Kelas (untuk Guru)</label>
+                     <div id="class-checkbox-container" class="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-48 overflow-y-auto border p-4 rounded-lg">
+                        ${CLASSES.map(c => `
+                            <label class="flex items-center space-x-2 text-slate-700">
+                                <input type="checkbox" value="${c}" class="class-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${assignedClasses.includes(c) ? 'checked' : ''}>
+                                <span>${c}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-4 mt-8">
+                    <button id="manage-user-cancel-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Batal</button>
+                    <button id="manage-user-save-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition">Simpan Perubahan</button>
                 </div>
             </div>
         </div>`;
