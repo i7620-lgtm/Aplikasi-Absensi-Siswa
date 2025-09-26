@@ -219,16 +219,31 @@ export default async function handler(request, response) {
                     return response.status(200).json({ allData });
 
                 case 'getAllUsers':
-                    if (user.role !== 'SUPER_ADMIN') {
+                    if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN_SEKOLAH') {
                          return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
-                    const { rows: allUsers } = await sql`
-                        SELECT 
-                            email, name, picture, role, school_id, assigned_classes,
-                            (role = 'GURU' AND school_id IS NULL) AS is_unmanaged
-                        FROM users 
-                        ORDER BY name;
-                    `;
+
+                    let usersQuery;
+                    if (user.role === 'SUPER_ADMIN') {
+                        usersQuery = sql`
+                            SELECT 
+                                email, name, picture, role, school_id, assigned_classes,
+                                (role = 'GURU' AND school_id IS NULL) AS is_unmanaged
+                            FROM users 
+                            ORDER BY name;
+                        `;
+                    } else { // ADMIN_SEKOLAH
+                        if (!user.school_id) return response.status(200).json({ allUsers: [] });
+                        usersQuery = sql`
+                            SELECT 
+                                email, name, picture, role, school_id, assigned_classes,
+                                (role = 'GURU' AND school_id IS NULL) AS is_unmanaged
+                            FROM users
+                            WHERE school_id = ${user.school_id} AND role IN ('GURU', 'KEPALA_SEKOLAH')
+                            ORDER BY name;
+                        `;
+                    }
+                    const { rows: allUsers } = await usersQuery;
                     return response.status(200).json({ allUsers });
 
                 case 'getAllSchools':
@@ -247,17 +262,34 @@ export default async function handler(request, response) {
                     return response.status(201).json({ success: true, school: newSchool[0] });
 
                 case 'updateUserConfiguration':
-                     if (user.role !== 'SUPER_ADMIN') {
+                     if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN_SEKOLAH') {
                          return response.status(403).json({ error: 'Forbidden: Access denied' });
                     }
                     const { targetEmail, newRole, newSchoolId, newClasses } = payload;
                     
-                    // Validasi: Jangan demote SUPER_ADMIN bawaan
-                    if (SUPER_ADMIN_EMAILS.includes(targetEmail) && newRole !== 'SUPER_ADMIN') {
-                        return response.status(400).json({ error: 'Cannot demote a bootstrapped Super Admin.' });
+                    if (user.role === 'ADMIN_SEKOLAH') {
+                        // Security check for School Admin
+                        if (!user.school_id) return response.status(403).json({ error: 'Admin Sekolah tidak ditugaskan ke sekolah manapun.' });
+
+                        // 1. Can only manage users in their own school
+                        const { rows: targetUserRows } = await sql`SELECT school_id FROM users WHERE email = ${targetEmail}`;
+                        if (targetUserRows.length === 0 || targetUserRows[0].school_id !== user.school_id) {
+                            return response.status(403).json({ error: 'Anda hanya dapat mengelola pengguna di sekolah Anda sendiri.' });
+                        }
+                        // 2. Cannot promote users to admin roles
+                        if (newRole === 'SUPER_ADMIN' || newRole === 'ADMIN_SEKOLAH') {
+                             return response.status(403).json({ error: 'Anda tidak memiliki izin untuk menetapkan peran admin.' });
+                        }
+                        // 3. Cannot change a user's school
+                        if (newSchoolId !== user.school_id.toString()) {
+                             return response.status(403).json({ error: 'Anda tidak dapat memindahkan pengguna ke sekolah lain.' });
+                        }
+                    } else { // SUPER_ADMIN checks
+                        if (SUPER_ADMIN_EMAILS.includes(targetEmail) && newRole !== 'SUPER_ADMIN') {
+                            return response.status(400).json({ error: 'Cannot demote a bootstrapped Super Admin.' });
+                        }
                     }
                     
-                    // Pastikan kelas hanya diatur untuk GURU
                     const assignedClasses = newRole === 'GURU' ? newClasses : '{}';
                     
                     await sql`
@@ -308,7 +340,7 @@ export default async function handler(request, response) {
                                         studentData[studentName] = { name: studentName, class: log.class, absences: [] };
                                     }
                                     studentData[studentName].absences.push({ date: log.date, status });
-                                }
+                                 }
                             });
                         });
     
