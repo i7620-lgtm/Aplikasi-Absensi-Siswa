@@ -24,14 +24,20 @@ export let state = {
         users: [],
         schools: [], // To store list of all schools
         isLoading: true,
-        pollingIntervalId: null, // For real-time updates
+        polling: {
+            timeoutId: null,
+            interval: 10000,
+        },
     },
     dashboard: {
         allTeacherData: [],
         isLoading: true,
         isDataLoaded: false, // Flag to check if initial data fetch is complete
         selectedDate: new Date().toISOString().split('T')[0],
-        pollingIntervalId: null, // For real-time updates
+        polling: {
+            timeoutId: null,
+            interval: 10000,
+        },
         activeView: 'report', // 'report', 'percentage', 'ai'
         chartViewMode: 'daily', // 'daily', 'weekly', 'monthly', 'yearly'
         chartClassFilter: 'all', // 'all' or specific class name
@@ -42,7 +48,10 @@ export let state = {
         },
     },
     setup: {
-        pollingIntervalId: null, // For real-time updates of teacher profile
+        polling: {
+            timeoutId: null,
+            interval: 10000,
+        },
     },
     maintenanceMode: {
         isActive: false,
@@ -94,19 +103,19 @@ export function navigateTo(screen) {
 
 
     // --- START: Real-time update cleanup ---
-    if (state.dashboard.pollingIntervalId) {
-        clearInterval(state.dashboard.pollingIntervalId);
-        setState({ dashboard: { ...state.dashboard, pollingIntervalId: null } });
+    if (state.dashboard.polling.timeoutId) {
+        clearTimeout(state.dashboard.polling.timeoutId);
+        setState({ dashboard: { ...state.dashboard, polling: { timeoutId: null, interval: 10000 } } });
         console.log('Dashboard polling stopped.');
     }
-    if (state.adminPanel.pollingIntervalId) {
-        clearInterval(state.adminPanel.pollingIntervalId);
-        setState({ adminPanel: { ...state.adminPanel, pollingIntervalId: null } });
+    if (state.adminPanel.polling.timeoutId) {
+        clearTimeout(state.adminPanel.polling.timeoutId);
+        setState({ adminPanel: { ...state.adminPanel, polling: { timeoutId: null, interval: 10000 } } });
         console.log('Admin Panel polling stopped.');
     }
-    if (state.setup.pollingIntervalId) {
-        clearInterval(state.setup.pollingIntervalId);
-        setState({ setup: { ...state.setup, pollingIntervalId: null } });
+    if (state.setup.polling.timeoutId) {
+        clearTimeout(state.setup.polling.timeoutId);
+        setState({ setup: { ...state.setup, polling: { timeoutId: null, interval: 10000 } } });
         console.log('Setup Screen (Teacher/Admin) polling stopped.');
     }
     // --- END: Real-time update cleanup ---
