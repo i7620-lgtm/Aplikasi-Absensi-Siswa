@@ -401,75 +401,81 @@ async function renderDashboardScreen() {
             const { allData } = await apiService.getGlobalData(schoolId);
             const selectedDate = state.dashboard.selectedDate;
             
-            const logsForDate = [];
+            // 1. Create a master list of all students for each class in the school.
             const studentListsByClass = {};
-
             allData.forEach(teacherData => {
-                // Correctly merge student lists from all teachers for a comprehensive roster.
                 if (teacherData.students_by_class) {
                     for (const className in teacherData.students_by_class) {
+                        // Use a Set to avoid duplicate student entries for the same class from different teachers.
                         const currentStudents = new Set(studentListsByClass[className] || []);
                         const newStudents = teacherData.students_by_class[className].students || [];
                         newStudents.forEach(student => currentStudents.add(student));
                         studentListsByClass[className] = Array.from(currentStudents);
                     }
                 }
-                // Collect all logs for the selected date.
+            });
+
+            // 2. Aggregate all attendance logs for the selected date, keyed by class.
+            const aggregatedLogsByClass = {};
+            allData.forEach(teacherData => {
                 (teacherData.saved_logs || []).forEach(log => {
                     if (log.date === selectedDate) {
-                        logsForDate.push({ ...log, teacherName: teacherData.user_name });
+                        const className = log.class;
+                        // Initialize if this is the first log for this class on this date.
+                        if (!aggregatedLogsByClass[className]) {
+                            aggregatedLogsByClass[className] = {
+                                attendance: {},
+                                teacherNames: new Set(),
+                            };
+                        }
+                        // Merge attendance data. If two teachers mark the same student, the last one processed wins.
+                        Object.assign(aggregatedLogsByClass[className].attendance, log.attendance);
+                        // Add the teacher's name to the set for attribution.
+                        aggregatedLogsByClass[className].teacherNames.add(teacherData.user_name);
                     }
                 });
             });
 
 
             if (state.dashboard.activeView === 'report') {
-                const absentStudentsByClass = {};
-                logsForDate.forEach(log => {
-                    // Ensure the class entry exists.
-                    if (!absentStudentsByClass[log.class]) {
-                        absentStudentsByClass[log.class] = { students: [], teacherNames: new Set() };
-                    }
-                    
-                    // Add the teacher's name (Set handles duplicates).
-                    absentStudentsByClass[log.class].teacherNames.add(log.teacherName);
+                const classNames = Object.keys(aggregatedLogsByClass).sort();
+                const classesWithAbsences = classNames.filter(className => 
+                    Object.values(aggregatedLogsByClass[className].attendance).some(status => status !== 'H')
+                );
 
-                    // Aggregate absent students.
-                    Object.entries(log.attendance).forEach(([studentName, status]) => {
-                        if (status !== 'H') {
-                           absentStudentsByClass[log.class].students.push({ name: studentName, status: status });
-                        }
-                    });
-                });
-
-                const classNames = Object.keys(absentStudentsByClass).sort();
-                if (classNames.length === 0 || classNames.every(c => absentStudentsByClass[c].students.length === 0)) {
+                if (classesWithAbsences.length === 0) {
                     reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada siswa yang absen pada tanggal yang dipilih.</p>`;
                 } else {
-                    reportContent.innerHTML = classNames.map(className => {
-                        const classData = absentStudentsByClass[className];
-                        if (classData.students.length === 0) return '';
-                        classData.students.sort((a, b) => a.name.localeCompare(b.name));
+                    reportContent.innerHTML = classesWithAbsences.map(className => {
+                        const log = aggregatedLogsByClass[className];
+                        const absentStudents = Object.entries(log.attendance)
+                            .filter(([_, status]) => status !== 'H')
+                            .map(([name, status]) => ({ name, status }));
+                        
+                        if (absentStudents.length === 0) return '';
+                        absentStudents.sort((a, b) => a.name.localeCompare(b.name));
 
-                        // Display all teachers involved.
-                        const teacherDisplay = Array.from(classData.teacherNames).join(', ');
+                        const teacherDisplay = Array.from(log.teacherNames).join(', ');
 
                         return `<div class="bg-slate-50 p-4 rounded-lg">
                             <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${className}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${teacherDisplay}</p></div>
                             <div class="overflow-x-auto"><table class="w-full text-sm">
                                 <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
-                                <tbody>${classData.students.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${s.name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
+                                <tbody>${absentStudents.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${s.name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
                             </table></div></div>`;
                     }).join('');
                 }
             }
             else if (state.dashboard.activeView === 'percentage') {
-                if (logsForDate.length === 0) {
+                const classNames = Object.keys(aggregatedLogsByClass).sort();
+
+                if (classNames.length === 0) {
                      percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8 col-span-full">Tidak ada data absensi untuk ditampilkan pada tanggal ini.</p>`;
                 } else {
                     percentageContent.innerHTML = '';
-                    logsForDate.sort((a,b) => a.class.localeCompare(b.class)).forEach(log => {
-                        const totalStudents = studentListsByClass[log.class]?.length || Object.keys(log.attendance).length;
+                    classNames.forEach(className => {
+                        const log = aggregatedLogsByClass[className];
+                        const totalStudents = studentListsByClass[className]?.length || Object.keys(log.attendance).length;
                         if (totalStudents === 0) return;
 
                         const absentCount = Object.values(log.attendance).filter(s => s !== 'H').length;
@@ -477,10 +483,10 @@ async function renderDashboardScreen() {
                         
                         const chartContainer = document.createElement('div');
                         chartContainer.className = 'bg-slate-50 p-4 rounded-lg flex flex-col items-center';
-                        chartContainer.innerHTML = `<h3 class="font-bold text-blue-600 mb-2">Kelas ${log.class}</h3><canvas id="chart-${log.class}"></canvas>`;
+                        chartContainer.innerHTML = `<h3 class="font-bold text-blue-600 mb-2">Kelas ${className}</h3><canvas id="chart-${className}"></canvas>`;
                         percentageContent.appendChild(chartContainer);
 
-                        const ctx = document.getElementById(`chart-${log.class}`).getContext('2d');
+                        const ctx = document.getElementById(`chart-${className}`).getContext('2d');
                         new Chart(ctx, {
                             type: 'pie',
                             data: {
