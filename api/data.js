@@ -309,7 +309,6 @@ export default async function handler(request, response) {
                         }
                     }
                     
-                    // FIX: Enclosed case in a block to correctly scope this variable.
                     let finalSchoolId = newSchoolId === "" ? null : newSchoolId;
 
                     if (newRole === 'SUPER_ADMIN') {
@@ -318,6 +317,7 @@ export default async function handler(request, response) {
                     
                     const assignedClasses = newRole === 'GURU' ? newClasses : '{}';
                     
+                    // Update the user's main profile in the 'users' table
                     await sql`
                         UPDATE users 
                         SET 
@@ -326,6 +326,13 @@ export default async function handler(request, response) {
                             assigned_classes = ${assignedClasses}
                         WHERE email = ${targetEmail}`;
                     
+                    // CRITICAL FIX: Also update the school_id in the user's existing attendance data
+                    // This ensures their historical data is correctly associated with their new school.
+                    await sql`
+                        UPDATE absensi_data
+                        SET school_id = ${finalSchoolId}
+                        WHERE user_email = ${targetEmail}`;
+
                     return response.status(200).json({ success: true });
                 }
                 case 'generateAiRecommendation': {
