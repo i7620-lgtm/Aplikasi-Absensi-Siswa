@@ -29,6 +29,7 @@ export let state = {
     dashboard: {
         allTeacherData: [],
         isLoading: true,
+        isDataLoaded: false, // Flag to check if initial data fetch is complete
         selectedDate: new Date().toISOString().split('T')[0],
         pollingIntervalId: null, // For real-time updates
         activeView: 'report', // 'report', 'percentage', 'ai'
