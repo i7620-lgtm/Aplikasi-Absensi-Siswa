@@ -1,3 +1,4 @@
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -404,13 +405,16 @@ async function renderDashboardScreen() {
             const studentListsByClass = {};
 
             allData.forEach(teacherData => {
-                if(teacherData.students_by_class) {
-                    for(const className in teacherData.students_by_class) {
-                        if (!studentListsByClass[className]) {
-                            studentListsByClass[className] = teacherData.students_by_class[className].students || [];
-                        }
+                // Correctly merge student lists from all teachers for a comprehensive roster.
+                if (teacherData.students_by_class) {
+                    for (const className in teacherData.students_by_class) {
+                        const currentStudents = new Set(studentListsByClass[className] || []);
+                        const newStudents = teacherData.students_by_class[className].students || [];
+                        newStudents.forEach(student => currentStudents.add(student));
+                        studentListsByClass[className] = Array.from(currentStudents);
                     }
                 }
+                // Collect all logs for the selected date.
                 (teacherData.saved_logs || []).forEach(log => {
                     if (log.date === selectedDate) {
                         logsForDate.push({ ...log, teacherName: teacherData.user_name });
@@ -418,12 +422,19 @@ async function renderDashboardScreen() {
                 });
             });
 
+
             if (state.dashboard.activeView === 'report') {
                 const absentStudentsByClass = {};
                 logsForDate.forEach(log => {
+                    // Ensure the class entry exists.
                     if (!absentStudentsByClass[log.class]) {
-                         absentStudentsByClass[log.class] = { students: [], teacherName: log.teacherName };
+                        absentStudentsByClass[log.class] = { students: [], teacherNames: new Set() };
                     }
+                    
+                    // Add the teacher's name (Set handles duplicates).
+                    absentStudentsByClass[log.class].teacherNames.add(log.teacherName);
+
+                    // Aggregate absent students.
                     Object.entries(log.attendance).forEach(([studentName, status]) => {
                         if (status !== 'H') {
                            absentStudentsByClass[log.class].students.push({ name: studentName, status: status });
@@ -440,8 +451,11 @@ async function renderDashboardScreen() {
                         if (classData.students.length === 0) return '';
                         classData.students.sort((a, b) => a.name.localeCompare(b.name));
 
+                        // Display all teachers involved.
+                        const teacherDisplay = Array.from(classData.teacherNames).join(', ');
+
                         return `<div class="bg-slate-50 p-4 rounded-lg">
-                            <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${className}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${classData.teacherName}</p></div>
+                            <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${className}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${teacherDisplay}</p></div>
                             <div class="overflow-x-auto"><table class="w-full text-sm">
                                 <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
                                 <tbody>${classData.students.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${s.name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
