@@ -401,64 +401,66 @@ async function renderDashboardScreen() {
 
             const { allData } = await apiService.getGlobalData(schoolId);
             const selectedDate = state.dashboard.selectedDate;
-            
-            const allClassNamesInSchool = CLASSES;
 
+            // Step 1: Sanitize and parse all teacher data robustly.
+            const parsedData = allData.map(teacherData => {
+                let students_by_class = teacherData.students_by_class;
+                if (typeof students_by_class === 'string') {
+                    try { students_by_class = JSON.parse(students_by_class); } catch (e) { students_by_class = {}; }
+                }
+
+                let saved_logs = teacherData.saved_logs;
+                if (typeof saved_logs === 'string') {
+                    try { saved_logs = JSON.parse(saved_logs); } catch (e) { saved_logs = []; }
+                }
+                
+                if (typeof students_by_class !== 'object' || students_by_class === null) students_by_class = {};
+                if (!Array.isArray(saved_logs)) saved_logs = [];
+
+                return { ...teacherData, students_by_class, saved_logs };
+            });
+
+            // Step 2: Aggregate all student lists from all teachers.
             const studentListsByClass = {};
-            allData.forEach(teacherData => {
-                let studentsData = teacherData.students_by_class;
-                if (typeof studentsData === 'string') {
-                    try {
-                        studentsData = JSON.parse(studentsData);
-                    } catch (e) {
-                        console.error("Gagal mem-parsing students_by_class untuk guru:", teacherData.user_name, e);
-                        studentsData = null;
-                    }
-                }
-
-                if (studentsData) {
-                    for (const className in studentsData) {
-                        if (studentsData.hasOwnProperty(className) && studentsData[className] && Array.isArray(studentsData[className].students)) {
-                            const currentStudents = new Set(studentListsByClass[className] || []);
-                            studentsData[className].students.forEach(student => currentStudents.add(student));
-                            studentListsByClass[className] = Array.from(currentStudents).sort();
-                        }
+            parsedData.forEach(teacherData => {
+                for (const className in teacherData.students_by_class) {
+                    const classData = teacherData.students_by_class[className];
+                    if (classData && Array.isArray(classData.students)) {
+                        if (!studentListsByClass[className]) studentListsByClass[className] = new Set();
+                        classData.students.forEach(student => studentListsByClass[className].add(student));
                     }
                 }
             });
+            for (const className in studentListsByClass) {
+                studentListsByClass[className] = Array.from(studentListsByClass[className]).sort();
+            }
 
+            // Step 3: Aggregate all attendance logs for the selected date.
             const aggregatedLogsByClass = {};
-            allData.forEach(teacherData => {
-                let logs = teacherData.saved_logs;
-                if (typeof logs === 'string') {
-                    try {
-                        logs = JSON.parse(logs);
-                    } catch (e) {
-                        console.error("Gagal mem-parsing saved_logs untuk guru:", teacherData.user_name, e);
-                        logs = [];
-                    }
-                }
+            parsedData.forEach(teacherData => {
+                teacherData.saved_logs
+                    .filter(log => log && log.date === selectedDate)
+                    .forEach(log => {
+                        const className = log.class;
+                        if (!className) return; 
 
-                if (Array.isArray(logs)) {
-                    logs.forEach(log => {
-                        if (log && log.date === selectedDate) {
-                            const className = log.class;
-                            if (!aggregatedLogsByClass[className]) {
-                                aggregatedLogsByClass[className] = {
-                                    attendance: {},
-                                    teacherNames: new Set(),
-                                };
-                            }
-                            if (log.attendance && typeof log.attendance === 'object') {
-                                Object.assign(aggregatedLogsByClass[className].attendance, log.attendance);
-                            }
-                            aggregatedLogsByClass[className].teacherNames.add(teacherData.user_name);
+                        if (!aggregatedLogsByClass[className]) {
+                            aggregatedLogsByClass[className] = {
+                                attendance: {},
+                                teacherNames: new Set(),
+                            };
                         }
+                        
+                        if (log.attendance && typeof log.attendance === 'object') {
+                            Object.assign(aggregatedLogsByClass[className].attendance, log.attendance);
+                        }
+                        aggregatedLogsByClass[className].teacherNames.add(teacherData.user_name);
                     });
-                }
             });
 
-
+            // Step 4: Render the content based on the active view and aggregated data.
+            const allClassNamesInSchool = CLASSES;
+            
             if (state.dashboard.activeView === 'report') {
                 if (allClassNamesInSchool.length === 0) {
                     reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada kelas yang terdaftar dalam aplikasi.</p>`;
