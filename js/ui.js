@@ -441,12 +441,16 @@ async function renderDashboardScreen() {
                         </select>
                     </div>
                 </div>
-                <div id="chart-container" class="relative mx-auto" style="max-width: 450px; height: 450px;">
-                    <canvas id="dashboard-pie-chart"></canvas>
-                    <div id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center">
-                        <p class="text-slate-500 bg-white p-4 rounded-lg">Tidak ada data absensi untuk filter yang dipilih.</p>
+                <div class="flex flex-col md:flex-row items-center justify-center gap-8 p-4">
+                    <div id="chart-container" class="relative w-full md:w-1/2" style="max-width: 400px; max-height: 400px;">
+                        <canvas id="dashboard-pie-chart"></canvas>
+                        <div id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center">
+                            <p class="text-slate-500 bg-white p-4 rounded-lg">Tidak ada data absensi untuk filter yang dipilih.</p>
+                        </div>
                     </div>
-                </div>`;
+                    <div id="custom-legend-container" class="w-full md:w-1/2 max-w-xs"></div>
+                </div>
+                `;
 
             document.querySelectorAll('.chart-time-btn').forEach(btn => {
                 btn.onclick = async (e) => {
@@ -492,6 +496,14 @@ async function renderDashboardScreen() {
             const totalRecords = Object.values(counts).reduce((sum, val) => sum + val, 0);
             const chartCanvas = document.getElementById('dashboard-pie-chart');
             const noDataEl = document.getElementById('chart-no-data');
+            const legendContainer = document.getElementById('custom-legend-container');
+            
+            const chartData = [
+                { label: 'Hadir', value: counts.H, color: '#22c55e' },
+                { label: 'Sakit', value: counts.S, color: '#fbbf24' },
+                { label: 'Izin', value: counts.I, color: '#3b82f6' },
+                { label: 'Alpa', value: counts.A, color: '#ef4444' }
+            ];
 
             if (window.dashboardPieChart instanceof Chart) {
                 window.dashboardPieChart.destroy();
@@ -500,39 +512,82 @@ async function renderDashboardScreen() {
             if (totalRecords > 0) {
                 chartCanvas.style.display = 'block';
                 noDataEl.classList.add('hidden');
+                
+                legendContainer.innerHTML = chartData.map((item, index) => {
+                    const percentage = totalRecords > 0 ? ((item.value / totalRecords) * 100).toFixed(1) : 0;
+                    return `
+                    <div class="legend-item flex items-center justify-between p-3 rounded-lg transition duration-200 cursor-pointer" data-index="${index}">
+                        <div class="flex items-center gap-3">
+                            <span class="w-4 h-4 rounded-full" style="background-color: ${item.color};"></span>
+                            <span class="font-semibold text-slate-700">${item.label}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-bold text-slate-800">${item.value}</span>
+                            <span class="text-sm text-slate-500 ml-2">(${percentage}%)</span>
+                        </div>
+                    </div>`;
+                }).join('');
+
                 const ctx = chartCanvas.getContext('2d');
                 window.dashboardPieChart = new Chart(ctx, {
                     type: 'pie',
                     data: {
-                        labels: ['Hadir', 'Sakit', 'Izin', 'Alpa'],
+                        labels: chartData.map(d => d.label),
                         datasets: [{
-                            data: [counts.H, counts.S, counts.I, counts.A],
-                            backgroundColor: ['#22c55e', '#fbbf24', '#3b82f6', '#ef4444'],
+                            data: chartData.map(d => d.value),
+                            backgroundColor: chartData.map(d => d.color),
                             borderColor: '#ffffff',
-                            borderWidth: 3
+                            borderWidth: 3,
+                            hoverOffset: 12,
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle' } },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        const label = context.label || '';
-                                        const value = context.raw;
-                                        const percentage = ((value / totalRecords) * 100).toFixed(1);
-                                        return `${label}: ${value} (${percentage}%)`;
-                                    }
-                                }
-                            }
+                            legend: { display: false }, // Disable default legend
+                            tooltip: { enabled: true } // Keep tooltip for quick hover info
                         }
                     }
                 });
+
+                // --- INTERACTIVITY LOGIC ---
+                const legendItems = legendContainer.querySelectorAll('.legend-item');
+
+                const setActive = (index) => {
+                     window.dashboardPieChart.setActiveElements([{ datasetIndex: 0, index: index }]);
+                     window.dashboardPieChart.update();
+                     legendItems.forEach((item, i) => {
+                        item.classList.toggle('bg-slate-100', i === index);
+                     });
+                };
+                const clearActive = () => {
+                     window.dashboardPieChart.setActiveElements([]);
+                     window.dashboardPieChart.update();
+                     legendItems.forEach(item => item.classList.remove('bg-slate-100'));
+                };
+
+                // Chart hover -> Legend highlight
+                chartCanvas.onpointermove = (e) => {
+                    const activeElements = window.dashboardPieChart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+                    if (activeElements.length > 0) {
+                        setActive(activeElements[0].index);
+                    } else {
+                        clearActive();
+                    }
+                };
+                chartCanvas.onpointerleave = clearActive;
+
+                // Legend hover -> Chart highlight
+                legendItems.forEach(item => {
+                    item.addEventListener('mouseenter', () => setActive(parseInt(item.dataset.index)));
+                    item.addEventListener('mouseleave', clearActive);
+                });
+
             } else {
                 chartCanvas.style.display = 'none';
                 noDataEl.classList.remove('hidden');
+                legendContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada data untuk ditampilkan di legenda.</p>`;
             }
         } else if (activeView === 'ai') {
             const { isLoading, result, error } = aiRecommendation;
