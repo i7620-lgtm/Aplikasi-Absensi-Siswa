@@ -312,9 +312,56 @@ export async function handleGenerateAiRecommendation() {
     render();
     
     try {
-        const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
-        const { recommendation } = await apiService.generateAiRecommendation(schoolId);
+        // --- START: Client-side data processing ---
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+        const studentSummary = {};
+
+        state.dashboard.allTeacherData.forEach(teacher => {
+            (teacher.saved_logs || []).forEach(log => {
+                const logDate = new Date(log.date + 'T00:00:00');
+                if (logDate >= thirtyDaysAgo) {
+                    Object.entries(log.attendance).forEach(([studentName, status]) => {
+                        if (status !== 'H') {
+                            if (!studentSummary[studentName]) {
+                                studentSummary[studentName] = { name: studentName, class: log.class, S: 0, I: 0, A: 0, total: 0 };
+                            }
+                            if (studentSummary[studentName][status] !== undefined) {
+                                studentSummary[studentName][status]++;
+                                studentSummary[studentName].total++;
+                            }
+                        }
+                    });
+                }
+            });
+        });
+        
+        const topStudentsData = Object.values(studentSummary)
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 20)
+            .map(({ name, class: className, S, I, A, total }) => ({ name, class: className, S, I, A, total }));
+        // --- END: Client-side data processing ---
+
+        if (topStudentsData.length === 0) {
+            await setState({
+                dashboard: {
+                    ...state.dashboard,
+                    aiRecommendation: {
+                        isLoading: false,
+                        result: "Tidak ada data absensi (sakit, izin, alpa) dalam 30 hari terakhir untuk dianalisis.",
+                        error: null,
+                    },
+                },
+            });
+            render();
+            return;
+        }
+
+        const { recommendation } = await apiService.generateAiRecommendation(topStudentsData);
         await setState({ dashboard: { ...state.dashboard, aiRecommendation: { isLoading: false, result: recommendation, error: null } } });
+    
     } catch(error) {
         console.error("AI Recommendation Error:", error);
         const errorMessage = error.message || 'Gagal menghasilkan rekomendasi. Coba lagi nanti.';
