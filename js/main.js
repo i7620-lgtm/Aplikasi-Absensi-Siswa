@@ -33,6 +33,8 @@ export let state = {
         selectedDate: new Date().toISOString().split('T')[0],
         pollingIntervalId: null, // For real-time updates
         activeView: 'report', // 'report', 'percentage', 'ai'
+        chartViewMode: 'daily', // 'daily', 'weekly', 'monthly', 'yearly'
+        chartClassFilter: 'all', // 'all' or specific class name
         aiRecommendation: {
             isLoading: false,
             result: null,
