@@ -401,7 +401,12 @@ async function renderDashboardScreen() {
             const { allData } = await apiService.getGlobalData(schoolId);
             const selectedDate = state.dashboard.selectedDate;
             
-            // 1. Create a master list of all students for each class in the school. This is the source of truth.
+            // --- LOGIC REWORK ---
+            // 1. Establish the definitive list of classes for the school.
+            //    This is the crucial fix: we use the global CLASSES constant as the source of truth.
+            const allClassNamesInSchool = CLASSES;
+
+            // 2. Aggregate student lists from all teachers to get accurate total counts for percentages.
             const studentListsByClass = {};
             allData.forEach(teacherData => {
                 if (teacherData.students_by_class) {
@@ -414,7 +419,7 @@ async function renderDashboardScreen() {
                 }
             });
 
-            // 2. Aggregate all attendance logs for the selected date.
+            // 3. Aggregate all attendance logs for the selected date.
             const aggregatedLogsByClass = {};
             allData.forEach(teacherData => {
                 (teacherData.saved_logs || []).forEach(log => {
@@ -434,10 +439,8 @@ async function renderDashboardScreen() {
 
 
             if (state.dashboard.activeView === 'report') {
-                const allClassNamesInSchool = Object.keys(studentListsByClass).sort();
-
                 if (allClassNamesInSchool.length === 0) {
-                    reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Belum ada data siswa yang ditambahkan di sekolah ini.</p>`;
+                    reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada kelas yang terdaftar dalam aplikasi.</p>`;
                 } else {
                     reportContent.innerHTML = allClassNamesInSchool.map(className => {
                         const log = aggregatedLogsByClass[className];
@@ -478,17 +481,14 @@ async function renderDashboardScreen() {
                 }
             }
             else if (state.dashboard.activeView === 'percentage') {
-                const allClassNamesInSchool = Object.keys(studentListsByClass).sort();
-
                 if (allClassNamesInSchool.length === 0) {
-                     percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8 col-span-full">Belum ada data siswa yang ditambahkan di sekolah ini.</p>`;
+                     percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8 col-span-full">Tidak ada kelas yang terdaftar dalam aplikasi.</p>`;
                 } else {
                     percentageContent.innerHTML = '';
                     allClassNamesInSchool.forEach(className => {
                         const log = aggregatedLogsByClass[className];
                         const totalStudentsInClass = studentListsByClass[className]?.length || 0;
-                        if (totalStudentsInClass === 0) return;
-
+                        
                         const chartContainer = document.createElement('div');
                         chartContainer.className = 'bg-slate-50 p-4 rounded-lg flex flex-col items-center';
                         
@@ -496,6 +496,11 @@ async function renderDashboardScreen() {
                             chartContainer.innerHTML = `<h3 class="font-bold text-slate-700 mb-2">Kelas ${className}</h3>
                                                         <div class="flex-grow flex items-center justify-center">
                                                             <p class="text-sm text-slate-500 italic text-center">Belum ada laporan absensi untuk tanggal ini.</p>
+                                                        </div>`;
+                        } else if (totalStudentsInClass === 0) {
+                             chartContainer.innerHTML = `<h3 class="font-bold text-slate-700 mb-2">Kelas ${className}</h3>
+                                                        <div class="flex-grow flex items-center justify-center">
+                                                            <p class="text-sm text-slate-500 italic text-center">Belum ada daftar siswa untuk kelas ini.</p>
                                                         </div>`;
                         } else {
                             const totalStudentsInLog = Object.keys(log.attendance).length;
