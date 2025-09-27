@@ -334,64 +334,17 @@ export default async function handler(request, response) {
                     }
     
                     try {
-                        let dataQuery;
-                        const { schoolId: contextSchoolId } = payload;
-
-                        if (user.role === 'KEPALA_SEKOLAH') {
-                            if (!user.school_id) {
-                                return response.status(404).json({ error: "Kepala Sekolah belum ditugaskan ke sekolah manapun." });
-                            }
-                            dataQuery = sql`SELECT ad.saved_logs FROM absensi_data ad WHERE ad.school_id = ${user.school_id}`;
-                        } else { // SUPER_ADMIN
-                            if (contextSchoolId) {
-                                dataQuery = sql`SELECT ad.saved_logs FROM absensi_data ad WHERE ad.school_id = ${contextSchoolId}`;
-                            } else {
-                                dataQuery = sql`SELECT ad.saved_logs FROM absensi_data ad`;
-                            }
+                        const { preprocessedData } = payload;
+    
+                        if (!preprocessedData || preprocessedData.length === 0) {
+                             return response.status(200).json({ success: true, recommendation: "Tidak ada data absensi yang relevan untuk dianalisis." });
                         }
-                        
-                        const { rows: allData } = await dataQuery;
-                        
-                        const thirtyDaysAgo = new Date();
-                        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-                        const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split('T')[0];
-    
-                        const recentLogs = allData.flatMap(teacher =>
-                            (teacher.saved_logs || []).filter(log => log.date >= thirtyDaysAgoStr)
-                        );
-    
-                        if (recentLogs.length === 0) {
-                             return response.status(200).json({ success: true, recommendation: "Tidak ada data absensi dalam 30 hari terakhir untuk dianalisis." });
-                        }
-    
-                        const studentSummary = {};
-                        recentLogs.forEach(log => {
-                            Object.entries(log.attendance).forEach(([studentName, status]) => {
-                                if (status !== 'H') { // S, I, A
-                                    if (!studentSummary[studentName]) {
-                                        studentSummary[studentName] = { name: studentName, class: log.class, S: 0, I: 0, A: 0 };
-                                    }
-                                    if (studentSummary[studentName][status] !== undefined) {
-                                         studentSummary[studentName][status]++;
-                                    }
-                                 }
-                            });
-                        });
-                        
-                        const summarizedData = Object.values(studentSummary).map(student => ({
-                            ...student,
-                            total: student.S + student.I + student.A
-                        }));
-
-                        summarizedData.sort((a, b) => b.total - a.total);
-
-                        const topStudentsData = summarizedData.slice(0, 20);
     
                         const prompt = `
                             Anda adalah seorang asisten kepala sekolah virtual yang cerdas dan proaktif. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir dan memberikan rekomendasi yang tajam, ringkas, dan dapat ditindaklanjuti.
 
-                            Berikut adalah data absensi yang sudah dirangkum untuk 20 siswa dengan total absensi tertinggi dalam format JSON. Setiap siswa memiliki total jumlah absensi berdasarkan status (S=Sakit, I=Izin, A=Alpa).
-                            Data: ${JSON.stringify(topStudentsData)}
+                            Berikut adalah data absensi yang sudah dirangkum untuk siswa dengan total absensi tertinggi dalam format JSON. Setiap siswa memiliki total jumlah absensi berdasarkan status (S=Sakit, I=Izin, A=Alpa).
+                            Data: ${JSON.stringify(preprocessedData)}
 
                             Berdasarkan data di atas, lakukan hal berikut:
                             1.  **Identifikasi Peringatan Dini:** Cari 5 siswa dengan jumlah total absensi (S+I+A) tertinggi. Tampilkan dalam format daftar bernomor. Untuk setiap siswa, sebutkan NAMA LENGKAP, KELAS, dan rincian jumlah absensi (Contoh: Total 8 kali: 5 Alpa, 2 Sakit, 1 Izin).
@@ -411,7 +364,7 @@ export default async function handler(request, response) {
                         return response.status(200).json({ success: true, recommendation });
     
                     } catch (error) {
-                        console.error('Gemini API call failed:', error);
+                        console.error('AI Recommendation processing failed:', error);
                         return response.status(500).json({ error: 'Gagal menghasilkan rekomendasi AI.', details: error.message });
                     }
                 }
@@ -422,7 +375,7 @@ export default async function handler(request, response) {
         } else {
             return response.status(405).json({ error: 'Method Not Allowed' });
         }
-    } catch (error) {
+    } catch (error)
         console.error('API Error:', error);
         return response.status(500).json({ error: 'An internal server error occurred', details: error.message });
     }
