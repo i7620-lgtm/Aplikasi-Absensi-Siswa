@@ -361,11 +361,9 @@ async function renderDashboardScreen() {
     const aiContent = document.getElementById('dashboard-content-ai');
 
     // --- CORE RENDERING LOGIC ---
-    // This function renders all dashboard panels based on the current state. It does NOT fetch data.
     const renderDashboardPanels = () => {
         const { isDataLoaded, allTeacherData, selectedDate, activeView, aiRecommendation } = state.dashboard;
 
-        // Show a loader only if the initial data hasn't been loaded yet.
         if (!isDataLoaded) {
             const loaderHtml = `<p class="text-center text-slate-500 py-8">Memuat data sekolah...</p>`;
             if (reportContent) reportContent.innerHTML = loaderHtml;
@@ -374,17 +372,8 @@ async function renderDashboardScreen() {
             return;
         }
 
-        // --- Data Processing ---
         const logsForDate = [];
-        const studentListsByClass = {};
         allTeacherData.forEach(teacherData => {
-            if (teacherData.students_by_class) {
-                for (const className in teacherData.students_by_class) {
-                    if (!studentListsByClass[className]) {
-                        studentListsByClass[className] = teacherData.students_by_class[className].students || [];
-                    }
-                }
-            }
             (teacherData.saved_logs || []).forEach(log => {
                 if (log.date === selectedDate) {
                     logsForDate.push({ ...log, teacherName: teacherData.user_name });
@@ -392,7 +381,6 @@ async function renderDashboardScreen() {
             });
         });
 
-        // --- Render Active View ---
         if (activeView === 'report') {
             const absentStudentsByClass = {};
             logsForDate.forEach(log => {
@@ -422,29 +410,129 @@ async function renderDashboardScreen() {
                 }).join('');
             }
         } else if (activeView === 'percentage') {
-            if (logsForDate.length === 0) {
-                percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8 col-span-full">Tidak ada data absensi untuk ditampilkan pada tanggal ini.</p>`;
-            } else {
-                percentageContent.innerHTML = '';
-                logsForDate.sort((a, b) => a.class.localeCompare(b.class)).forEach(log => {
-                    const totalStudents = studentListsByClass[log.class]?.length || Object.keys(log.attendance).length;
-                    if (totalStudents === 0) return;
-                    const absentCount = Object.values(log.attendance).filter(s => s !== 'H').length;
-                    const presentCount = totalStudents - absentCount;
-                    const chartContainer = document.createElement('div');
-                    chartContainer.className = 'bg-slate-50 p-4 rounded-lg flex flex-col items-center';
-                    chartContainer.innerHTML = `<h3 class="font-bold text-blue-600 mb-2">Kelas ${log.class}</h3><canvas id="chart-${log.class}"></canvas>`;
-                    percentageContent.appendChild(chartContainer);
-                    const ctx = document.getElementById(`chart-${log.class}`).getContext('2d');
-                    new Chart(ctx, {
-                        type: 'pie',
-                        data: {
-                            labels: ['Hadir', 'Tidak Hadir'],
-                            datasets: [{ data: [presentCount, absentCount], backgroundColor: ['#22c55e', '#ef4444'], borderColor: '#f8fafc', borderWidth: 2 }]
-                        },
-                        options: { responsive: true, plugins: { legend: { position: 'top' } } }
-                    });
+            if (!percentageContent) return;
+
+            const allClasses = [...new Set(allTeacherData.flatMap(teacher => 
+                teacher.students_by_class ? Object.keys(teacher.students_by_class) : []
+            ))].sort();
+
+            const timeFilters = [
+                { id: 'daily', text: 'Harian' }, { id: 'weekly', text: 'Mingguan' },
+                { id: 'monthly', text: 'Bulanan' }, { id: 'yearly', text: 'Tahunan' },
+            ];
+
+            percentageContent.innerHTML = `
+                <div class="flex flex-col md:flex-row gap-4 mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200">
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Periode Waktu</label>
+                        <div id="chart-time-filter" class="flex flex-wrap gap-2">
+                            ${timeFilters.map(f => `
+                                <button data-mode="${f.id}" class="chart-time-btn flex-1 sm:flex-initial text-sm font-semibold py-2 px-4 rounded-lg transition ${state.dashboard.chartViewMode === f.id ? 'bg-blue-600 text-white' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'}">
+                                    ${f.text}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <div class="flex-1">
+                        <label for="chart-class-filter" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Kelas</label>
+                        <select id="chart-class-filter" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
+                            <option value="all">Seluruh Sekolah</option>
+                            ${allClasses.map(c => `<option value="${c}" ${state.dashboard.chartClassFilter === c ? 'selected' : ''}>Kelas ${c}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                <div id="chart-container" class="relative mx-auto" style="max-width: 450px; height: 450px;">
+                    <canvas id="dashboard-pie-chart"></canvas>
+                    <div id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center">
+                        <p class="text-slate-500 bg-white p-4 rounded-lg">Tidak ada data absensi untuk filter yang dipilih.</p>
+                    </div>
+                </div>`;
+
+            document.querySelectorAll('.chart-time-btn').forEach(btn => {
+                btn.onclick = async (e) => {
+                    await setState({ dashboard: { ...state.dashboard, chartViewMode: e.currentTarget.dataset.mode }});
+                    renderDashboardPanels();
+                };
+            });
+            document.getElementById('chart-class-filter').onchange = async (e) => {
+                await setState({ dashboard: { ...state.dashboard, chartClassFilter: e.target.value }});
+                renderDashboardPanels();
+            };
+
+            const counts = { H: 0, S: 0, I: 0, A: 0 };
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const startOfWeek = new Date(today);
+            const dayOfWeek = today.getDay();
+            const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+            startOfWeek.setDate(diff);
+            startOfWeek.setHours(0, 0, 0, 0);
+
+            const filteredLogs = allTeacherData
+                .flatMap(teacher => teacher.saved_logs || [])
+                .filter(log => {
+                    const logDate = new Date(log.date + 'T00:00:00');
+                    switch (state.dashboard.chartViewMode) {
+                        case 'daily': return logDate.getTime() === new Date(state.dashboard.selectedDate + 'T00:00:00').getTime();
+                        case 'weekly': return logDate >= startOfWeek;
+                        case 'monthly': return logDate.getFullYear() === today.getFullYear() && logDate.getMonth() === today.getMonth();
+                        case 'yearly': return logDate.getFullYear() === today.getFullYear();
+                        default: return true;
+                    }
+                })
+                .filter(log => state.dashboard.chartClassFilter === 'all' || log.class === state.dashboard.chartClassFilter);
+
+            filteredLogs.forEach(log => {
+                Object.values(log.attendance).forEach(status => {
+                    if (counts[status] !== undefined) counts[status]++;
                 });
+            });
+
+            const totalRecords = Object.values(counts).reduce((sum, val) => sum + val, 0);
+            const chartCanvas = document.getElementById('dashboard-pie-chart');
+            const noDataEl = document.getElementById('chart-no-data');
+
+            if (window.dashboardPieChart instanceof Chart) {
+                window.dashboardPieChart.destroy();
+            }
+
+            if (totalRecords > 0) {
+                chartCanvas.style.display = 'block';
+                noDataEl.classList.add('hidden');
+                const ctx = chartCanvas.getContext('2d');
+                window.dashboardPieChart = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Hadir', 'Sakit', 'Izin', 'Alpa'],
+                        datasets: [{
+                            data: [counts.H, counts.S, counts.I, counts.A],
+                            backgroundColor: ['#22c55e', '#fbbf24', '#3b82f6', '#ef4444'],
+                            borderColor: '#ffffff',
+                            borderWidth: 3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle' } },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.label || '';
+                                        const value = context.raw;
+                                        const percentage = ((value / totalRecords) * 100).toFixed(1);
+                                        return `${label}: ${value} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                chartCanvas.style.display = 'none';
+                noDataEl.classList.remove('hidden');
             }
         } else if (activeView === 'ai') {
             const { isLoading, result, error } = aiRecommendation;
@@ -466,26 +554,23 @@ async function renderDashboardScreen() {
         }
     };
 
-    // --- DATA FETCHING LOGIC ---
-    // This function fetches all data for the school, updates the state, and triggers a re-render.
     const fetchAndRenderDashboardData = async () => {
         console.log('Dashboard is refreshing...');
         try {
             const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
-            if ((!schoolId && state.userProfile.role !== 'SUPER_ADMIN') || (!schoolId && state.userProfile.role === 'SUPER_ADMIN')) {
+            if (!schoolId) {
                 const message = state.userProfile.role === 'SUPER_ADMIN' ? 'Konteks sekolah belum dipilih.' : 'Anda belum ditugaskan ke sekolah manapun.';
                 reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">${message}</p>`;
+                percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8">${message}</p>`;
                 return;
             }
             const { allData } = await apiService.getGlobalData(schoolId);
-            // Only update state and re-render if data has actually changed.
             if (JSON.stringify(allData) !== JSON.stringify(state.dashboard.allTeacherData)) {
                 console.log('Dashboard data has changed. Updating view.');
                 await setState({ dashboard: { ...state.dashboard, allTeacherData: allData, isDataLoaded: true } });
                 renderDashboardPanels();
             } else {
                 console.log('Dashboard data unchanged.');
-                // Ensure isDataLoaded is true even if there's no new data on first load.
                 if (!state.dashboard.isDataLoaded) {
                     await setState({ dashboard: { ...state.dashboard, isDataLoaded: true } });
                     renderDashboardPanels();
@@ -506,23 +591,19 @@ async function renderDashboardScreen() {
     if (backBtn) {
         backBtn.addEventListener('click', () => navigateTo(backBtn.dataset.target));
     }
-    // Tab listeners
     ['report', 'percentage', 'ai'].forEach(view => {
         document.getElementById(`db-view-${view}`).addEventListener('click', async () => {
             await setState({ dashboard: { ...state.dashboard, activeView: view } });
-            renderScreen('dashboard'); // Re-render the whole screen to update tab styles
+            renderScreen('dashboard'); 
         });
     });
-    // Date picker listener
     document.getElementById('ks-date-picker').addEventListener('change', async (e) => {
-        await setState({ dashboard: { ...state.dashboard, selectedDate: e.target.value } });
-        renderDashboardPanels(); // Instantly re-render panels with new date, no re-fetch.
+        await setState({ dashboard: { ...state.dashboard, selectedDate: e.target.value, chartViewMode: 'daily' } });
+        renderDashboardPanels();
     });
 
-    // --- ORCHESTRATION ---
-    renderDashboardPanels(); // Render initial state (likely a loader).
-    fetchAndRenderDashboardData(); // Fetch initial data.
-    // Set up silent polling for background updates.
+    renderDashboardPanels();
+    fetchAndRenderDashboardData();
     if (state.dashboard.pollingIntervalId) {
         clearInterval(state.dashboard.pollingIntervalId);
     }
