@@ -401,36 +401,32 @@ async function renderDashboardScreen() {
             const { allData } = await apiService.getGlobalData(schoolId);
             const selectedDate = state.dashboard.selectedDate;
             
-            // 1. Create a master list of all students for each class in the school.
+            // 1. Create a master list of all students for each class in the school. This is the source of truth.
             const studentListsByClass = {};
             allData.forEach(teacherData => {
                 if (teacherData.students_by_class) {
                     for (const className in teacherData.students_by_class) {
-                        // Use a Set to avoid duplicate student entries for the same class from different teachers.
                         const currentStudents = new Set(studentListsByClass[className] || []);
                         const newStudents = teacherData.students_by_class[className].students || [];
                         newStudents.forEach(student => currentStudents.add(student));
-                        studentListsByClass[className] = Array.from(currentStudents);
+                        studentListsByClass[className] = Array.from(currentStudents).sort();
                     }
                 }
             });
 
-            // 2. Aggregate all attendance logs for the selected date, keyed by class.
+            // 2. Aggregate all attendance logs for the selected date.
             const aggregatedLogsByClass = {};
             allData.forEach(teacherData => {
                 (teacherData.saved_logs || []).forEach(log => {
                     if (log.date === selectedDate) {
                         const className = log.class;
-                        // Initialize if this is the first log for this class on this date.
                         if (!aggregatedLogsByClass[className]) {
                             aggregatedLogsByClass[className] = {
                                 attendance: {},
                                 teacherNames: new Set(),
                             };
                         }
-                        // Merge attendance data. If two teachers mark the same student, the last one processed wins.
                         Object.assign(aggregatedLogsByClass[className].attendance, log.attendance);
-                        // Add the teacher's name to the set for attribution.
                         aggregatedLogsByClass[className].teacherNames.add(teacherData.user_name);
                     }
                 });
@@ -438,68 +434,97 @@ async function renderDashboardScreen() {
 
 
             if (state.dashboard.activeView === 'report') {
-                const classNames = Object.keys(aggregatedLogsByClass).sort();
-                const classesWithAbsences = classNames.filter(className => 
-                    Object.values(aggregatedLogsByClass[className].attendance).some(status => status !== 'H')
-                );
+                const allClassNamesInSchool = Object.keys(studentListsByClass).sort();
 
-                if (classesWithAbsences.length === 0) {
-                    reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada siswa yang absen pada tanggal yang dipilih.</p>`;
+                if (allClassNamesInSchool.length === 0) {
+                    reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Belum ada data siswa yang ditambahkan di sekolah ini.</p>`;
                 } else {
-                    reportContent.innerHTML = classesWithAbsences.map(className => {
+                    reportContent.innerHTML = allClassNamesInSchool.map(className => {
                         const log = aggregatedLogsByClass[className];
-                        const absentStudents = Object.entries(log.attendance)
-                            .filter(([_, status]) => status !== 'H')
-                            .map(([name, status]) => ({ name, status }));
-                        
-                        if (absentStudents.length === 0) return '';
-                        absentStudents.sort((a, b) => a.name.localeCompare(b.name));
 
+                        if (!log) {
+                            return `<div class="bg-slate-50 p-4 rounded-lg">
+                                <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-slate-700">Kelas ${className}</h3></div>
+                                <p class="text-sm text-slate-500 italic">Belum ada laporan absensi untuk tanggal ini.</p>
+                            </div>`;
+                        }
+
+                        const absentStudents = Object.entries(log.attendance).filter(([_, status]) => status !== 'H');
+                        
+                        if (absentStudents.length === 0) {
+                            return `<div class="bg-slate-50 p-4 rounded-lg">
+                                <div class="flex justify-between items-center mb-2">
+                                    <h3 class="font-bold text-green-600">Kelas ${className}</h3>
+                                    <p class="text-xs text-slate-400 font-medium">Oleh: ${Array.from(log.teacherNames).join(', ')}</p>
+                                </div>
+                                <p class="text-sm text-slate-600">✅ Semua siswa hadir.</p>
+                            </div>`;
+                        }
+                        
+                        absentStudents.sort((a, b) => a[0].localeCompare(b[0]));
                         const teacherDisplay = Array.from(log.teacherNames).join(', ');
 
                         return `<div class="bg-slate-50 p-4 rounded-lg">
-                            <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${className}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${teacherDisplay}</p></div>
+                            <div class="flex justify-between items-center mb-2">
+                                <h3 class="font-bold text-blue-600">Kelas ${className}</h3>
+                                <p class="text-xs text-slate-400 font-medium">Oleh: ${teacherDisplay}</p>
+                            </div>
                             <div class="overflow-x-auto"><table class="w-full text-sm">
                                 <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
-                                <tbody>${absentStudents.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${s.name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
-                            </table></div></div>`;
+                                <tbody>${absentStudents.map(([name, status]) => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${status === 'S' ? 'bg-yellow-100 text-yellow-800' : status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${status}</span></td></tr>`).join('')}</tbody>
+                            </table></div>
+                        </div>`;
                     }).join('');
                 }
             }
             else if (state.dashboard.activeView === 'percentage') {
-                const classNames = Object.keys(aggregatedLogsByClass).sort();
+                const allClassNamesInSchool = Object.keys(studentListsByClass).sort();
 
-                if (classNames.length === 0) {
-                     percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8 col-span-full">Tidak ada data absensi untuk ditampilkan pada tanggal ini.</p>`;
+                if (allClassNamesInSchool.length === 0) {
+                     percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8 col-span-full">Belum ada data siswa yang ditambahkan di sekolah ini.</p>`;
                 } else {
                     percentageContent.innerHTML = '';
-                    classNames.forEach(className => {
+                    allClassNamesInSchool.forEach(className => {
                         const log = aggregatedLogsByClass[className];
-                        const totalStudents = studentListsByClass[className]?.length || Object.keys(log.attendance).length;
-                        if (totalStudents === 0) return;
+                        const totalStudentsInClass = studentListsByClass[className]?.length || 0;
+                        if (totalStudentsInClass === 0) return;
 
-                        const absentCount = Object.values(log.attendance).filter(s => s !== 'H').length;
-                        const presentCount = totalStudents - absentCount;
-                        
                         const chartContainer = document.createElement('div');
                         chartContainer.className = 'bg-slate-50 p-4 rounded-lg flex flex-col items-center';
-                        chartContainer.innerHTML = `<h3 class="font-bold text-blue-600 mb-2">Kelas ${className}</h3><canvas id="chart-${className}"></canvas>`;
-                        percentageContent.appendChild(chartContainer);
+                        
+                        if (!log) {
+                            chartContainer.innerHTML = `<h3 class="font-bold text-slate-700 mb-2">Kelas ${className}</h3>
+                                                        <div class="flex-grow flex items-center justify-center">
+                                                            <p class="text-sm text-slate-500 italic text-center">Belum ada laporan absensi untuk tanggal ini.</p>
+                                                        </div>`;
+                        } else {
+                            const totalStudentsInLog = Object.keys(log.attendance).length;
+                            const finalTotalStudents = Math.max(totalStudentsInClass, totalStudentsInLog);
 
-                        const ctx = document.getElementById(`chart-${className}`).getContext('2d');
-                        new Chart(ctx, {
-                            type: 'pie',
-                            data: {
-                                labels: ['Hadir', 'Tidak Hadir'],
-                                datasets: [{
-                                    data: [presentCount, absentCount],
-                                    backgroundColor: ['#22c55e', '#ef4444'],
-                                    borderColor: '#f8fafc',
-                                    borderWidth: 2,
-                                }]
-                            },
-                            options: { responsive: true, plugins: { legend: { position: 'top' } } }
-                        });
+                            const absentCount = Object.values(log.attendance).filter(s => s !== 'H').length;
+                            const presentCount = finalTotalStudents - absentCount;
+                            
+                            chartContainer.innerHTML = `<h3 class="font-bold text-blue-600 mb-2">Kelas ${className}</h3><canvas id="chart-${className}"></canvas>`;
+                            
+                            setTimeout(() => {
+                                const ctx = document.getElementById(`chart-${className}`)?.getContext('2d');
+                                if (!ctx) return;
+                                new Chart(ctx, {
+                                    type: 'pie',
+                                    data: {
+                                        labels: ['Hadir', 'Tidak Hadir'],
+                                        datasets: [{
+                                            data: [presentCount, absentCount],
+                                            backgroundColor: ['#22c55e', '#ef4444'],
+                                            borderColor: '#f8fafc',
+                                            borderWidth: 2,
+                                        }]
+                                    },
+                                    options: { responsive: true, plugins: { legend: { position: 'top' } } }
+                                });
+                            }, 0);
+                        }
+                        percentageContent.appendChild(chartContainer);
                     });
                 }
             }
