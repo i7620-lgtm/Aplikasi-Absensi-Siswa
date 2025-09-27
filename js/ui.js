@@ -1,5 +1,3 @@
-
-
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -268,7 +266,7 @@ function renderMaintenanceToggle(container, isMaintenance) {
     const statusText = isMaintenance ? 'Aktif' : 'Tidak Aktif';
     const statusColor = isMaintenance ? 'text-red-600' : 'text-green-600';
     const buttonText = isMaintenance ? 'Nonaktifkan' : 'Aktifkan';
-    const buttonColor = isMaintenance ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-500';
+    const buttonColor = isMaintenance ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600';
 
     container.innerHTML = `
         <div class="flex items-center justify-between w-full">
@@ -323,7 +321,18 @@ async function renderAdminHomeScreen() {
         if (isSuperAdmin) {
             const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Dasbor');
             if (selectedSchool) {
-                await setState({ adminActingAsSchool: selectedSchool });
+                const oldSchoolId = state.adminActingAsSchool?.id;
+                // If school context changes, reset the dashboard data to force a reload
+                if (String(selectedSchool.id) !== String(oldSchoolId)) {
+                    await setState({
+                        adminActingAsSchool: selectedSchool,
+                        dashboard: {
+                            ...state.dashboard,
+                            allTeacherData: [],
+                            isDataLoaded: false,
+                        }
+                    });
+                }
                 navigateTo('dashboard');
             }
         } else {
@@ -345,236 +354,143 @@ async function renderAdminHomeScreen() {
 
 async function renderDashboardScreen() {
     appContainer.innerHTML = templates.dashboard();
-    document.getElementById('logoutBtn-ks').addEventListener('click', handleSignOut);
-    
-    const backBtn = document.getElementById('dashboard-back-btn');
-    if(backBtn) {
-        const target = backBtn.dataset.target;
-        backBtn.addEventListener('click', () => navigateTo(target));
-    }
-    
-    document.getElementById('db-view-report').addEventListener('click', () => {
-        setState({ dashboard: { ...state.dashboard, activeView: 'report' } });
-        renderScreen('dashboard');
-    });
-    document.getElementById('db-view-percentage').addEventListener('click', () => {
-        setState({ dashboard: { ...state.dashboard, activeView: 'percentage' } });
-        renderScreen('dashboard');
-    });
-    document.getElementById('db-view-ai').addEventListener('click', () => {
-        setState({ dashboard: { ...state.dashboard, activeView: 'ai' } });
-        renderScreen('dashboard');
-    });
 
-
-    document.getElementById('ks-date-picker').addEventListener('change', async (e) => {
-        navigateTo('dashboard'); 
-        await setState({ 
-            dashboard: { 
-                ...state.dashboard, 
-                selectedDate: e.target.value,
-                pollingIntervalId: null 
-            } 
-        });
-        renderScreen('dashboard');
-    });
-
+    // --- ELEMENT REFERENCES ---
     const reportContent = document.getElementById('dashboard-content-report');
     const percentageContent = document.getElementById('dashboard-content-percentage');
     const aiContent = document.getElementById('dashboard-content-ai');
 
-    const updateDashboardContent = async () => {
-        console.log('Dashboard is refreshing...');
-        try {
-            const schoolId = state.userProfile.role === 'SUPER_ADMIN' 
-                ? state.adminActingAsSchool?.id 
-                : state.userProfile.school_id;
+    // --- CORE RENDERING LOGIC ---
+    // This function renders all dashboard panels based on the current state. It does NOT fetch data.
+    const renderDashboardPanels = () => {
+        const { isDataLoaded, allTeacherData, selectedDate, activeView, aiRecommendation } = state.dashboard;
 
-            if (!schoolId && state.userProfile.role !== 'SUPER_ADMIN') {
-                 reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Anda belum ditugaskan ke sekolah manapun.</p>`;
-                 return;
-            }
-            if (!schoolId && state.userProfile.role === 'SUPER_ADMIN') {
-                 reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Konteks sekolah belum dipilih.</p>`;
-                 return;
-            }
+        // Show a loader only if the initial data hasn't been loaded yet.
+        if (!isDataLoaded) {
+            const loaderHtml = `<p class="text-center text-slate-500 py-8">Memuat data sekolah...</p>`;
+            if (reportContent) reportContent.innerHTML = loaderHtml;
+            if (percentageContent) percentageContent.innerHTML = loaderHtml;
+            if (aiContent) aiContent.innerHTML = loaderHtml;
+            return;
+        }
 
-            const { allData } = await apiService.getGlobalData(schoolId);
-            const selectedDate = state.dashboard.selectedDate;
-
-            // Step 1: Sanitize and parse all teacher data robustly.
-            const parsedData = allData.map(teacherData => {
-                let students_by_class = teacherData.students_by_class;
-                if (typeof students_by_class === 'string') {
-                    try { students_by_class = JSON.parse(students_by_class); } catch (e) { students_by_class = {}; }
-                }
-
-                let saved_logs = teacherData.saved_logs;
-                if (typeof saved_logs === 'string') {
-                    try { saved_logs = JSON.parse(saved_logs); } catch (e) { saved_logs = []; }
-                }
-                
-                if (typeof students_by_class !== 'object' || students_by_class === null) students_by_class = {};
-                if (!Array.isArray(saved_logs)) saved_logs = [];
-
-                return { ...teacherData, students_by_class, saved_logs };
-            });
-
-            // Step 2: Aggregate all student lists from all teachers.
-            const studentListsByClass = {};
-            parsedData.forEach(teacherData => {
+        // --- Data Processing ---
+        const logsForDate = [];
+        const studentListsByClass = {};
+        allTeacherData.forEach(teacherData => {
+            if (teacherData.students_by_class) {
                 for (const className in teacherData.students_by_class) {
-                    const classData = teacherData.students_by_class[className];
-                    if (classData && Array.isArray(classData.students)) {
-                        if (!studentListsByClass[className]) studentListsByClass[className] = new Set();
-                        classData.students.forEach(student => studentListsByClass[className].add(student));
+                    if (!studentListsByClass[className]) {
+                        studentListsByClass[className] = teacherData.students_by_class[className].students || [];
                     }
                 }
+            }
+            (teacherData.saved_logs || []).forEach(log => {
+                if (log.date === selectedDate) {
+                    logsForDate.push({ ...log, teacherName: teacherData.user_name });
+                }
             });
-            for (const className in studentListsByClass) {
-                studentListsByClass[className] = Array.from(studentListsByClass[className]).sort();
-            }
+        });
 
-            // Step 3: Aggregate all attendance logs for the selected date.
-            const aggregatedLogsByClass = {};
-            parsedData.forEach(teacherData => {
-                teacherData.saved_logs
-                    .filter(log => log && log.date === selectedDate)
-                    .forEach(log => {
-                        const className = log.class;
-                        if (!className) return; 
-
-                        if (!aggregatedLogsByClass[className]) {
-                            aggregatedLogsByClass[className] = {
-                                attendance: {},
-                                teacherNames: new Set(),
-                            };
-                        }
-                        
-                        if (log.attendance && typeof log.attendance === 'object') {
-                            Object.assign(aggregatedLogsByClass[className].attendance, log.attendance);
-                        }
-                        aggregatedLogsByClass[className].teacherNames.add(teacherData.user_name);
-                    });
+        // --- Render Active View ---
+        if (activeView === 'report') {
+            const absentStudentsByClass = {};
+            logsForDate.forEach(log => {
+                if (!absentStudentsByClass[log.class]) {
+                    absentStudentsByClass[log.class] = { students: [], teacherName: log.teacherName };
+                }
+                Object.entries(log.attendance).forEach(([studentName, status]) => {
+                    if (status !== 'H') {
+                        absentStudentsByClass[log.class].students.push({ name: studentName, status: status });
+                    }
+                });
             });
-
-            // Step 4: Render the content based on the active view and aggregated data.
-            const allClassNamesInSchool = CLASSES;
-            
-            if (state.dashboard.activeView === 'report') {
-                if (allClassNamesInSchool.length === 0) {
-                    reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada kelas yang terdaftar dalam aplikasi.</p>`;
-                } else {
-                    reportContent.innerHTML = allClassNamesInSchool.map(className => {
-                        const log = aggregatedLogsByClass[className];
-
-                        if (!log) {
-                            return `<div class="bg-slate-50 p-4 rounded-lg">
-                                <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-slate-700">Kelas ${className}</h3></div>
-                                <p class="text-sm text-slate-500 italic">Belum ada laporan absensi untuk tanggal ini.</p>
-                            </div>`;
-                        }
-
-                        const absentStudents = Object.entries(log.attendance).filter(([_, status]) => status !== 'H');
-                        
-                        if (absentStudents.length === 0) {
-                            return `<div class="bg-slate-50 p-4 rounded-lg">
-                                <div class="flex justify-between items-center mb-2">
-                                    <h3 class="font-bold text-green-600">Kelas ${className}</h3>
-                                    <p class="text-xs text-slate-400 font-medium">Oleh: ${Array.from(log.teacherNames).join(', ')}</p>
-                                </div>
-                                <p class="text-sm text-slate-600">✅ Semua siswa hadir.</p>
-                            </div>`;
-                        }
-                        
-                        absentStudents.sort((a, b) => a[0].localeCompare(b[0]));
-                        const teacherDisplay = Array.from(log.teacherNames).join(', ');
-
-                        return `<div class="bg-slate-50 p-4 rounded-lg">
-                            <div class="flex justify-between items-center mb-2">
-                                <h3 class="font-bold text-blue-600">Kelas ${className}</h3>
-                                <p class="text-xs text-slate-400 font-medium">Oleh: ${teacherDisplay}</p>
-                            </div>
-                            <div class="overflow-x-auto"><table class="w-full text-sm">
-                                <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
-                                <tbody>${absentStudents.map(([name, status]) => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${status === 'S' ? 'bg-yellow-100 text-yellow-800' : status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${status}</span></td></tr>`).join('')}</tbody>
-                            </table></div>
-                        </div>`;
-                    }).join('');
-                }
+            const classNames = Object.keys(absentStudentsByClass).sort();
+            if (classNames.length === 0 || classNames.every(c => absentStudentsByClass[c].students.length === 0)) {
+                reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada siswa yang absen pada tanggal yang dipilih.</p>`;
+            } else {
+                reportContent.innerHTML = classNames.map(className => {
+                    const classData = absentStudentsByClass[className];
+                    if (classData.students.length === 0) return '';
+                    classData.students.sort((a, b) => a.name.localeCompare(b.name));
+                    return `<div class="bg-slate-50 p-4 rounded-lg">
+                        <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${className}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${classData.teacherName}</p></div>
+                        <div class="overflow-x-auto"><table class="w-full text-sm">
+                            <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
+                            <tbody>${classData.students.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${s.name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
+                        </table></div></div>`;
+                }).join('');
             }
-            else if (state.dashboard.activeView === 'percentage') {
-                if (allClassNamesInSchool.length === 0) {
-                     percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8 col-span-full">Tidak ada kelas yang terdaftar dalam aplikasi.</p>`;
-                } else {
-                    percentageContent.innerHTML = '';
-                    allClassNamesInSchool.forEach(className => {
-                        const log = aggregatedLogsByClass[className];
-                        const totalStudentsInClass = studentListsByClass[className]?.length || 0;
-                        
-                        const chartContainer = document.createElement('div');
-                        chartContainer.className = 'bg-slate-50 p-4 rounded-lg flex flex-col items-center';
-                        
-                        if (!log) {
-                            chartContainer.innerHTML = `<h3 class="font-bold text-slate-700 mb-2">Kelas ${className}</h3>
-                                                        <div class="flex-grow flex items-center justify-center">
-                                                            <p class="text-sm text-slate-500 italic text-center">Belum ada laporan absensi untuk tanggal ini.</p>
-                                                        </div>`;
-                        } else if (totalStudentsInClass === 0) {
-                             chartContainer.innerHTML = `<h3 class="font-bold text-slate-700 mb-2">Kelas ${className}</h3>
-                                                        <div class="flex-grow flex items-center justify-center">
-                                                            <p class="text-sm text-slate-500 italic text-center">Belum ada daftar siswa untuk kelas ini.</p>
-                                                        </div>`;
-                        } else {
-                            const totalStudentsInLog = Object.keys(log.attendance).length;
-                            const finalTotalStudents = Math.max(totalStudentsInClass, totalStudentsInLog);
-
-                            const absentCount = Object.values(log.attendance).filter(s => s !== 'H').length;
-                            const presentCount = finalTotalStudents - absentCount;
-                            
-                            chartContainer.innerHTML = `<h3 class="font-bold text-blue-600 mb-2">Kelas ${className}</h3><canvas id="chart-${className}"></canvas>`;
-                            
-                            setTimeout(() => {
-                                const ctx = document.getElementById(`chart-${className}`)?.getContext('2d');
-                                if (!ctx) return;
-                                new Chart(ctx, {
-                                    type: 'pie',
-                                    data: {
-                                        labels: ['Hadir', 'Tidak Hadir'],
-                                        datasets: [{
-                                            data: [presentCount, absentCount],
-                                            backgroundColor: ['#22c55e', '#ef4444'],
-                                            borderColor: '#f8fafc',
-                                            borderWidth: 2,
-                                        }]
-                                    },
-                                    options: { responsive: true, plugins: { legend: { position: 'top' } } }
-                                });
-                            }, 0);
-                        }
-                        percentageContent.appendChild(chartContainer);
+        } else if (activeView === 'percentage') {
+            if (logsForDate.length === 0) {
+                percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8 col-span-full">Tidak ada data absensi untuk ditampilkan pada tanggal ini.</p>`;
+            } else {
+                percentageContent.innerHTML = '';
+                logsForDate.sort((a, b) => a.class.localeCompare(b.class)).forEach(log => {
+                    const totalStudents = studentListsByClass[log.class]?.length || Object.keys(log.attendance).length;
+                    if (totalStudents === 0) return;
+                    const absentCount = Object.values(log.attendance).filter(s => s !== 'H').length;
+                    const presentCount = totalStudents - absentCount;
+                    const chartContainer = document.createElement('div');
+                    chartContainer.className = 'bg-slate-50 p-4 rounded-lg flex flex-col items-center';
+                    chartContainer.innerHTML = `<h3 class="font-bold text-blue-600 mb-2">Kelas ${log.class}</h3><canvas id="chart-${log.class}"></canvas>`;
+                    percentageContent.appendChild(chartContainer);
+                    const ctx = document.getElementById(`chart-${log.class}`).getContext('2d');
+                    new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: ['Hadir', 'Tidak Hadir'],
+                            datasets: [{ data: [presentCount, absentCount], backgroundColor: ['#22c55e', '#ef4444'], borderColor: '#f8fafc', borderWidth: 2 }]
+                        },
+                        options: { responsive: true, plugins: { legend: { position: 'top' } } }
                     });
-                }
+                });
             }
-            else if (state.dashboard.activeView === 'ai') {
-                const { isLoading, result, error } = state.dashboard.aiRecommendation;
-                if (isLoading) {
-                    aiContent.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div><p class="loader-text">Menganalisis data absensi...</p></div>`;
-                } else if (error) {
-                    aiContent.innerHTML = `<div class="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200"><p class="font-bold">Terjadi Kesalahan</p><p>${error}</p><button id="retry-ai-btn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Coba Lagi</button></div>`;
-                    document.getElementById('retry-ai-btn').addEventListener('click', handleGenerateAiRecommendation);
-                } else if (result) {
-                    aiContent.innerHTML = `<div class="bg-slate-50 p-6 rounded-lg prose max-w-none gemini-response">${marked.parse(result)}</div>`;
-                } else {
-                    aiContent.innerHTML = `<div class="text-center p-8 bg-slate-50 rounded-lg">
-                        <h3 class="text-lg font-bold text-slate-800">Dapatkan Wawasan dengan AI</h3>
-                        <p class="text-slate-500 my-4">Klik tombol di bawah untuk meminta Gemini menganalisis data absensi 30 hari terakhir. AI akan menemukan pola, mengidentifikasi siswa yang perlu perhatian, dan memberikan rekomendasi yang dapat ditindaklanjuti.</p>
-                        <button id="generate-ai-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition">Buat Rekomendasi Sekarang</button>
-                    </div>`;
-                    document.getElementById('generate-ai-btn').addEventListener('click', handleGenerateAiRecommendation);
-                }
+        } else if (activeView === 'ai') {
+            const { isLoading, result, error } = aiRecommendation;
+            if (isLoading) {
+                aiContent.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div><p class="loader-text">Menganalisis data absensi...</p></div>`;
+            } else if (error) {
+                aiContent.innerHTML = `<div class="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200"><p class="font-bold">Terjadi Kesalahan</p><p>${error}</p><button id="retry-ai-btn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Coba Lagi</button></div>`;
+                document.getElementById('retry-ai-btn').addEventListener('click', handleGenerateAiRecommendation);
+            } else if (result) {
+                aiContent.innerHTML = `<div class="bg-slate-50 p-6 rounded-lg prose max-w-none gemini-response">${marked.parse(result)}</div>`;
+            } else {
+                aiContent.innerHTML = `<div class="text-center p-8 bg-slate-50 rounded-lg">
+                    <h3 class="text-lg font-bold text-slate-800">Dapatkan Wawasan dengan AI</h3>
+                    <p class="text-slate-500 my-4">Klik tombol di bawah untuk meminta Gemini menganalisis data absensi 30 hari terakhir. AI akan menemukan pola, mengidentifikasi siswa yang perlu perhatian, dan memberikan rekomendasi yang dapat ditindaklanjuti.</p>
+                    <button id="generate-ai-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition">Buat Rekomendasi Sekarang</button>
+                </div>`;
+                document.getElementById('generate-ai-btn').addEventListener('click', handleGenerateAiRecommendation);
             }
+        }
+    };
 
+    // --- DATA FETCHING LOGIC ---
+    // This function fetches all data for the school, updates the state, and triggers a re-render.
+    const fetchAndRenderDashboardData = async () => {
+        console.log('Dashboard is refreshing...');
+        try {
+            const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+            if ((!schoolId && state.userProfile.role !== 'SUPER_ADMIN') || (!schoolId && state.userProfile.role === 'SUPER_ADMIN')) {
+                const message = state.userProfile.role === 'SUPER_ADMIN' ? 'Konteks sekolah belum dipilih.' : 'Anda belum ditugaskan ke sekolah manapun.';
+                reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">${message}</p>`;
+                return;
+            }
+            const { allData } = await apiService.getGlobalData(schoolId);
+            // Only update state and re-render if data has actually changed.
+            if (JSON.stringify(allData) !== JSON.stringify(state.dashboard.allTeacherData)) {
+                console.log('Dashboard data has changed. Updating view.');
+                await setState({ dashboard: { ...state.dashboard, allTeacherData: allData, isDataLoaded: true } });
+                renderDashboardPanels();
+            } else {
+                console.log('Dashboard data unchanged.');
+                // Ensure isDataLoaded is true even if there's no new data on first load.
+                if (!state.dashboard.isDataLoaded) {
+                    await setState({ dashboard: { ...state.dashboard, isDataLoaded: true } });
+                    renderDashboardPanels();
+                }
+            }
         } catch (error) {
             console.error("Failed to refresh dashboard data:", error);
             const currentContent = document.querySelector(`#dashboard-content-${state.dashboard.activeView}`);
@@ -584,13 +500,33 @@ async function renderDashboardScreen() {
         }
     };
 
-    updateDashboardContent();
+    // --- EVENT LISTENERS & INITIALIZATION ---
+    document.getElementById('logoutBtn-ks').addEventListener('click', handleSignOut);
+    const backBtn = document.getElementById('dashboard-back-btn');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => navigateTo(backBtn.dataset.target));
+    }
+    // Tab listeners
+    ['report', 'percentage', 'ai'].forEach(view => {
+        document.getElementById(`db-view-${view}`).addEventListener('click', async () => {
+            await setState({ dashboard: { ...state.dashboard, activeView: view } });
+            renderScreen('dashboard'); // Re-render the whole screen to update tab styles
+        });
+    });
+    // Date picker listener
+    document.getElementById('ks-date-picker').addEventListener('change', async (e) => {
+        await setState({ dashboard: { ...state.dashboard, selectedDate: e.target.value } });
+        renderDashboardPanels(); // Instantly re-render panels with new date, no re-fetch.
+    });
 
+    // --- ORCHESTRATION ---
+    renderDashboardPanels(); // Render initial state (likely a loader).
+    fetchAndRenderDashboardData(); // Fetch initial data.
+    // Set up silent polling for background updates.
     if (state.dashboard.pollingIntervalId) {
         clearInterval(state.dashboard.pollingIntervalId);
     }
-
-    const newIntervalId = setInterval(updateDashboardContent, 10000);
+    const newIntervalId = setInterval(fetchAndRenderDashboardData, 10000);
     setState({ dashboard: { ...state.dashboard, pollingIntervalId: newIntervalId } });
     console.log(`Dashboard polling started with ID: ${newIntervalId}.`);
 }
