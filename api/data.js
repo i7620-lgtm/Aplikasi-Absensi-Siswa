@@ -377,12 +377,21 @@ export default async function handler(request, response) {
                                  }
                             });
                         });
+                        
+                        const summarizedData = Object.values(studentSummary).map(student => ({
+                            ...student,
+                            total: student.S + student.I + student.A
+                        }));
+
+                        summarizedData.sort((a, b) => b.total - a.total);
+
+                        const topStudentsData = summarizedData.slice(0, 20);
     
                         const prompt = `
                             Anda adalah seorang asisten kepala sekolah virtual yang cerdas dan proaktif. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir dan memberikan rekomendasi yang tajam, ringkas, dan dapat ditindaklanjuti.
 
-                            Berikut adalah data absensi yang sudah dirangkum dalam format JSON. Setiap siswa memiliki total jumlah absensi berdasarkan status (S=Sakit, I=Izin, A=Alpa).
-                            Data: ${JSON.stringify(Object.values(studentSummary))}
+                            Berikut adalah data absensi yang sudah dirangkum untuk 20 siswa dengan total absensi tertinggi dalam format JSON. Setiap siswa memiliki total jumlah absensi berdasarkan status (S=Sakit, I=Izin, A=Alpa).
+                            Data: ${JSON.stringify(topStudentsData)}
 
                             Berdasarkan data di atas, lakukan hal berikut:
                             1.  **Identifikasi Peringatan Dini:** Cari 5 siswa dengan jumlah total absensi (S+I+A) tertinggi. Tampilkan dalam format daftar bernomor. Untuk setiap siswa, sebutkan NAMA LENGKAP, KELAS, dan rincian jumlah absensi (Contoh: Total 8 kali: 5 Alpa, 2 Sakit, 1 Izin).
