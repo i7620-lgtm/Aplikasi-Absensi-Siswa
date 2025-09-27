@@ -309,6 +309,7 @@ export default async function handler(request, response) {
                         }
                     }
                     
+                    // FIX: Enclosed case in a block to correctly scope this variable.
                     let finalSchoolId = newSchoolId === "" ? null : newSchoolId;
 
                     if (newRole === 'SUPER_ADMIN') {
@@ -317,7 +318,6 @@ export default async function handler(request, response) {
                     
                     const assignedClasses = newRole === 'GURU' ? newClasses : '{}';
                     
-                    // Update the user's main profile in the 'users' table
                     await sql`
                         UPDATE users 
                         SET 
@@ -326,13 +326,6 @@ export default async function handler(request, response) {
                             assigned_classes = ${assignedClasses}
                         WHERE email = ${targetEmail}`;
                     
-                    // CRITICAL FIX: Also update the school_id in the user's existing attendance data
-                    // This ensures their historical data is correctly associated with their new school.
-                    await sql`
-                        UPDATE absensi_data
-                        SET school_id = ${finalSchoolId}
-                        WHERE user_email = ${targetEmail}`;
-
                     return response.status(200).json({ success: true });
                 }
                 case 'generateAiRecommendation': {
@@ -371,14 +364,16 @@ export default async function handler(request, response) {
                              return response.status(200).json({ success: true, recommendation: "Tidak ada data absensi dalam 30 hari terakhir untuk dianalisis." });
                         }
     
-                        const studentData = {};
+                        const studentSummary = {};
                         recentLogs.forEach(log => {
                             Object.entries(log.attendance).forEach(([studentName, status]) => {
-                                if (status !== 'H') {
-                                    if (!studentData[studentName]) {
-                                        studentData[studentName] = { name: studentName, class: log.class, absences: [] };
+                                if (status !== 'H') { // S, I, A
+                                    if (!studentSummary[studentName]) {
+                                        studentSummary[studentName] = { name: studentName, class: log.class, S: 0, I: 0, A: 0 };
                                     }
-                                    studentData[studentName].absences.push({ date: log.date, status });
+                                    if (studentSummary[studentName][status] !== undefined) {
+                                         studentSummary[studentName][status]++;
+                                    }
                                  }
                             });
                         });
@@ -386,12 +381,12 @@ export default async function handler(request, response) {
                         const prompt = `
                             Anda adalah seorang asisten kepala sekolah virtual yang cerdas dan proaktif. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir dan memberikan rekomendasi yang tajam, ringkas, dan dapat ditindaklanjuti.
 
-                            Berikut adalah data absensi mentah dalam format JSON. Setiap siswa memiliki daftar absensi dengan tanggal dan status (S=Sakit, I=Izin, A=Alpa).
-                            Data: ${JSON.stringify(Object.values(studentData))}
+                            Berikut adalah data absensi yang sudah dirangkum dalam format JSON. Setiap siswa memiliki total jumlah absensi berdasarkan status (S=Sakit, I=Izin, A=Alpa).
+                            Data: ${JSON.stringify(Object.values(studentSummary))}
 
                             Berdasarkan data di atas, lakukan hal berikut:
-                            1.  **Identifikasi Peringatan Dini:** Cari 5 siswa dengan jumlah absensi tertinggi. Tampilkan dalam format daftar bernomor. Untuk setiap siswa, sebutkan NAMA LENGKAP, KELAS, dan rincian jumlah absensi (Contoh: Total 8 kali: 5 Alpa, 2 Sakit, 1 Izin).
-                            2.  **Temukan Pola Tersembunyi:** Apakah ada tren yang menarik? Misalnya, siswa yang sering absen di hari tertentu, atau peningkatan absensi 'Sakit' di kelas tertentu yang mungkin mengindikasikan masalah kesehatan. Sebutkan 1-2 pola paling signifikan yang Anda temukan.
+                            1.  **Identifikasi Peringatan Dini:** Cari 5 siswa dengan jumlah total absensi (S+I+A) tertinggi. Tampilkan dalam format daftar bernomor. Untuk setiap siswa, sebutkan NAMA LENGKAP, KELAS, dan rincian jumlah absensi (Contoh: Total 8 kali: 5 Alpa, 2 Sakit, 1 Izin).
+                            2.  **Temukan Pola Tersembunyi:** Apakah ada tren yang menarik? Misalnya, kelas dengan total absensi 'Sakit' yang tinggi, atau dominasi absensi 'Alpa' secara keseluruhan. Sebutkan 1-2 pola paling signifikan yang Anda temukan berdasarkan data agregat. (Catatan: Anda tidak memiliki data harian, jadi fokus pada tren agregat).
                             3.  **Berikan Rekomendasi Konkret:** Berikan 2-3 rekomendasi yang jelas dan dapat langsung ditindaklanjuti oleh kepala sekolah atau guru BK. Rekomendasi harus berhubungan langsung dengan temuan Anda di atas.
 
                             Gunakan format Markdown untuk jawaban Anda dengan heading, bold, dan list agar mudah dibaca.
