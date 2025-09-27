@@ -8,6 +8,15 @@ const loaderWrapper = document.getElementById('loader-wrapper');
 const notificationEl = document.getElementById('notification');
 const offlineIndicator = document.getElementById('offline-indicator');
 
+// --- POLLING CONFIGURATION ---
+const INITIAL_POLLING_INTERVAL = 10000; // 10 seconds
+const MAX_POLLING_INTERVAL = 300000; // 5 minutes (300 seconds)
+
+function getNextInterval(currentInterval) {
+    const next = currentInterval * 2;
+    return Math.min(next, MAX_POLLING_INTERVAL);
+}
+
 
 export function showLoader(message) {
     loaderWrapper.querySelector('.loader-text').textContent = message;
@@ -177,44 +186,48 @@ function renderSetupScreen() {
         document.getElementById('class-select').value = state.selectedClass || availableClasses[0] || '';
     }
     
-    // --- START: Real-time update for Teacher's profile ---
+    // --- START: Real-time update logic ---
     if (isTeacher) {
-        const updateTeacherProfile = async () => {
-            console.log("Checking for teacher profile updates...");
+        const teacherProfilePoller = async () => {
+            console.log(`Teacher profile polling (interval: ${state.setup.polling.interval / 1000}s)...`);
+            if (state.setup.polling.timeoutId) {
+                clearTimeout(state.setup.polling.timeoutId);
+            }
             try {
                 const { userProfile: latestProfile } = await apiService.getUserProfile();
-                const hasChanged = JSON.stringify(latestProfile.assigned_classes) !== JSON.stringify(state.userProfile.assigned_classes);
-                
-                if (hasChanged) {
-                    console.log("Teacher profile has changed, re-rendering.");
-                    if (state.setup.pollingIntervalId) {
-                        clearInterval(state.setup.pollingIntervalId);
-                    }
-                    await setState({ 
-                        userProfile: latestProfile,
-                        setup: { ...state.setup, pollingIntervalId: null }
-                    });
+                let nextInterval;
+
+                if (JSON.stringify(latestProfile.assigned_classes) !== JSON.stringify(state.userProfile.assigned_classes)) {
+                    console.log("Teacher profile changed. Re-rendering and resetting interval.");
+                    await setState({ userProfile: latestProfile, setup: { ...state.setup, polling: { timeoutId: null, interval: INITIAL_POLLING_INTERVAL } }});
                     showNotification('Hak akses kelas Anda telah diperbarui oleh admin.', 'info');
-                    renderScreen('setup');
+                    renderScreen('setup'); // This re-runs this whole function, starting a new poller.
+                    return; // Stop current poller execution.
+                } else {
+                    nextInterval = getNextInterval(state.setup.polling.interval);
                 }
+
+                const newTimeoutId = setTimeout(teacherProfilePoller, nextInterval);
+                await setState({ setup: { polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
+
             } catch (error) {
                 console.error("Failed to fetch teacher profile update:", error);
+                const newTimeoutId = setTimeout(teacherProfilePoller, state.setup.polling.interval);
+                await setState({ setup: { polling: { ...state.setup.polling, timeoutId: newTimeoutId } } });
             }
         };
-
-        if (state.setup.pollingIntervalId) {
-            clearInterval(state.setup.pollingIntervalId);
-        }
-        const newIntervalId = setInterval(updateTeacherProfile, 10000);
-        setState({ setup: { ...state.setup, pollingIntervalId: newIntervalId } });
-        console.log(`Setup (Teacher) polling started with ID: ${newIntervalId}.`);
+        teacherProfilePoller();
     } else if (isAdmin) {
-        const updateAdminClassData = async () => {
+        const adminClassDataPoller = async () => {
             const selectElement = document.getElementById('class-select');
             if (!selectElement || !selectElement.value) return;
-
+            
             const selectedClass = selectElement.value;
-            console.log(`Admin polling for class: ${selectedClass}...`);
+            console.log(`Admin setup polling for class ${selectedClass} (interval: ${state.setup.polling.interval / 1000}s)...`);
+            
+            if (state.setup.polling.timeoutId) {
+                clearTimeout(state.setup.polling.timeoutId);
+            }
 
             try {
                 const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
@@ -231,42 +244,44 @@ function renderSetupScreen() {
                 }
 
                 const currentStudents = state.studentsByClass[selectedClass]?.students || [];
+                let nextInterval;
                 
                 if (latestStudents && JSON.stringify(latestStudents) !== JSON.stringify(currentStudents)) {
-                    console.log(`Data for class ${selectedClass} has changed. Updating state.`);
-                    
-                    const updatedStudentsByClass = {
-                        ...state.studentsByClass,
-                        [selectedClass]: {
-                            ...(state.studentsByClass[selectedClass] || {}),
-                            students: latestStudents,
-                        }
-                    };
-
+                    console.log(`Data for class ${selectedClass} changed. Updating state & resetting interval.`);
+                    const updatedStudentsByClass = { ...state.studentsByClass, [selectedClass]: { ...(state.studentsByClass[selectedClass] || {}), students: latestStudents } };
                     await setState({ studentsByClass: updatedStudentsByClass });
-                    
                     showNotification(`Data untuk kelas ${selectedClass} telah diperbarui secara otomatis.`, 'info');
+                    nextInterval = INITIAL_POLLING_INTERVAL;
+                } else {
+                    nextInterval = getNextInterval(state.setup.polling.interval);
                 }
+                
+                const newTimeoutId = setTimeout(adminClassDataPoller, nextInterval);
+                await setState({ setup: { polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
 
             } catch (error) {
                 console.error(`Failed to fetch class data update for admin:`, error);
+                const newTimeoutId = setTimeout(adminClassDataPoller, state.setup.polling.interval);
+                await setState({ setup: { polling: { ...state.setup.polling, timeoutId: newTimeoutId } } });
             }
         };
-
-        if (state.setup.pollingIntervalId) {
-            clearInterval(state.setup.pollingIntervalId);
-        }
-        const newIntervalId = setInterval(updateAdminClassData, 10000);
-        setState({ setup: { ...state.setup, pollingIntervalId: newIntervalId } });
-        console.log(`Setup (Admin) polling started with ID: ${newIntervalId}.`);
+        
+        adminClassDataPoller();
+        
+        document.getElementById('class-select').addEventListener('change', async () => {
+            console.log("Class selection changed, restarting admin setup poller.");
+            await setState({ setup: { polling: { ...state.setup.polling, interval: INITIAL_POLLING_INTERVAL } } });
+            adminClassDataPoller();
+        });
     }
 }
+
 
 function renderMaintenanceToggle(container, isMaintenance) {
     const statusText = isMaintenance ? 'Aktif' : 'Tidak Aktif';
     const statusColor = isMaintenance ? 'text-red-600' : 'text-green-600';
     const buttonText = isMaintenance ? 'Nonaktifkan' : 'Aktifkan';
-    const buttonColor = isMaintenance ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600';
+    const buttonColor = isMaintenance ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-500';
 
     container.innerHTML = `
         <div class="flex items-center justify-between w-full">
@@ -609,8 +624,13 @@ async function renderDashboardScreen() {
         }
     };
 
-    const fetchAndRenderDashboardData = async () => {
-        console.log('Dashboard is refreshing...');
+    const dashboardPoller = async () => {
+        console.log(`Dashboard polling (interval: ${state.dashboard.polling.interval / 1000}s)...`);
+        
+        if (state.dashboard.polling.timeoutId) {
+            clearTimeout(state.dashboard.polling.timeoutId);
+        }
+
         try {
             const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
             if (!schoolId) {
@@ -619,33 +639,41 @@ async function renderDashboardScreen() {
                 percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8">${message}</p>`;
                 return;
             }
+
             const { allData } = await apiService.getGlobalData(schoolId);
+            let nextInterval;
+
             if (JSON.stringify(allData) !== JSON.stringify(state.dashboard.allTeacherData)) {
-                console.log('Dashboard data has changed. Updating view.');
+                console.log('Dashboard data changed. Updating view & resetting interval.');
                 await setState({ dashboard: { ...state.dashboard, allTeacherData: allData, isDataLoaded: true } });
                 renderDashboardPanels();
+                nextInterval = INITIAL_POLLING_INTERVAL;
             } else {
-                console.log('Dashboard data unchanged.');
+                console.log('Dashboard data unchanged. Increasing interval.');
+                nextInterval = getNextInterval(state.dashboard.polling.interval);
                 if (!state.dashboard.isDataLoaded) {
-                    await setState({ dashboard: { ...state.dashboard, isDataLoaded: true } });
-                    renderDashboardPanels();
+                     await setState({ dashboard: { ...state.dashboard, allTeacherData: allData, isDataLoaded: true } });
+                     renderDashboardPanels();
                 }
             }
+            
+            const newTimeoutId = setTimeout(dashboardPoller, nextInterval);
+            await setState({ dashboard: { ...state.dashboard, polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
         } catch (error) {
-            console.error("Failed to refresh dashboard data:", error);
+            console.error("Dashboard poll failed:", error);
             const currentContent = document.querySelector(`#dashboard-content-${state.dashboard.activeView}`);
-            if (currentContent) {
-                currentContent.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
-            }
+            if (currentContent) currentContent.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
+            
+            const newTimeoutId = setTimeout(dashboardPoller, state.dashboard.polling.interval);
+            await setState({ dashboard: { ...state.dashboard, polling: { ...state.dashboard.polling, timeoutId: newTimeoutId } } });
         }
     };
 
     // --- EVENT LISTENERS & INITIALIZATION ---
     document.getElementById('logoutBtn-ks').addEventListener('click', handleSignOut);
     const backBtn = document.getElementById('dashboard-back-btn');
-    if (backBtn) {
-        backBtn.addEventListener('click', () => navigateTo(backBtn.dataset.target));
-    }
+    if (backBtn) backBtn.addEventListener('click', () => navigateTo(backBtn.dataset.target));
+    
     ['report', 'percentage', 'ai'].forEach(view => {
         document.getElementById(`db-view-${view}`).addEventListener('click', async () => {
             await setState({ dashboard: { ...state.dashboard, activeView: view } });
@@ -658,15 +686,58 @@ async function renderDashboardScreen() {
     });
 
     renderDashboardPanels();
-    fetchAndRenderDashboardData();
-    if (state.dashboard.pollingIntervalId) {
-        clearInterval(state.dashboard.pollingIntervalId);
-    }
-    const newIntervalId = setInterval(fetchAndRenderDashboardData, 10000);
-    setState({ dashboard: { ...state.dashboard, pollingIntervalId: newIntervalId } });
-    console.log(`Dashboard polling started with ID: ${newIntervalId}.`);
+    dashboardPoller();
 }
 
+function renderAdminPanelTable(container, allUsers, allSchools) {
+    container.innerHTML = `
+        <table class="w-full text-left">
+            <thead>
+                <tr class="border-b bg-slate-50">
+                    <th class="p-3 text-sm font-semibold text-slate-600">Pengguna</th>
+                    <th class="p-3 text-sm font-semibold text-slate-600">Peran</th>
+                    <th class="p-3 text-sm font-semibold text-slate-600">Sekolah</th>
+                    <th class="p-3 text-sm font-semibold text-slate-600 text-center">Tindakan</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${allUsers.map(user => {
+                    const school = allSchools.find(s => s.id === user.school_id);
+                    const isNew = user.is_unmanaged;
+                    const newBadge = isNew ? `<span class="ml-2 px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full">BARU</span>` : '';
+
+                    return `
+                    <tr class="border-b hover:bg-slate-50 transition">
+                        <td class="p-3">
+                            <div class="flex items-center gap-3">
+                                <img src="${user.picture}" alt="${user.name}" class="w-10 h-10 rounded-full"/>
+                                <div>
+                                    <p class="font-medium text-slate-800">${user.name}${newBadge}</p>
+                                    <p class="text-xs text-slate-500">${user.email}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="p-3 text-sm text-slate-600">${user.role}</td>
+                        <td class="p-3 text-sm text-slate-600">${school ? school.name : '<span class="italic text-slate-400">Belum Ditugaskan</span>'}</td>
+                        <td class="p-3 text-center">
+                            <button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" 
+                                    data-user='${JSON.stringify(user)}'>
+                                Kelola
+                            </button>
+                        </td>
+                    </tr>
+                `}).join('')}
+            </tbody>
+        </table>
+    `;
+
+    document.querySelectorAll('.manage-user-btn').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const user = JSON.parse(e.currentTarget.dataset.user);
+            showManageUserModal(user, allSchools);
+        });
+    });
+}
 
 async function renderAdminPanelScreen() {
     appContainer.innerHTML = templates.adminPanel();
@@ -677,9 +748,15 @@ async function renderAdminPanelScreen() {
     const container = document.getElementById('admin-panel-container');
 
     await setState({ adminPanel: { ...state.adminPanel, isLoading: true } });
+    container.innerHTML = `<p class="text-center text-slate-500 py-8">Memuat daftar pengguna...</p>`;
 
-    const updateAdminPanelContent = async () => {
-        console.log("Admin panel is refreshing...");
+    const adminPanelPoller = async () => {
+        console.log(`Admin panel polling (interval: ${state.adminPanel.polling.interval / 1000}s)...`);
+
+        if (state.adminPanel.polling.timeoutId) {
+            clearTimeout(state.adminPanel.polling.timeoutId);
+        }
+
         try {
             const [{ allUsers }, { allSchools }] = await Promise.all([
                 apiService.getAllUsers(),
@@ -688,84 +765,40 @@ async function renderAdminPanelScreen() {
 
             const oldData = { users: state.adminPanel.users, schools: state.adminPanel.schools };
             const newData = { users: allUsers, schools: allSchools };
-            
-            if (oldData.users.length > 0) {
-                const oldUserEmails = new Set(oldData.users.map(u => u.email));
-                newData.users.forEach(newUser => {
-                    if (!oldUserEmails.has(newUser.email)) {
-                        showNotification(`${newUser.name} baru saja mendaftar.`, 'info');
-                    }
-                });
+            let nextInterval;
+
+            if (JSON.stringify(oldData) !== JSON.stringify(newData)) {
+                console.log("Admin panel data changed. Updating view & resetting interval.");
+                if (oldData.users.length > 0) {
+                    const oldUserEmails = new Set(oldData.users.map(u => u.email));
+                    newData.users.forEach(newUser => {
+                        if (!oldUserEmails.has(newUser.email)) {
+                            showNotification(`${newUser.name} baru saja mendaftar.`, 'info');
+                        }
+                    });
+                }
+                renderAdminPanelTable(container, allUsers, allSchools);
+                await setState({ adminPanel: { ...state.adminPanel, ...newData, isLoading: false } });
+                nextInterval = INITIAL_POLLING_INTERVAL;
+            } else {
+                console.log("Admin panel data unchanged. Increasing interval.");
+                nextInterval = getNextInterval(state.adminPanel.polling.interval);
+                if (state.adminPanel.isLoading) {
+                    renderAdminPanelTable(container, allUsers, allSchools);
+                    await setState({ adminPanel: { ...state.adminPanel, ...newData, isLoading: false } });
+                }
             }
 
-            const hasChanged = JSON.stringify(oldData) !== JSON.stringify(newData);
-            if (!hasChanged && !state.adminPanel.isLoading) {
-                console.log("Admin panel data unchanged.");
-                return;
-            }
-
-            await setState({ adminPanel: { ...state.adminPanel, ...newData, isLoading: false } });
-            
-            container.innerHTML = `
-                <table class="w-full text-left">
-                    <thead>
-                        <tr class="border-b bg-slate-50">
-                            <th class="p-3 text-sm font-semibold text-slate-600">Pengguna</th>
-                            <th class="p-3 text-sm font-semibold text-slate-600">Peran</th>
-                            <th class="p-3 text-sm font-semibold text-slate-600">Sekolah</th>
-                            <th class="p-3 text-sm font-semibold text-slate-600 text-center">Tindakan</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${allUsers.map(user => {
-                            const school = allSchools.find(s => s.id === user.school_id);
-                            const isNew = user.is_unmanaged;
-                            const newBadge = isNew ? `<span class="ml-2 px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full">BARU</span>` : '';
-
-                            return `
-                            <tr class="border-b hover:bg-slate-50 transition">
-                                <td class="p-3">
-                                    <div class="flex items-center gap-3">
-                                        <img src="${user.picture}" alt="${user.name}" class="w-10 h-10 rounded-full"/>
-                                        <div>
-                                            <p class="font-medium text-slate-800">${user.name}${newBadge}</p>
-                                            <p class="text-xs text-slate-500">${user.email}</p>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="p-3 text-sm text-slate-600">${user.role}</td>
-                                <td class="p-3 text-sm text-slate-600">${school ? school.name : '<span class="italic text-slate-400">Belum Ditugaskan</span>'}</td>
-                                <td class="p-3 text-center">
-                                    <button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" 
-                                            data-user='${JSON.stringify(user)}'>
-                                        Kelola
-                                    </button>
-                                </td>
-                            </tr>
-                        `}).join('')}
-                    </tbody>
-                </table>
-            `;
-
-            document.querySelectorAll('.manage-user-btn').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    const user = JSON.parse(e.currentTarget.dataset.user);
-                    showManageUserModal(user, allSchools);
-                });
-            });
+            const newTimeoutId = setTimeout(adminPanelPoller, nextInterval);
+            await setState({ adminPanel: { ...state.adminPanel, polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
         } catch(error) {
-             container.innerHTML = `<p class="text-center text-red-500 py-8">${error.message}</p>`;
+            container.innerHTML = `<p class="text-center text-red-500 py-8">${error.message}</p>`;
+            const newTimeoutId = setTimeout(adminPanelPoller, state.adminPanel.polling.interval);
+            await setState({ adminPanel: { ...state.adminPanel, polling: { ...state.adminPanel.polling, timeoutId: newTimeoutId } } });
         }
     };
 
-    updateAdminPanelContent();
-
-    if (state.adminPanel.pollingIntervalId) {
-        clearInterval(state.adminPanel.pollingIntervalId);
-    }
-    const newIntervalId = setInterval(updateAdminPanelContent, 10000);
-    setState({ adminPanel: { ...state.adminPanel, pollingIntervalId: newIntervalId } });
-    console.log(`Admin Panel polling started with ID: ${newIntervalId}.`);
+    adminPanelPoller();
 }
 
 function showManageUserModal(user, schools) {
