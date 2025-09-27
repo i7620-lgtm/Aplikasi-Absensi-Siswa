@@ -200,15 +200,9 @@ export const templates = {
                 </div>
 
                 <!-- Content Area -->
-                <div id="dashboard-content-report" class="space-y-6 ${activeView === 'report' ? '' : 'hidden'}">
-                    <p class="text-center text-slate-500 py-8">Memuat laporan...</p>
-                </div>
-                <div id="dashboard-content-percentage" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 ${activeView === 'percentage' ? '' : 'hidden'}">
-                     <p class="text-center text-slate-500 py-8 col-span-full">Memuat visualisasi...</p>
-                </div>
-                <div id="dashboard-content-ai" class="${activeView === 'ai' ? '' : 'hidden'}">
-                     <p class="text-center text-slate-500 py-8">Memuat fitur rekomendasi...</p>
-                </div>
+                <div id="dashboard-content-report" class="space-y-6 ${activeView === 'report' ? '' : 'hidden'}"></div>
+                <div id="dashboard-content-percentage" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 ${activeView === 'percentage' ? '' : 'hidden'}"></div>
+                <div id="dashboard-content-ai" class="${activeView === 'ai' ? '' : 'hidden'}"></div>
              </div>
         </div>`;
     },
