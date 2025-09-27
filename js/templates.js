@@ -201,7 +201,7 @@ export const templates = {
 
                 <!-- Content Area -->
                 <div id="dashboard-content-report" class="space-y-6 ${activeView === 'report' ? '' : 'hidden'}"></div>
-                <div id="dashboard-content-percentage" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 ${activeView === 'percentage' ? '' : 'hidden'}"></div>
+                <div id="dashboard-content-percentage" class="${activeView === 'percentage' ? '' : 'hidden'}"></div>
                 <div id="dashboard-content-ai" class="${activeView === 'ai' ? '' : 'hidden'}"></div>
              </div>
         </div>`;
