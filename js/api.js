@@ -69,7 +69,7 @@ export const apiService = {
         return await _fetch('setMaintenanceStatus', { enabled });
     },
 
-    async generateAiRecommendation(schoolId = null) {
-        return await _fetch('generateAiRecommendation', { schoolId });
+    async generateAiRecommendation(preprocessedData) {
+        return await _fetch('generateAiRecommendation', { preprocessedData });
     }
 };
