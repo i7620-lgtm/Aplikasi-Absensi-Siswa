@@ -1,4 +1,5 @@
 
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -267,7 +268,7 @@ function renderMaintenanceToggle(container, isMaintenance) {
     const statusText = isMaintenance ? 'Aktif' : 'Tidak Aktif';
     const statusColor = isMaintenance ? 'text-red-600' : 'text-green-600';
     const buttonText = isMaintenance ? 'Nonaktifkan' : 'Aktifkan';
-    const buttonColor = isMaintenance ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600';
+    const buttonColor = isMaintenance ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-500';
 
     container.innerHTML = `
         <div class="flex items-center justify-between w-full">
@@ -401,40 +402,60 @@ async function renderDashboardScreen() {
             const { allData } = await apiService.getGlobalData(schoolId);
             const selectedDate = state.dashboard.selectedDate;
             
-            // --- LOGIC REWORK ---
-            // 1. Establish the definitive list of classes for the school.
-            //    This is the crucial fix: we use the global CLASSES constant as the source of truth.
             const allClassNamesInSchool = CLASSES;
 
-            // 2. Aggregate student lists from all teachers to get accurate total counts for percentages.
             const studentListsByClass = {};
             allData.forEach(teacherData => {
-                if (teacherData.students_by_class) {
-                    for (const className in teacherData.students_by_class) {
-                        const currentStudents = new Set(studentListsByClass[className] || []);
-                        const newStudents = teacherData.students_by_class[className].students || [];
-                        newStudents.forEach(student => currentStudents.add(student));
-                        studentListsByClass[className] = Array.from(currentStudents).sort();
+                let studentsData = teacherData.students_by_class;
+                if (typeof studentsData === 'string') {
+                    try {
+                        studentsData = JSON.parse(studentsData);
+                    } catch (e) {
+                        console.error("Gagal mem-parsing students_by_class untuk guru:", teacherData.user_name, e);
+                        studentsData = null;
+                    }
+                }
+
+                if (studentsData) {
+                    for (const className in studentsData) {
+                        if (studentsData.hasOwnProperty(className) && studentsData[className] && Array.isArray(studentsData[className].students)) {
+                            const currentStudents = new Set(studentListsByClass[className] || []);
+                            studentsData[className].students.forEach(student => currentStudents.add(student));
+                            studentListsByClass[className] = Array.from(currentStudents).sort();
+                        }
                     }
                 }
             });
 
-            // 3. Aggregate all attendance logs for the selected date.
             const aggregatedLogsByClass = {};
             allData.forEach(teacherData => {
-                (teacherData.saved_logs || []).forEach(log => {
-                    if (log.date === selectedDate) {
-                        const className = log.class;
-                        if (!aggregatedLogsByClass[className]) {
-                            aggregatedLogsByClass[className] = {
-                                attendance: {},
-                                teacherNames: new Set(),
-                            };
-                        }
-                        Object.assign(aggregatedLogsByClass[className].attendance, log.attendance);
-                        aggregatedLogsByClass[className].teacherNames.add(teacherData.user_name);
+                let logs = teacherData.saved_logs;
+                if (typeof logs === 'string') {
+                    try {
+                        logs = JSON.parse(logs);
+                    } catch (e) {
+                        console.error("Gagal mem-parsing saved_logs untuk guru:", teacherData.user_name, e);
+                        logs = [];
                     }
-                });
+                }
+
+                if (Array.isArray(logs)) {
+                    logs.forEach(log => {
+                        if (log && log.date === selectedDate) {
+                            const className = log.class;
+                            if (!aggregatedLogsByClass[className]) {
+                                aggregatedLogsByClass[className] = {
+                                    attendance: {},
+                                    teacherNames: new Set(),
+                                };
+                            }
+                            if (log.attendance && typeof log.attendance === 'object') {
+                                Object.assign(aggregatedLogsByClass[className].attendance, log.attendance);
+                            }
+                            aggregatedLogsByClass[className].teacherNames.add(teacherData.user_name);
+                        }
+                    });
+                }
             });
 
 
