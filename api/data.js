@@ -375,7 +375,7 @@ export default async function handler(request, response) {
         } else {
             return response.status(405).json({ error: 'Method Not Allowed' });
         }
-    } catch (error)
+    } catch (error) {
         console.error('API Error:', error);
         return response.status(500).json({ error: 'An internal server error occurred', details: error.message });
     }
