@@ -1,3 +1,4 @@
+
 import { initializeGsi, handleSignIn, handleSignOut } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus } from './ui.js';
@@ -326,11 +327,12 @@ export async function handleGenerateAiRecommendation() {
                     Object.entries(log.attendance).forEach(([studentName, status]) => {
                         if (status !== 'H') {
                             if (!studentSummary[studentName]) {
-                                studentSummary[studentName] = { name: studentName, class: log.class, S: 0, I: 0, A: 0, total: 0 };
+                                studentSummary[studentName] = { name: studentName, class: log.class, S: 0, I: 0, A: 0, total: 0, absences: [] };
                             }
                             if (studentSummary[studentName][status] !== undefined) {
                                 studentSummary[studentName][status]++;
                                 studentSummary[studentName].total++;
+                                studentSummary[studentName].absences.push({ date: log.date, status: status });
                             }
                         }
                     });
@@ -341,7 +343,7 @@ export async function handleGenerateAiRecommendation() {
         const topStudentsData = Object.values(studentSummary)
             .sort((a, b) => b.total - a.total)
             .slice(0, 20)
-            .map(({ name, class: className, S, I, A, total }) => ({ name, class: className, S, I, A, total }));
+            .map(({ name, class: className, S, I, A, total, absences }) => ({ name, class: className, S, I, A, total, absences }));
         // --- END: Client-side data processing ---
 
         if (topStudentsData.length === 0) {
