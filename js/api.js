@@ -1,26 +1,44 @@
 import { state } from './main.js';
 
 async function _fetch(action, payload = {}) {
-    const response = await fetch('/api/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action,
-            payload,
-            userEmail: state.userProfile?.email // Send authenticated user's email for verification
-        }),
-    });
-
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        let errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
-        if (response.status >= 500) {
-            errorMessage = `Kesalahan Server (${response.status}): ${errorData.error || 'Gagal terhubung ke database. Periksa variabel lingkungan atau log Vercel.'}`;
-        }
-        throw new Error(errorMessage);
+    // Secara proaktif memeriksa status offline untuk memberikan pesan error yang lebih baik.
+    if (!navigator.onLine) {
+        throw new Error('Koneksi internet terputus. Silakan periksa jaringan Anda.');
     }
-
-    return response.json();
+    
+    try {
+        const response = await fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action,
+                payload,
+                userEmail: state.userProfile?.email // Mengirim email pengguna terotentikasi untuk verifikasi
+            }),
+        });
+    
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            let errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
+            if (response.status >= 500) {
+                errorMessage = `Kesalahan Server (${response.status}): ${errorData.error || 'Gagal terhubung ke database. Periksa log Vercel.'}`;
+            }
+            throw new Error(errorMessage);
+        }
+    
+        return response.json();
+    } catch (error) {
+        // Blok catch terpadu ini menangani error jaringan (seperti 'Failed to fetch') 
+        // dan error HTTP yang dilempar dari blok di atas.
+        console.error(`Panggilan API '${action}' gagal:`, error);
+        
+        // Memeriksa apakah ini sudah merupakan pesan yang ramah untuk menghindari pesan error bertumpuk.
+        if (error.message.startsWith('Kesalahan Server')) {
+            throw error; // Menyebarkan error server yang spesifik.
+        }
+        // Melempar pesan error yang lebih umum dan ramah pengguna untuk masalah koneksi.
+        throw new Error('Gagal terhubung ke server. Periksa koneksi internet Anda.');
+    }
 }
 
 export const apiService = {
