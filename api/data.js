@@ -184,7 +184,6 @@ export default async function handler(request, response) {
                     }
                     const { studentsByClass, savedLogs, actingAsSchoolId } = payload;
                     
-                    // FIX: Enclosed case in a block to correctly scope this variable.
                     let finalSchoolId;
                     if (user.role === 'SUPER_ADMIN' && actingAsSchoolId) {
                         finalSchoolId = actingAsSchoolId;
@@ -313,7 +312,6 @@ export default async function handler(request, response) {
                         }
                     }
                     
-                    // FIX: Enclosed case in a block to correctly scope this variable.
                     let finalSchoolId = newSchoolId === "" ? null : newSchoolId;
 
                     if (newRole === 'SUPER_ADMIN') {
@@ -414,7 +412,6 @@ export default async function handler(request, response) {
         }
     } catch (error) {
         console.error('API Error:', error);
-        // FIX: Added a block to the catch statement.
         return response.status(500).json({ error: 'An internal server error occurred', details: error.message });
     }
 }
