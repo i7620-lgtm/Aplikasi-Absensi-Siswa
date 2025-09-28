@@ -373,39 +373,34 @@ function renderStructuredAiResponse(markdownText) {
         'Pola Utama': `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>`,
         'Rekomendasi Tindak Lanjut': `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>`
     };
-
-    const html = marked.parse(markdownText);
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-
-    const sections = [];
-    let currentSection = null;
-
-    tempDiv.childNodes.forEach(node => {
-        if (node.tagName === 'H3') {
-            if (currentSection) sections.push(currentSection);
-            currentSection = { title: node.textContent, content: '' };
-        } else if (currentSection && node.outerHTML) {
-            currentSection.content += node.outerHTML;
-        }
-    });
-    if (currentSection) sections.push(currentSection);
-
-    if (sections.length === 0) {
-        return `<div class="bg-slate-50 p-6 rounded-lg gemini-response">${html}</div>`; // Fallback for unstructured responses
+    
+    // Regex to split the text by headings (with or without markdown ###), looking for a newline before the heading.
+    const splitRegex = new RegExp(`(?<=\\n)(?=(?:###\\s*)?(?:Ringkasan|Peringatan Dini|Analisis Pola Utama|Rekomendasi Tindak Lanjut))`, 'g');
+    const parts = markdownText.split(splitRegex).filter(p => p.trim());
+    
+    // Fallback if splitting doesn't work well (e.g., less than 2 sections found)
+    if (parts.length < 2) {
+        return `<div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm gemini-response prose prose-slate max-w-none prose-sm">${marked.parse(markdownText)}</div>`;
     }
 
-    return `<div class="space-y-4 gemini-response bg-slate-50 p-6 rounded-lg">
+    const sections = parts.map(part => {
+        const lines = part.trim().split('\n');
+        const title = lines[0].replace(/###\s*/, '').trim();
+        const content = lines.slice(1).join('\n').trim();
+        return { title, content: marked.parse(content) };
+    });
+    
+    return `<div class="space-y-4 gemini-response">
         ${sections.map(section => {
             const iconKey = Object.keys(icons).find(key => section.title.includes(key));
             const icon = iconKey ? icons[iconKey] : icons['Ringkasan'];
             return `
-            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm transition hover:shadow-md">
                 <h3 class="flex items-center gap-3 font-bold text-slate-800 text-base mb-3">
                     ${icon}
                     <span>${section.title}</span>
                 </h3>
-                <div class="pl-9">${section.content}</div>
+                <div class="pl-9 card-content">${section.content}</div>
             </div>
             `;
         }).join('')}
