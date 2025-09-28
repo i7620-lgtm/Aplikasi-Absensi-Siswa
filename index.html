@@ -95,10 +95,13 @@
             bottom: 20px;
         }
         /* AI Response Formatting */
-        .gemini-response ul { list-style-type: disc; padding-left: 1.25rem; margin-top: 0.5rem; }
-        .gemini-response li { margin-bottom: 0.5rem; color: #475569; }
-        .gemini-response p { color: #475569; line-height: 1.6; }
-        .gemini-response strong { font-weight: 600; color: #334155; }
+        .gemini-response .card-content ul { list-style-type: disc; padding-left: 1.25rem; margin-top: 0.5rem; }
+        .gemini-response .card-content li { margin-bottom: 0.5rem; color: #475569; line-height: 1.6; }
+        .gemini-response .card-content li::marker { color: #94a3b8; }
+        .gemini-response .card-content p { color: #475569; line-height: 1.6; margin-bottom: 0.75rem; }
+        .gemini-response .card-content strong { font-weight: 600; color: #1e293b; }
+        .gemini-response { background-color: transparent !important; padding: 0 !important; }
+
     </style>
 <script type="importmap">
 {
