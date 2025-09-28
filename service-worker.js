@@ -155,9 +155,22 @@ async function syncDataToServer() {
 
     console.log('Service Worker: Data synced successfully.');
     if (self.Notification && self.Notification.permission === 'granted') {
-      self.registration.showNotification('Absensi Online', {
+      const title = 'Absensi Online';
+      const options = {
         body: 'Data Anda berhasil disinkronkan ke cloud.',
-        icon: 'https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png'
+        icon: 'https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png',
+        tag: 'sync-notification', // Mencegah notifikasi menumpuk
+        renotify: false, // Mencegah getaran/suara pada pembaruan
+        silent: true // Membuatnya tidak terlalu mengganggu
+      };
+
+      self.registration.showNotification(title, options).then(() => {
+          // Setelah notifikasi ditampilkan, atur timer untuk menutupnya
+          setTimeout(() => {
+              self.registration.getNotifications({ tag: 'sync-notification' }).then(notifications => {
+                  notifications.forEach(notification => notification.close());
+              });
+          }, 5000); // Tutup setelah 5 detik
       });
     }
 
