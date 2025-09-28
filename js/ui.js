@@ -8,9 +8,10 @@ const loaderWrapper = document.getElementById('loader-wrapper');
 const notificationEl = document.getElementById('notification');
 const offlineIndicator = document.getElementById('offline-indicator');
 
-// --- POLLING CONFIGURATION ---
+// --- POLLING & PAGINATION CONFIGURATION ---
 const INITIAL_POLLING_INTERVAL = 10000; // 10 seconds
 const MAX_POLLING_INTERVAL = 300000; // 5 minutes (300 seconds)
+const USERS_PER_PAGE = 10;
 
 function getNextInterval(currentInterval) {
     const next = currentInterval * 2;
@@ -213,7 +214,7 @@ function renderSetupScreen() {
             } catch (error) {
                 console.error("Failed to fetch teacher profile update:", error);
                 const newTimeoutId = setTimeout(teacherProfilePoller, state.setup.polling.interval);
-                await setState({ setup: { polling: { ...state.setup.polling, timeoutId: newTimeoutId } } });
+                await setState({ setup: { ...state.setup.polling, timeoutId: newTimeoutId } } });
             }
         };
         teacherProfilePoller();
@@ -725,7 +726,31 @@ async function renderDashboardScreen() {
 }
 
 function renderAdminPanelTable(container, allUsers, allSchools) {
-    container.innerHTML = `
+    const { currentPage, groupBySchool } = state.adminPanel;
+    let usersToRender = [...allUsers];
+
+    // 1. Logika Pengurutan & Pengelompokan
+    if (groupBySchool && state.userProfile.role === 'SUPER_ADMIN') {
+        usersToRender.sort((a, b) => {
+            const schoolA = allSchools.find(s => s.id === a.school_id)?.name || 'zzz_Unassigned';
+            const schoolB = allSchools.find(s => s.id === b.school_id)?.name || 'zzz_Unassigned';
+            if (schoolA < schoolB) return -1;
+            if (schoolA > schoolB) return 1;
+            return a.name.localeCompare(b.name);
+        });
+    } else {
+        usersToRender.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    // 2. Logika Paginasi
+    const totalPages = Math.ceil(usersToRender.length / USERS_PER_PAGE);
+    const validCurrentPage = Math.max(1, Math.min(currentPage, totalPages || 1));
+    const startIndex = (validCurrentPage - 1) * USERS_PER_PAGE;
+    const endIndex = startIndex + USERS_PER_PAGE;
+    const paginatedUsers = usersToRender.slice(startIndex, endIndex);
+
+    // 3. Merender Tabel
+    let tableHtml = `
         <table class="w-full text-left">
             <thead>
                 <tr class="border-b bg-slate-50">
@@ -736,36 +761,91 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
                 </tr>
             </thead>
             <tbody>
-                ${allUsers.map(user => {
-                    const school = allSchools.find(s => s.id === user.school_id);
-                    const isNew = user.is_unmanaged;
-                    const newBadge = isNew ? `<span class="ml-2 px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full">BARU</span>` : '';
-
-                    return `
-                    <tr class="border-b hover:bg-slate-50 transition">
-                        <td class="p-3">
-                            <div class="flex items-center gap-3">
-                                <img src="${user.picture}" alt="${user.name}" class="w-10 h-10 rounded-full"/>
-                                <div>
-                                    <p class="font-medium text-slate-800">${user.name}${newBadge}</p>
-                                    <p class="text-xs text-slate-500">${user.email}</p>
-                                </div>
-                            </div>
-                        </td>
-                        <td class="p-3 text-sm text-slate-600">${user.role}</td>
-                        <td class="p-3 text-sm text-slate-600">${school ? school.name : '<span class="italic text-slate-400">Belum Ditugaskan</span>'}</td>
-                        <td class="p-3 text-center">
-                            <button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" 
-                                    data-user='${JSON.stringify(user)}'>
-                                Kelola
-                            </button>
-                        </td>
-                    </tr>
-                `}).join('')}
-            </tbody>
-        </table>
     `;
+    
+    if (paginatedUsers.length === 0) {
+        tableHtml += `<tr><td colspan="4" class="text-center text-slate-500 py-8">Tidak ada pengguna yang cocok.</td></tr>`;
+    } else {
+        let currentSchoolId = -1; 
+        paginatedUsers.forEach(user => {
+            if (groupBySchool && state.userProfile.role === 'SUPER_ADMIN' && user.school_id !== currentSchoolId) {
+                currentSchoolId = user.school_id;
+                const school = allSchools.find(s => s.id === currentSchoolId);
+                const schoolName = school ? school.name : 'Belum Ditugaskan';
+                tableHtml += `
+                    <tr class="bg-slate-100 sticky top-0">
+                        <td colspan="4" class="p-2 font-bold text-slate-600">${schoolName}</td>
+                    </tr>
+                `;
+            }
+            
+            const school = allSchools.find(s => s.id === user.school_id);
+            const isNew = user.is_unmanaged;
+            const newBadge = isNew ? `<span class="ml-2 px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full">BARU</span>` : '';
 
+            tableHtml += `
+                <tr class="border-b hover:bg-slate-50 transition">
+                    <td class="p-3">
+                        <div class="flex items-center gap-3">
+                            <img src="${user.picture}" alt="${user.name}" class="w-10 h-10 rounded-full"/>
+                            <div>
+                                <p class="font-medium text-slate-800">${user.name}${newBadge}</p>
+                                <p class="text-xs text-slate-500">${user.email}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="p-3 text-sm text-slate-600">${user.role}</td>
+                    <td class="p-3 text-sm text-slate-600">${school ? school.name : '<span class="italic text-slate-400">Belum Ditugaskan</span>'}</td>
+                    <td class="p-3 text-center">
+                        <button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" 
+                                data-user='${JSON.stringify(user)}'>
+                            Kelola
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    tableHtml += `</tbody></table>`;
+    container.innerHTML = tableHtml;
+
+    // 4. Merender Kontrol Paginasi
+    const paginationContainer = document.getElementById('admin-pagination-container');
+    if (paginationContainer) {
+        if (totalPages > 1) {
+            paginationContainer.innerHTML = `
+                <button id="prev-page-btn" class="font-semibold py-1 px-3 rounded-lg text-sm transition disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-slate-50 text-slate-700 border border-slate-300" ${validCurrentPage === 1 ? 'disabled' : ''}>
+                    Sebelumnya
+                </button>
+                <span>Halaman ${validCurrentPage} dari ${totalPages}</span>
+                <button id="next-page-btn" class="font-semibold py-1 px-3 rounded-lg text-sm transition disabled:opacity-50 disabled:cursor-not-allowed bg-white hover:bg-slate-50 text-slate-700 border border-slate-300" ${validCurrentPage === totalPages ? 'disabled' : ''}>
+                    Berikutnya
+                </button>
+            `;
+            
+            const prevBtn = document.getElementById('prev-page-btn');
+            if (prevBtn) {
+                prevBtn.addEventListener('click', async () => {
+                    await setState({ adminPanel: { ...state.adminPanel, currentPage: state.adminPanel.currentPage - 1 }});
+                    renderAdminPanelTable(container, allUsers, allSchools);
+                });
+            }
+
+            const nextBtn = document.getElementById('next-page-btn');
+            if (nextBtn) {
+                nextBtn.addEventListener('click', async () => {
+                    await setState({ adminPanel: { ...state.adminPanel, currentPage: state.adminPanel.currentPage + 1 }});
+                    renderAdminPanelTable(container, allUsers, allSchools);
+                });
+            }
+
+        } else {
+            paginationContainer.innerHTML = '';
+        }
+    }
+    
+    // 5. Melampirkan kembali Event Listener untuk tombol kelola
     document.querySelectorAll('.manage-user-btn').forEach(button => {
         button.addEventListener('click', (e) => {
             const user = JSON.parse(e.currentTarget.dataset.user);
@@ -774,11 +854,30 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
     });
 }
 
+
 async function renderAdminPanelScreen() {
     appContainer.innerHTML = templates.adminPanel();
     document.getElementById('admin-panel-back-btn').addEventListener('click', () => navigateTo('adminHome'));
     if (document.getElementById('add-school-btn')) {
         document.getElementById('add-school-btn').addEventListener('click', handleCreateSchool);
+    }
+    const groupBySchoolToggle = document.getElementById('group-by-school-toggle');
+    if (groupBySchoolToggle) {
+        groupBySchoolToggle.checked = state.adminPanel.groupBySchool;
+        groupBySchoolToggle.addEventListener('change', async (e) => {
+            await setState({ 
+                adminPanel: { 
+                    ...state.adminPanel, 
+                    groupBySchool: e.target.checked,
+                    currentPage: 1 
+                } 
+            });
+            renderAdminPanelTable(
+                document.getElementById('admin-panel-container'), 
+                state.adminPanel.users, 
+                state.adminPanel.schools
+            );
+        });
     }
     const container = document.getElementById('admin-panel-container');
 
@@ -804,7 +903,7 @@ async function renderAdminPanelScreen() {
 
             if (JSON.stringify(oldData) !== JSON.stringify(newData)) {
                 console.log("Admin panel data changed. Updating view & resetting interval.");
-                if (oldData.users.length > 0) {
+                if (oldData.users.length > 0 && oldData.users.length < newData.users.length) {
                     const oldUserEmails = new Set(oldData.users.map(u => u.email));
                     newData.users.forEach(newUser => {
                         if (!oldUserEmails.has(newUser.email)) {
@@ -812,8 +911,12 @@ async function renderAdminPanelScreen() {
                         }
                     });
                 }
+                
+                const totalPages = Math.ceil(allUsers.length / USERS_PER_PAGE);
+                const newCurrentPage = Math.min(state.adminPanel.currentPage, totalPages) || 1;
+
                 renderAdminPanelTable(container, allUsers, allSchools);
-                await setState({ adminPanel: { ...state.adminPanel, ...newData, isLoading: false } });
+                await setState({ adminPanel: { ...state.adminPanel, ...newData, isLoading: false, currentPage: newCurrentPage } });
                 nextInterval = INITIAL_POLLING_INTERVAL;
             } else {
                 console.log("Admin panel data unchanged. Increasing interval.");
@@ -828,7 +931,6 @@ async function renderAdminPanelScreen() {
             await setState({ adminPanel: { ...state.adminPanel, polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
         } catch(error) {
             console.error("Admin Panel poll failed:", error);
-            // Hanya tampilkan error jika panel masih dalam status loading awal.
             if (state.adminPanel.isLoading) {
                 if (container && state.currentScreen === 'adminPanel') {
                     container.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
