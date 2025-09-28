@@ -661,8 +661,15 @@ async function renderDashboardScreen() {
             await setState({ dashboard: { ...state.dashboard, polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
         } catch (error) {
             console.error("Dashboard poll failed:", error);
-            const currentContent = document.querySelector(`#dashboard-content-${state.dashboard.activeView}`);
-            if (currentContent) currentContent.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
+    
+            // Hanya tampilkan pesan error yang mengganggu jika data BELUM pernah berhasil dimuat.
+            if (!state.dashboard.isDataLoaded) {
+                const currentContent = document.querySelector(`#dashboard-content-${state.dashboard.activeView}`);
+                // Pastikan kita masih di layar dasbor sebelum mencoba memperbarui DOM.
+                if (currentContent && state.currentScreen === 'dashboard') {
+                    currentContent.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
+                }
+            }
             
             const newTimeoutId = setTimeout(dashboardPoller, state.dashboard.polling.interval);
             await setState({ dashboard: { ...state.dashboard, polling: { ...state.dashboard.polling, timeoutId: newTimeoutId } } });
@@ -792,7 +799,14 @@ async function renderAdminPanelScreen() {
             const newTimeoutId = setTimeout(adminPanelPoller, nextInterval);
             await setState({ adminPanel: { ...state.adminPanel, polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
         } catch(error) {
-            container.innerHTML = `<p class="text-center text-red-500 py-8">${error.message}</p>`;
+            console.error("Admin Panel poll failed:", error);
+            // Hanya tampilkan error jika panel masih dalam status loading awal.
+            if (state.adminPanel.isLoading) {
+                if (container && state.currentScreen === 'adminPanel') {
+                    container.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
+                }
+            }
+            
             const newTimeoutId = setTimeout(adminPanelPoller, state.adminPanel.polling.interval);
             await setState({ adminPanel: { ...state.adminPanel, polling: { ...state.adminPanel.polling, timeoutId: newTimeoutId } } });
         }
