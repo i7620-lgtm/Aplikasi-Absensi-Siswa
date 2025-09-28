@@ -346,26 +346,31 @@ export default async function handler(request, response) {
                         }
     
                         const prompt = `
-                            Anda adalah seorang konsultan pendidikan virtual yang sangat analitis dan berwawasan. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir untuk mengidentifikasi pola-pola tersembunyi dan memberikan wawasan yang dapat ditindaklanjuti bagi kepala sekolah.
+                            Anda adalah seorang konsultan pendidikan virtual yang sangat analitis dan ahli dalam menemukan pola. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir untuk memberikan wawasan yang dapat ditindaklanjuti bagi kepala sekolah.
 
                             Data absensi siswa dengan ketidakhadiran tertinggi (format JSON): ${JSON.stringify(preprocessedData)}
                             Setiap siswa memiliki daftar 'absences' yang berisi tanggal dan status ('S' untuk Sakit, 'I' untuk Izin, 'A' untuk Alpa).
 
-                            Sajikan analisis Anda HANYA dalam format Markdown berikut. Gunakan heading level 3 (###) untuk setiap judul bagian. Berikan penjelasan singkat namun bermakna di setiap bagian.
+                            Sajikan analisis Anda HANYA dalam format Markdown berikut. Gunakan heading level 3 (###) untuk setiap judul bagian.
 
                             ### Ringkasan Eksekutif
-                            Berikan 2-3 kalimat yang merangkum temuan paling krusial. Sebutkan tren umum atau kelas yang paling menonjol.
+                            Berikan 2-3 kalimat yang merangkum temuan paling krusial dari analisis mendalam Anda di bawah ini.
 
                             ### Peringatan Dini: Siswa yang Memerlukan Perhatian
-                            Fokus HANYA pada siswa yang menunjukkan pola absensi yang signifikan atau mengkhawatirkan. Abaikan siswa dengan absensi sporadis (1-2 kali) kecuali ada pola yang jelas. Untuk setiap siswa yang Anda pilih, gunakan format berikut:
-                            - **Nama Siswa (Kelas)**: Total X kali absen (Sakit: Y, Izin: Z, Alpa: A).
-                                - ***Pola Teridentifikasi:*** Jelaskan secara singkat pola yang Anda temukan. Jadilah spesifik. Contoh: "Absen rutin setiap hari Senin selama 3 minggu terakhir." atau "Absen sakit selama 5 hari berturut-turut pada awal bulan, menandakan kemungkinan pemulihan dari penyakit." atau "Frekuensi absensi 'Izin' meningkat dalam dua minggu terakhir."
+                            Ini adalah bagian terpenting. Prioritaskan analisis Anda untuk menemukan **kelompok siswa** yang absen karena 'Sakit' (S) atau 'Izin' (I) dalam **rentang tanggal yang sama atau tumpang tindih**. Pola ini sangat penting karena dapat mengindikasikan masalah komunal (misalnya, wabah penyakit di satu kelas) atau acara lokal yang memengaruhi banyak siswa.
+                            Setelah itu, identifikasi siswa individu dengan pola absensi beruntun (misalnya, sakit 3 hari berturut-turut) atau pola berulang (misalnya, absen setiap hari Senin).
                             
+                            **ATURAN KETAT:** Abaikan sepenuhnya siswa dengan total absensi rendah (1-2 kali) yang tidak menunjukkan salah satu dari pola kuat di atas. Jangan sertakan mereka dalam daftar sama sekali untuk menjaga analisis tetap fokus pada isu yang paling mendesak.
+
+                            Untuk setiap siswa yang Anda pilih, gunakan format berikut:
+                            - **Nama Siswa (Kelas)**: Total X kali absen (Sakit: Y, Izin: Z, Alpa: A).
+                                - ***Pola Teridentifikasi:*** Jelaskan pola secara komprehensif. Jika siswa tersebut adalah bagian dari sebuah kelompok dengan pola serupa, **wajib sebutkan hal tersebut dan jelaskan kesamaannya (misalnya rentang tanggal yang sama)**. Contoh: "Bagian dari kelompok siswa yang sakit secara bersamaan pada akhir bulan (24-26 September), menunjukkan kemungkinan adanya penyakit menular." atau "Tiga kali absen sakit secara beruntun pada awal bulan (1-3 September), menandakan pemulihan dari penyakit."
+
                             ### Analisis Pola Utama
-                            Gunakan daftar berpoin. Identifikasi 1-2 pola paling signifikan di tingkat sekolah atau kelas dari data yang diberikan. Contoh: "Dominasi Absensi 'Sakit': Mayoritas absensi (X dari Y total) disebabkan oleh sakit, ini bisa menandakan masalah kesehatan komunal." atau "Konsentrasi di Kelas Tertentu: Kelas 5B menyumbang Z% dari total absensi tertinggi, mengindikasikan adanya isu spesifik di kelas tersebut."
+                            Gunakan daftar berpoin. Berdasarkan temuan di 'Peringatan Dini', identifikasi 1-2 pola paling signifikan di tingkat sekolah. Contoh: "Teridentifikasi Klaster Sakit di Kelas 5B: Sejumlah siswa dari kelas 5B absen sakit pada rentang tanggal 24-26 September, ini sangat perlu diwaspadai sebagai potensi penyebaran penyakit."
 
                             ### Rekomendasi Tindak Lanjut Strategis
-                            Gunakan daftar berpoin. Berikan 2-3 rekomendasi konkret dan dapat ditindaklanjuti. Jelaskan secara singkat MENGAPA setiap rekomendasi penting. Contoh: "**Investigasi Kesehatan di Kelas 5B**: Tugaskan Guru UKS/BK untuk berdialog dengan wali kelas 5B. Tujuannya adalah untuk memahami apakah ada faktor lingkungan atau penyakit menular yang menyebabkan tingginya angka absensi sakit."
+                            Gunakan daftar berpoin. Berikan 2-3 rekomendasi konkret berdasarkan 'Peringatan Dini' dan 'Analisis Pola Utama'. Jelaskan MENGAPA setiap rekomendasi penting. Contoh: "**Investigasi Kesehatan di Kelas 5B**: Tugaskan Guru UKS/BK untuk berdialog dengan wali kelas 5B untuk memahami apakah ada faktor lingkungan atau penyakit menular yang menyebabkan klaster absensi sakit."
                         `;
                         
                         const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
