@@ -7,73 +7,78 @@ import { GoogleGenAI } from "@google/genai";
 const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
 
 async function setupTables() {
-    // 1. Membuat tabel 'schools' untuk arsitektur multi-tenant.
-    await sql`
-      CREATE TABLE IF NOT EXISTS schools (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      );
-    `;
-
-    // 2. Membuat tabel 'users' jika belum ada.
-    await sql`
-      CREATE TABLE IF NOT EXISTS users (
-        email VARCHAR(255) PRIMARY KEY,
-        name VARCHAR(255),
-        picture TEXT,
-        role VARCHAR(50) DEFAULT 'GURU',
-        school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL,
-        assigned_classes TEXT[] DEFAULT '{}',
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        last_login TIMESTAMPTZ
-      );
-    `;
-
-    // 3. Menangani migrasi untuk tabel pengguna yang sudah ada.
     try {
-        await sql`ALTER TABLE users ADD COLUMN school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL;`;
-    } catch (error) {
-        if (error.code !== '42701') throw error; // Abaikan jika kolom sudah ada
-    }
-     try {
-        await sql`ALTER TABLE users ADD COLUMN assigned_classes TEXT[] DEFAULT '{}'`;
-    } catch (error) {
-        if (error.code !== '42701') throw error; // Abaikan jika kolom sudah ada
-    }
+        // 1. Membuat tabel 'schools' untuk arsitektur multi-tenant.
+        await sql`
+          CREATE TABLE IF NOT EXISTS schools (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
+        `;
     
-    // Memastikan nilai default untuk kolom yang baru ditambahkan tidak null.
-    await sql`UPDATE users SET assigned_classes = '{}' WHERE assigned_classes IS NULL`;
-
-    // 4. Membuat tabel 'absensi_data' dengan isolasi data per sekolah.
-    await sql`
-      CREATE TABLE IF NOT EXISTS absensi_data (
-        user_email VARCHAR(255) PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
-        school_id INTEGER, 
-        students_by_class JSONB,
-        saved_logs JSONB,
-        last_updated TIMESTAMPTZ DEFAULT NOW()
-      );
-    `;
-     try {
-        await sql`ALTER TABLE absensi_data ADD COLUMN school_id INTEGER;`;
-    } catch (error) {
-        if (error.code !== '42701') throw error;
+        // 2. Membuat tabel 'users' jika belum ada.
+        await sql`
+          CREATE TABLE IF NOT EXISTS users (
+            email VARCHAR(255) PRIMARY KEY,
+            name VARCHAR(255),
+            picture TEXT,
+            role VARCHAR(50) DEFAULT 'GURU',
+            school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL,
+            assigned_classes TEXT[] DEFAULT '{}',
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            last_login TIMESTAMPTZ
+          );
+        `;
+    
+        // 3. Menangani migrasi untuk tabel pengguna yang sudah ada.
+        try {
+            await sql`ALTER TABLE users ADD COLUMN school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL;`;
+        } catch (error) {
+            if (error.code !== '42701') throw error; // Abaikan jika kolom sudah ada
+        }
+         try {
+            await sql`ALTER TABLE users ADD COLUMN assigned_classes TEXT[] DEFAULT '{}'`;
+        } catch (error) {
+            if (error.code !== '42701') throw error; // Abaikan jika kolom sudah ada
+        }
+        
+        // Memastikan nilai default untuk kolom yang baru ditambahkan tidak null.
+        await sql`UPDATE users SET assigned_classes = '{}' WHERE assigned_classes IS NULL`;
+    
+        // 4. Membuat tabel 'absensi_data' dengan isolasi data per sekolah.
+        await sql`
+          CREATE TABLE IF NOT EXISTS absensi_data (
+            user_email VARCHAR(255) PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
+            school_id INTEGER, 
+            students_by_class JSONB,
+            saved_logs JSONB,
+            last_updated TIMESTAMPTZ DEFAULT NOW()
+          );
+        `;
+         try {
+            await sql`ALTER TABLE absensi_data ADD COLUMN school_id INTEGER;`;
+        } catch (error) {
+            if (error.code !== '42701') throw error;
+        }
+    
+    
+        // 5. Membuat tabel konfigurasi aplikasi.
+        await sql`
+          CREATE TABLE IF NOT EXISTS app_config (
+            key VARCHAR(50) PRIMARY KEY,
+            value TEXT
+          );
+        `;
+        await sql`
+            INSERT INTO app_config (key, value)
+            VALUES ('maintenance_mode', 'false')
+            ON CONFLICT (key) DO NOTHING;
+        `;
+    } catch(error) {
+        console.error("Gagal melakukan setup tabel:", error);
+        throw error;
     }
-
-
-    // 5. Membuat tabel konfigurasi aplikasi.
-    await sql`
-      CREATE TABLE IF NOT EXISTS app_config (
-        key VARCHAR(50) PRIMARY KEY,
-        value TEXT
-      );
-    `;
-    await sql`
-        INSERT INTO app_config (key, value)
-        VALUES ('maintenance_mode', 'false')
-        ON CONFLICT (key) DO NOTHING;
-    `;
 }
 
 async function loginOrRegisterUser(profile) {
@@ -346,7 +351,8 @@ export default async function handler(request, response) {
                         }
     
                         const prompt = `
-                            Anda adalah seorang konsultan pendidikan virtual yang sangat analitis dan ahli dalam menemukan pola. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir untuk memberikan wawasan yang dapat ditindaklanjuti bagi kepala sekolah.
+                            Anda adalah AI canggih yang bertindak sebagai tim konsultan pendidikan untuk kepala sekolah. Anda menganalisis data absensi secara objektif untuk memberikan wawasan yang dapat ditindaklanjuti.
+                            **ATURAN UTAMA: Langsung berikan analisis dalam format Markdown yang diminta tanpa salam pembuka, paragraf pengantar, atau basa-basi.**
 
                             Data absensi siswa dengan ketidakhadiran tertinggi (format JSON): ${JSON.stringify(preprocessedData)}
                             Setiap siswa memiliki daftar 'absences' yang berisi tanggal dan status ('S' untuk Sakit, 'I' untuk Izin, 'A' untuk Alpa).
@@ -354,23 +360,32 @@ export default async function handler(request, response) {
                             Sajikan analisis Anda HANYA dalam format Markdown berikut. Gunakan heading level 3 (###) untuk setiap judul bagian.
 
                             ### Ringkasan Eksekutif
-                            Berikan 2-3 kalimat yang merangkum temuan paling krusial dari analisis mendalam Anda di bawah ini.
+                            Berikan 2-3 kalimat yang merangkum temuan paling krusial dari analisis individu dan kelompok di bawah ini.
 
-                            ### Peringatan Dini: Siswa yang Memerlukan Perhatian
-                            Ini adalah bagian terpenting. Prioritaskan analisis Anda untuk menemukan **kelompok siswa** yang absen karena 'Sakit' (S) atau 'Izin' (I) dalam **rentang tanggal yang sama atau tumpang tindih**. Pola ini sangat penting karena dapat mengindikasikan masalah komunal (misalnya, wabah penyakit di satu kelas) atau acara lokal yang memengaruhi banyak siswa.
-                            Setelah itu, identifikasi siswa individu dengan pola absensi beruntun (misalnya, sakit 3 hari berturut-turut) atau pola berulang (misalnya, absen setiap hari Senin).
+                            ### Peringatan Dini: Pola Absensi Individu Signifikan
+                            Bertindaklah sebagai Konselor Sekolah. Fokus HANYA pada siswa **individu** dengan pola absensi yang sangat mengkhawatirkan dan memerlukan perhatian personal.
+                            Prioritaskan untuk menemukan pola berikut:
+                            1.  **Absensi Beruntun:** Siswa absen (khususnya 'Sakit' atau 'Izin') selama **3 hari atau lebih berturut-turut**.
+                            2.  **Pola Hari Kronis:** Siswa absen pada hari yang sama dalam seminggu (misalnya, setiap Senin) selama **2 minggu atau lebih**.
                             
-                            **ATURAN KETAT:** Abaikan sepenuhnya siswa dengan total absensi rendah (1-2 kali) yang tidak menunjukkan salah satu dari pola kuat di atas. Jangan sertakan mereka dalam daftar sama sekali untuk menjaga analisis tetap fokus pada isu yang paling mendesak.
-
+                            **ATURAN KETAT:** Abaikan sepenuhnya siswa dengan total absensi rendah (1-2 kali) yang tidak masuk dalam salah satu pola signifikan di atas. Jangan bahas pola kelompok di bagian ini.
+                            
                             Untuk setiap siswa yang Anda pilih, gunakan format berikut:
                             - **Nama Siswa (Kelas)**: Total X kali absen (Sakit: Y, Izin: Z, Alpa: A).
-                                - ***Pola Teridentifikasi:*** Jelaskan pola secara komprehensif. Jika siswa tersebut adalah bagian dari sebuah kelompok dengan pola serupa, **wajib sebutkan hal tersebut dan jelaskan kesamaannya (misalnya rentang tanggal yang sama)**. Contoh: "Bagian dari kelompok siswa yang sakit secara bersamaan pada akhir bulan (24-26 September), menunjukkan kemungkinan adanya penyakit menular." atau "Tiga kali absen sakit secara beruntun pada awal bulan (1-3 September), menandakan pemulihan dari penyakit."
+                                - ***Pola Teridentifikasi:*** Jelaskan pola individu yang ditemukan secara spesifik. Contoh: "Absen sakit selama 4 hari beruntun (1-4 September), menandakan kemungkinan adanya penyakit yang memerlukan pemulihan lebih lama." atau "Pola absensi kronis setiap hari Jumat selama 3 minggu terakhir, memerlukan investigasi lebih lanjut."
 
-                            ### Analisis Pola Utama
-                            Gunakan daftar berpoin. Berdasarkan temuan di 'Peringatan Dini', identifikasi 1-2 pola paling signifikan di tingkat sekolah. Contoh: "Teridentifikasi Klaster Sakit di Kelas 5B: Sejumlah siswa dari kelas 5B absen sakit pada rentang tanggal 24-26 September, ini sangat perlu diwaspadai sebagai potensi penyebaran penyakit."
+                            ### Analisis Pola Utama: Tren Kelompok & Lintas Kelas
+                            Bertindaklah sebagai Analis Data Sekolah. Fokus HANYA pada **tren kelompok** di mana beberapa siswa absen secara bersamaan.
+                            Cari pola berikut:
+                            1.  **Klaster Absensi:** Beberapa siswa (dari kelas yang sama atau berbeda) absen karena 'Sakit' atau 'Izin' dalam rentang tanggal yang tumpang tindih. Ini bisa menandakan adanya wabah penyakit atau acara komunitas.
+                            2.  **Anomali Kelas:** Satu kelas tertentu menunjukkan tingkat absensi 'Sakit' atau 'Izin' yang jauh lebih tinggi dibandingkan kelas lainnya pada periode waktu tertentu.
+
+                            Gunakan format berikut:
+                            - ***Judul Pola:*** Beri nama pola yang ditemukan. Contoh: "Teridentifikasi Klaster Absensi Sakit Akhir Bulan (24-26 September) Lintas Kelas".
+                                - ***Deskripsi:*** Jelaskan pola kelompok yang ditemukan, kelas mana saja yang terlibat, dan potensi penyebabnya. Sebutkan beberapa siswa yang menjadi bagian dari klaster ini sebagai contoh.
 
                             ### Rekomendasi Tindak Lanjut Strategis
-                            Gunakan daftar berpoin. Berikan 2-3 rekomendasi konkret berdasarkan 'Peringatan Dini' dan 'Analisis Pola Utama'. Jelaskan MENGAPA setiap rekomendasi penting. Contoh: "**Investigasi Kesehatan di Kelas 5B**: Tugaskan Guru UKS/BK untuk berdialog dengan wali kelas 5B untuk memahami apakah ada faktor lingkungan atau penyakit menular yang menyebabkan klaster absensi sakit."
+                            Gunakan daftar berpoin. Berikan 2-3 rekomendasi konkret berdasarkan temuan di 'Peringatan Dini' dan 'Analisis Pola Utama'. Jelaskan MENGAPA setiap rekomendasi penting. Contoh: "**Dialog Personal dengan Siswa Berpola Kronis**: Tugaskan Guru BK untuk berbicara dengan siswa yang absen setiap hari Jumat untuk memahami akar permasalahannya." atau "**Koordinasi Kesehatan untuk Klaster Sakit**: Informasikan kepada Guru UKS dan wali kelas terkait untuk memantau gejala dan memastikan protokol kesehatan dijalankan."
                         `;
                         
                         const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
@@ -396,6 +411,7 @@ export default async function handler(request, response) {
         }
     } catch (error) {
         console.error('API Error:', error);
+        // FIX: Added a block to the catch statement.
         return response.status(500).json({ error: 'An internal server error occurred', details: error.message });
     }
 }
