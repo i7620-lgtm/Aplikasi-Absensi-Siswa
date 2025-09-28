@@ -346,17 +346,23 @@ export default async function handler(request, response) {
                         }
     
                         const prompt = `
-                            Anda adalah seorang asisten kepala sekolah virtual yang cerdas dan proaktif. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir dan memberikan rekomendasi yang tajam, ringkas, dan dapat ditindaklanjuti.
+                            Anda adalah seorang analis data pendidikan ahli. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir dan menyajikannya dalam format yang sangat ringkas, visual, dan mudah dipahami untuk kepala sekolah yang sibuk. Hindari paragraf panjang dan fokus pada poin-poin penting.
 
-                            Berikut adalah data absensi yang sudah dirangkum untuk siswa dengan total absensi tertinggi dalam format JSON. Setiap siswa memiliki total jumlah absensi berdasarkan status (S=Sakit, I=Izin, A=Alpa).
-                            Data: ${JSON.stringify(preprocessedData)}
+                            Data absensi siswa dengan ketidakhadiran tertinggi (format JSON): ${JSON.stringify(preprocessedData)}
 
-                            Berdasarkan data di atas, lakukan hal berikut:
-                            1.  **Identifikasi Peringatan Dini:** Cari 5 siswa dengan jumlah total absensi (S+I+A) tertinggi. Tampilkan dalam format daftar bernomor. Untuk setiap siswa, sebutkan NAMA LENGKAP, KELAS, dan rincian jumlah absensi (Contoh: Total 8 kali: 5 Alpa, 2 Sakit, 1 Izin).
-                            2.  **Temukan Pola Tersembunyi:** Apakah ada tren yang menarik? Misalnya, kelas dengan total absensi 'Sakit' yang tinggi, atau dominasi absensi 'Alpa' secara keseluruhan. Sebutkan 1-2 pola paling signifikan yang Anda temukan berdasarkan data agregat. (Catatan: Anda tidak memiliki data harian, jadi fokus pada tren agregat).
-                            3.  **Berikan Rekomendasi Konkret:** Berikan 2-3 rekomendasi yang jelas dan dapat langsung ditindaklanjuti oleh kepala sekolah atau guru BK. Rekomendasi harus berhubungan langsung dengan temuan Anda di atas.
+                            Sajikan analisis Anda HANYA dalam format Markdown berikut, gunakan heading level 3 (###) untuk setiap judul bagian:
 
-                            Gunakan format Markdown untuk jawaban Anda dengan heading, bold, dan list agar mudah dibaca.
+                            ### Ringkasan
+                            Satu kalimat singkat yang merangkum temuan utama.
+
+                            ### Peringatan Dini: 5 Siswa Teratas
+                            Gunakan daftar berpoin. Format setiap item: **Nama Siswa (Kelas)**: Total X kali (Sakit: Y, Izin: Z, Alpa: A)
+                            
+                            ### Pola Utama yang Teridentifikasi
+                            Gunakan daftar berpoin. Jelaskan 1-2 pola paling signifikan dalam kalimat singkat.
+
+                            ### Rekomendasi Tindak Lanjut
+                            Gunakan daftar berpoin. Berikan 1-2 rekomendasi paling penting dan dapat ditindaklanjuti.
                         `;
                         
                         const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
