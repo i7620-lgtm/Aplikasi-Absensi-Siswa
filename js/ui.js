@@ -370,20 +370,20 @@ async function renderAdminHomeScreen() {
 async function renderDashboardScreen() {
     appContainer.innerHTML = templates.dashboard();
 
-    // --- ELEMENT REFERENCES ---
-    const reportContent = document.getElementById('dashboard-content-report');
-    const percentageContent = document.getElementById('dashboard-content-percentage');
-    const aiContent = document.getElementById('dashboard-content-ai');
-
-    // --- CORE RENDERING LOGIC ---
     const renderDashboardPanels = () => {
         const { isDataLoaded, allTeacherData, selectedDate, activeView, aiRecommendation } = state.dashboard;
+        
+        const reportContent = document.getElementById('dashboard-content-report');
+        const percentageContent = document.getElementById('dashboard-content-percentage');
+        const aiContent = document.getElementById('dashboard-content-ai');
+
+        if (!reportContent || !percentageContent || !aiContent) return;
 
         if (!isDataLoaded) {
             const loaderHtml = `<p class="text-center text-slate-500 py-8">Memuat data sekolah...</p>`;
-            if (reportContent) reportContent.innerHTML = loaderHtml;
-            if (percentageContent) percentageContent.innerHTML = loaderHtml;
-            if (aiContent) aiContent.innerHTML = loaderHtml;
+            reportContent.innerHTML = loaderHtml;
+            percentageContent.innerHTML = loaderHtml;
+            aiContent.innerHTML = loaderHtml;
             return;
         }
 
@@ -425,8 +425,6 @@ async function renderDashboardScreen() {
                 }).join('');
             }
         } else if (activeView === 'percentage') {
-            if (!percentageContent) return;
-
             const allClasses = [...new Set(allTeacherData.flatMap(teacher => 
                 teacher.students_by_class ? Object.keys(teacher.students_by_class) : []
             ))].sort();
@@ -524,7 +522,7 @@ async function renderDashboardScreen() {
                 window.dashboardPieChart.destroy();
             }
 
-            if (totalRecords > 0) {
+            if (totalRecords > 0 && chartCanvas && noDataEl && legendContainer) {
                 chartCanvas.style.display = 'block';
                 noDataEl.classList.add('hidden');
                 
@@ -560,21 +558,17 @@ async function renderDashboardScreen() {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            legend: { display: false }, // Disable default legend
-                            tooltip: { enabled: true } // Keep tooltip for quick hover info
+                            legend: { display: false },
+                            tooltip: { enabled: true }
                         }
                     }
                 });
 
-                // --- INTERACTIVITY LOGIC ---
                 const legendItems = legendContainer.querySelectorAll('.legend-item');
-
                 const setActive = (index) => {
                      window.dashboardPieChart.setActiveElements([{ datasetIndex: 0, index: index }]);
                      window.dashboardPieChart.update();
-                     legendItems.forEach((item, i) => {
-                        item.classList.toggle('bg-slate-100', i === index);
-                     });
+                     legendItems.forEach((item, i) => item.classList.toggle('bg-slate-100', i === index));
                 };
                 const clearActive = () => {
                      window.dashboardPieChart.setActiveElements([]);
@@ -582,24 +576,16 @@ async function renderDashboardScreen() {
                      legendItems.forEach(item => item.classList.remove('bg-slate-100'));
                 };
 
-                // Chart hover -> Legend highlight
                 chartCanvas.onpointermove = (e) => {
                     const activeElements = window.dashboardPieChart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
-                    if (activeElements.length > 0) {
-                        setActive(activeElements[0].index);
-                    } else {
-                        clearActive();
-                    }
+                    if (activeElements.length > 0) setActive(activeElements[0].index); else clearActive();
                 };
                 chartCanvas.onpointerleave = clearActive;
-
-                // Legend hover -> Chart highlight
                 legendItems.forEach(item => {
                     item.addEventListener('mouseenter', () => setActive(parseInt(item.dataset.index)));
                     item.addEventListener('mouseleave', clearActive);
                 });
-
-            } else {
+            } else if (chartCanvas && noDataEl && legendContainer) {
                 chartCanvas.style.display = 'none';
                 noDataEl.classList.remove('hidden');
                 legendContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada data untuk ditampilkan di legenda.</p>`;
@@ -626,22 +612,28 @@ async function renderDashboardScreen() {
 
     const dashboardPoller = async () => {
         console.log(`Dashboard polling (interval: ${state.dashboard.polling.interval / 1000}s)...`);
-        
-        if (state.dashboard.polling.timeoutId) {
-            clearTimeout(state.dashboard.polling.timeoutId);
-        }
+        if (state.dashboard.polling.timeoutId) clearTimeout(state.dashboard.polling.timeoutId);
 
         try {
             const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
             if (!schoolId) {
-                const message = state.userProfile.role === 'SUPER_ADMIN' ? 'Konteks sekolah belum dipilih.' : 'Anda belum ditugaskan ke sekolah manapun.';
-                reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">${message}</p>`;
-                percentageContent.innerHTML = `<p class="text-center text-slate-500 py-8">${message}</p>`;
+                if (state.currentScreen === 'dashboard') {
+                    const message = state.userProfile.role === 'SUPER_ADMIN' ? 'Konteks sekolah belum dipilih.' : 'Anda belum ditugaskan ke sekolah manapun.';
+                    const rc = document.getElementById('dashboard-content-report');
+                    const pc = document.getElementById('dashboard-content-percentage');
+                    if (rc) rc.innerHTML = `<p class="text-center text-slate-500 py-8">${message}</p>`;
+                    if (pc) pc.innerHTML = `<p class="text-center text-slate-500 py-8">${message}</p>`;
+                }
                 return;
             }
 
             const { allData } = await apiService.getGlobalData(schoolId);
             let nextInterval;
+
+            if (state.currentScreen !== 'dashboard') {
+                console.log("Dashboard poller cycle skipped: User is on a different screen.");
+                return;
+            }
 
             if (JSON.stringify(allData) !== JSON.stringify(state.dashboard.allTeacherData)) {
                 console.log('Dashboard data changed. Updating view & resetting interval.');
@@ -661,22 +653,17 @@ async function renderDashboardScreen() {
             await setState({ dashboard: { ...state.dashboard, polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
         } catch (error) {
             console.error("Dashboard poll failed:", error);
-    
-            // Hanya tampilkan pesan error yang mengganggu jika data BELUM pernah berhasil dimuat.
-            if (!state.dashboard.isDataLoaded) {
+            if (!state.dashboard.isDataLoaded && state.currentScreen === 'dashboard') {
                 const currentContent = document.querySelector(`#dashboard-content-${state.dashboard.activeView}`);
-                // Pastikan kita masih di layar dasbor sebelum mencoba memperbarui DOM.
-                if (currentContent && state.currentScreen === 'dashboard') {
+                if (currentContent) {
                     currentContent.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
                 }
             }
-            
             const newTimeoutId = setTimeout(dashboardPoller, state.dashboard.polling.interval);
             await setState({ dashboard: { ...state.dashboard, polling: { ...state.dashboard.polling, timeoutId: newTimeoutId } } });
         }
     };
 
-    // --- EVENT LISTENERS & INITIALIZATION ---
     document.getElementById('logoutBtn-ks').addEventListener('click', handleSignOut);
     const backBtn = document.getElementById('dashboard-back-btn');
     if (backBtn) backBtn.addEventListener('click', () => navigateTo(backBtn.dataset.target));
