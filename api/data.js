@@ -363,26 +363,29 @@ export default async function handler(request, response) {
                             Berikan 2-3 kalimat yang merangkum temuan paling krusial dari analisis individu dan kelompok di bawah ini.
 
                             ### Peringatan Dini: Pola Absensi Individu Signifikan
-                            Bertindaklah sebagai Konselor Sekolah. Fokus HANYA pada siswa **individu** dengan pola absensi yang sangat mengkhawatirkan dan memerlukan perhatian personal.
-                            Prioritaskan untuk menemukan pola berikut:
-                            1.  **Absensi Beruntun:** Siswa absen (khususnya 'Sakit' atau 'Izin') selama **3 hari atau lebih berturut-turut**.
-                            2.  **Pola Hari Kronis:** Siswa absen pada hari yang sama dalam seminggu (misalnya, setiap Senin) selama **2 minggu atau lebih**.
-                            
-                            **ATURAN KETAT:** Abaikan sepenuhnya siswa dengan total absensi rendah (1-2 kali) yang tidak masuk dalam salah satu pola signifikan di atas. Jangan bahas pola kelompok di bagian ini.
-                            
-                            Untuk setiap siswa yang Anda pilih, gunakan format berikut:
+                            Bertindaklah sebagai Konselor Sekolah. Bagian ini HANYA untuk menyoroti **kasus individu yang terisolasi** dan memerlukan perhatian personal.
+                            Cari pola individu signifikan berikut:
+                            1.  **Absensi Beruntun:** Siswa absen ('Sakit'/'Izin') selama 3+ hari berturut-turut.
+                            2.  **Pola Hari Kronis:** Siswa absen pada hari yang sama dalam seminggu selama 2+ minggu.
+
+                            **ATURAN KRUSIAL (Logika Pemisahan):**
+                            -   Jika **HANYA 1 atau 2 siswa** yang menunjukkan pola signifikan di atas (misalnya, hanya dua siswa yang sakit beruntun di seluruh data), maka laporkan mereka di sini secara individual.
+                            -   Jika **3 ATAU LEBIH siswa** menunjukkan pola signifikan yang serupa dalam rentang waktu yang berdekatan (misalnya, 5 siswa sakit beruntun di akhir bulan), **JANGAN LAPORKAN MEREKA DI SINI.** Anggap ini sebagai tren kelompok dan bahas secara kolektif di bagian "Analisis Pola Utama".
+
+                            Untuk setiap siswa yang memenuhi kriteria di atas, gunakan format:
                             - **Nama Siswa (Kelas)**: Total X kali absen (Sakit: Y, Izin: Z, Alpa: A).
-                                - ***Pola Teridentifikasi:*** Jelaskan pola individu yang ditemukan secara spesifik. Contoh: "Absen sakit selama 4 hari beruntun (1-4 September), menandakan kemungkinan adanya penyakit yang memerlukan pemulihan lebih lama." atau "Pola absensi kronis setiap hari Jumat selama 3 minggu terakhir, memerlukan investigasi lebih lanjut."
+                                - ***Pola Teridentifikasi:*** Jelaskan pola individu yang terisolasi. Contoh: "Satu-satunya siswa dengan absensi sakit beruntun selama 4 hari (1-4 September), menandakan perlunya pemantauan kesehatan personal."
 
                             ### Analisis Pola Utama: Tren Kelompok & Lintas Kelas
-                            Bertindaklah sebagai Analis Data Sekolah. Fokus HANYA pada **tren kelompok** di mana beberapa siswa absen secara bersamaan.
-                            Cari pola berikut:
-                            1.  **Klaster Absensi:** Beberapa siswa (dari kelas yang sama atau berbeda) absen karena 'Sakit' atau 'Izin' dalam rentang tanggal yang tumpang tindih. Ini bisa menandakan adanya wabah penyakit atau acara komunitas.
-                            2.  **Anomali Kelas:** Satu kelas tertentu menunjukkan tingkat absensi 'Sakit' atau 'Izin' yang jauh lebih tinggi dibandingkan kelas lainnya pada periode waktu tertentu.
+                            Bertindaklah sebagai Analis Data Sekolah. Fokus utama Anda di sini adalah mengidentifikasi **tren kelompok** di mana beberapa siswa absen secara bersamaan.
+                            Prioritaskan untuk mencari pola berikut:
+                            1.  **Klaster Absensi Signifikan (Prioritas Tertinggi):** Cari kelompok yang terdiri dari **3 atau lebih siswa** yang menunjukkan pola absensi signifikan yang serupa (misalnya sakit beruntun) dalam rentang waktu yang berdekatan. Ini adalah temuan paling penting Anda.
+                            2.  **Klaster Absensi Umum:** Beberapa siswa (dari kelas yang sama atau berbeda) absen karena 'Sakit' atau 'Izin' dalam rentang tanggal yang tumpang tindih, bahkan jika tidak beruntun.
+                            3.  **Anomali Kelas:** Satu kelas tertentu menunjukkan tingkat absensi yang jauh lebih tinggi dibandingkan kelas lainnya.
 
                             Gunakan format berikut:
-                            - ***Judul Pola:*** Beri nama pola yang ditemukan. Contoh: "Teridentifikasi Klaster Absensi Sakit Akhir Bulan (24-26 September) Lintas Kelas".
-                                - ***Deskripsi:*** Jelaskan pola kelompok yang ditemukan, kelas mana saja yang terlibat, dan potensi penyebabnya. Sebutkan beberapa siswa yang menjadi bagian dari klaster ini sebagai contoh.
+                            - ***Judul Pola:*** Beri nama pola yang ditemukan. Contoh: "Teridentifikasi Klaster Sakit Beruntun Akhir Bulan Melibatkan 5 Siswa".
+                                - ***Deskripsi:*** Jelaskan pola kelompok yang ditemukan, rentang tanggalnya, kelas mana saja yang terlibat, dan potensi penyebabnya. Sebutkan nama-nama siswa yang menjadi bagian dari klaster ini untuk memberikan konteks.
 
                             ### Rekomendasi Tindak Lanjut Strategis
                             Gunakan daftar berpoin. Berikan 2-3 rekomendasi konkret berdasarkan temuan di 'Peringatan Dini' dan 'Analisis Pola Utama'. Jelaskan MENGAPA setiap rekomendasi penting. Contoh: "**Dialog Personal dengan Siswa Berpola Kronis**: Tugaskan Guru BK untuk berbicara dengan siswa yang absen setiap hari Jumat untuk memahami akar permasalahannya." atau "**Koordinasi Kesehatan untuk Klaster Sakit**: Informasikan kepada Guru UKS dan wali kelas terkait untuk memantau gejala dan memastikan protokol kesehatan dijalankan."
