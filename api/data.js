@@ -38,7 +38,7 @@ async function setupTables() {
     }
      try {
         await sql`ALTER TABLE users ADD COLUMN assigned_classes TEXT[] DEFAULT '{}'`;
-    } catch (error) {
+    } catch (error)
         if (error.code !== '42701') throw error; // Abaikan jika kolom sudah ada
     }
     
@@ -346,20 +346,23 @@ export default async function handler(request, response) {
                         }
     
                         const prompt = `
-                            Anda adalah seorang asisten kepala sekolah virtual yang proaktif dan analitis. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir dan menyajikan temuan serta rekomendasi dalam format yang jernih, profesional, dan mudah ditindaklanjuti untuk kepala sekolah.
+                            Anda adalah seorang konsultan pendidikan virtual yang sangat analitis dan berwawasan. Tugas Anda adalah menganalisis data absensi siswa selama 30 hari terakhir untuk mengidentifikasi pola-pola tersembunyi dan memberikan wawasan yang dapat ditindaklanjuti bagi kepala sekolah.
 
                             Data absensi siswa dengan ketidakhadiran tertinggi (format JSON): ${JSON.stringify(preprocessedData)}
+                            Setiap siswa memiliki daftar 'absences' yang berisi tanggal dan status ('S' untuk Sakit, 'I' untuk Izin, 'A' untuk Alpa).
 
                             Sajikan analisis Anda HANYA dalam format Markdown berikut. Gunakan heading level 3 (###) untuk setiap judul bagian. Berikan penjelasan singkat namun bermakna di setiap bagian.
 
                             ### Ringkasan Eksekutif
-                            Berikan 2-3 kalimat yang merangkum temuan paling krusial. Sebutkan kelas atau pola yang paling menonjol.
+                            Berikan 2-3 kalimat yang merangkum temuan paling krusial. Sebutkan tren umum atau kelas yang paling menonjol.
 
                             ### Peringatan Dini: Siswa yang Memerlukan Perhatian
-                            Gunakan daftar berpoin. Untuk setiap siswa, tulis: **Nama Siswa (Kelas)**: Total X kali absen (Sakit: Y, Izin: Z, Alpa: A).
+                            Fokus HANYA pada siswa yang menunjukkan pola absensi yang signifikan atau mengkhawatirkan. Abaikan siswa dengan absensi sporadis (1-2 kali) kecuali ada pola yang jelas. Untuk setiap siswa yang Anda pilih, gunakan format berikut:
+                            - **Nama Siswa (Kelas)**: Total X kali absen (Sakit: Y, Izin: Z, Alpa: A).
+                                - ***Pola Teridentifikasi:*** Jelaskan secara singkat pola yang Anda temukan. Jadilah spesifik. Contoh: "Absen rutin setiap hari Senin selama 3 minggu terakhir." atau "Absen sakit selama 5 hari berturut-turut pada awal bulan, menandakan kemungkinan pemulihan dari penyakit." atau "Frekuensi absensi 'Izin' meningkat dalam dua minggu terakhir."
                             
                             ### Analisis Pola Utama
-                            Gunakan daftar berpoin. Identifikasi 1-2 pola paling signifikan. Contoh: "Dominasi Absensi 'Sakit': Mayoritas absensi (X dari Y total) disebabkan oleh sakit, ini bisa menandakan masalah kesehatan komunal." atau "Konsentrasi di Kelas Tertentu: Kelas 5B menyumbang Z% dari total absensi tertinggi, mengindikasikan adanya isu spesifik di kelas tersebut."
+                            Gunakan daftar berpoin. Identifikasi 1-2 pola paling signifikan di tingkat sekolah atau kelas dari data yang diberikan. Contoh: "Dominasi Absensi 'Sakit': Mayoritas absensi (X dari Y total) disebabkan oleh sakit, ini bisa menandakan masalah kesehatan komunal." atau "Konsentrasi di Kelas Tertentu: Kelas 5B menyumbang Z% dari total absensi tertinggi, mengindikasikan adanya isu spesifik di kelas tersebut."
 
                             ### Rekomendasi Tindak Lanjut Strategis
                             Gunakan daftar berpoin. Berikan 2-3 rekomendasi konkret dan dapat ditindaklanjuti. Jelaskan secara singkat MENGAPA setiap rekomendasi penting. Contoh: "**Investigasi Kesehatan di Kelas 5B**: Tugaskan Guru UKS/BK untuk berdialog dengan wali kelas 5B. Tujuannya adalah untuk memahami apakah ada faktor lingkungan atau penyakit menular yang menyebabkan tingginya angka absensi sakit."
