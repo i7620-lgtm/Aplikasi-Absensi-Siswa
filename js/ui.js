@@ -209,12 +209,12 @@ function renderSetupScreen() {
                 }
 
                 const newTimeoutId = setTimeout(teacherProfilePoller, nextInterval);
-                await setState({ setup: { polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
+                await setState({ setup: { ...state.setup, polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
 
             } catch (error) {
                 console.error("Failed to fetch teacher profile update:", error);
                 const newTimeoutId = setTimeout(teacherProfilePoller, state.setup.polling.interval);
-                await setState({ setup: { ...state.setup.polling, timeoutId: newTimeoutId } } });
+                await setState({ setup: { ...state.setup, polling: { ...state.setup.polling, timeoutId: newTimeoutId } } });
             }
         };
         teacherProfilePoller();
@@ -258,12 +258,12 @@ function renderSetupScreen() {
                 }
                 
                 const newTimeoutId = setTimeout(adminClassDataPoller, nextInterval);
-                await setState({ setup: { polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
+                await setState({ setup: { ...state.setup, polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
 
             } catch (error) {
                 console.error(`Failed to fetch class data update for admin:`, error);
                 const newTimeoutId = setTimeout(adminClassDataPoller, state.setup.polling.interval);
-                await setState({ setup: { polling: { ...state.setup.polling, timeoutId: newTimeoutId } } });
+                await setState({ setup: { ...state.setup, polling: { ...state.setup.polling, timeoutId: newTimeoutId } } });
             }
         };
         
@@ -271,7 +271,7 @@ function renderSetupScreen() {
         
         document.getElementById('class-select').addEventListener('change', async () => {
             console.log("Class selection changed, restarting admin setup poller.");
-            await setState({ setup: { polling: { ...state.setup.polling, interval: INITIAL_POLLING_INTERVAL } } });
+            await setState({ setup: { ...state.setup, polling: { ...state.setup.polling, interval: INITIAL_POLLING_INTERVAL } } });
             adminClassDataPoller();
         });
     }
