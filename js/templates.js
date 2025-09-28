@@ -1,4 +1,3 @@
-
 import { state, CLASSES } from './main.js';
 import { getGsiReadyState } from './auth.js';
 
@@ -220,9 +219,18 @@ export const templates = {
                          <button id="admin-panel-back-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
                     </div>
                 </div>
+                ${isSuperAdmin ? `
+                <div class="mb-4 flex justify-end">
+                    <label class="flex items-center space-x-2 cursor-pointer text-sm text-slate-600">
+                        <input type="checkbox" id="group-by-school-toggle" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <span>Kelompokkan berdasarkan sekolah</span>
+                    </label>
+                </div>
+                ` : ''}
                 <div id="admin-panel-container" class="overflow-x-auto">
                      <p class="text-center text-slate-500 py-8">Memuat daftar pengguna...</p>
                 </div>
+                <div id="admin-pagination-container" class="mt-6 flex justify-between items-center text-sm text-slate-600"></div>
              </div>
         </div>
     `},
