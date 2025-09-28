@@ -38,7 +38,7 @@ async function setupTables() {
     }
      try {
         await sql`ALTER TABLE users ADD COLUMN assigned_classes TEXT[] DEFAULT '{}'`;
-    } catch (error)
+    } catch (error) {
         if (error.code !== '42701') throw error; // Abaikan jika kolom sudah ada
     }
     
@@ -335,7 +335,7 @@ export default async function handler(request, response) {
     
                     try {
                         if (!process.env.API_KEY) {
-                            console.error('SERVER_CONFIGURATION_ERROR: GEMINI_API_KEY is not set in environment variables.');
+                            console.error('SERVER_CONFIGURATION_ERROR: API_KEY is not set in environment variables.');
                             return response.status(500).json({ error: 'Gagal menghasilkan rekomendasi: Konfigurasi server tidak lengkap.', details: 'Kunci API untuk layanan AI tidak ditemukan di lingkungan server.' });
                         }
                         
