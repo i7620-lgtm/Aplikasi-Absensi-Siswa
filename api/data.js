@@ -362,16 +362,16 @@ export default async function handler(request, response) {
                             Berikan 2-3 kalimat yang merangkum temuan paling krusial dari analisis individu dan kelompok di bawah ini.
 
                             ### Peringatan Dini: Pola Absensi Individu Signifikan
-                            Bertindaklah sebagai Konselor Sekolah. Bagian ini HANYA untuk menyoroti **kasus individu yang terisolasi** dan memerlukan perhatian personal.
-                            Cari pola individu signifikan berikut:
-                            1.  **Absensi Beruntun:** Siswa absen ('Sakit'/'Izin') selama 3+ hari berturut-turut.
-                            2.  **Pola Hari Kronis:** Siswa absen pada hari yang sama dalam seminggu selama 2+ minggu.
+                            Bertindaklah sebagai Konselor Sekolah. Fokus UTAMA Anda di bagian ini adalah **kasus individu yang sangat terisolasi**.
 
-                            **ATURAN KRUSIAL (Logika Pemisahan):**
-                            -   Jika **HANYA 1 atau 2 siswa** yang menunjukkan pola signifikan di atas (misalnya, hanya dua siswa yang sakit beruntun di seluruh data), maka laporkan mereka di sini secara individual.
-                            -   Jika **3 ATAU LEBIH siswa** menunjukkan pola signifikan yang serupa dalam rentang waktu yang berdekatan (misalnya, 5 siswa sakit beruntun di akhir bulan), **JANGAN LAPORKAN MEREKA DI SINI.** Anggap ini sebagai tren kelompok dan bahas secara kolektif di bagian "Analisis Pola Utama".
+                            **ATURAN PALING PENTING - IKUTI PROSES INI:**
+                            1.  **IDENTIFIKASI:** Cari semua siswa dengan pola individu signifikan: (A) Absen 'Sakit'/'Izin' selama 3+ hari berturut-turut, atau (B) Absen pada hari yang sama dalam seminggu selama 2+ minggu.
+                            2.  **HITUNG:** Hitung berapa banyak total siswa yang Anda temukan di langkah 1.
+                            3.  **PUTUSKAN (LOGIKA UTAMA):**
+                                -   **JIKA JUMLAHNYA 2 ATAU KURANG:** Laporkan hanya siswa-siswa tersebut di bagian ini.
+                                -   **JIKA JUMLAHNYA 3 ATAU LEBIH:** **JANGAN LAPORKAN SIAPAPUN DI SINI.** Biarkan bagian ini kosong atau tulis "Tidak ada kasus individu terisolasi yang signifikan; semua pola yang ditemukan bersifat kelompok dan dibahas di Analisis Pola Utama." Semua siswa tersebut HARUS dibahas sebagai satu kelompok di bagian "Analisis Pola Utama".
 
-                            Untuk setiap siswa yang memenuhi kriteria di atas, gunakan format:
+                            Hanya jika kondisi "2 ATAU KURANG" terpenuhi, gunakan format ini untuk setiap siswa:
                             - **Nama Siswa (Kelas)**: Total X kali absen (Sakit: Y, Izin: Z, Alpa: A).
                                 - ***Pola Teridentifikasi:*** Jelaskan pola individu yang terisolasi. Contoh: "Satu-satunya siswa dengan absensi sakit beruntun selama 4 hari (1-4 September), menandakan perlunya pemantauan kesehatan personal."
 
