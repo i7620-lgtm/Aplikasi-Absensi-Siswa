@@ -1,4 +1,3 @@
-
 import { sql } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 
@@ -394,7 +393,8 @@ export default async function handler(request, response) {
                         const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
                         const geminiResponse = await ai.models.generateContent({
                             model: 'gemini-2.5-flash',
-                            contents: prompt
+                            contents: prompt,
+                            config: { thinkingConfig: { thinkingBudget: 0 } }
                         });
             
                         const recommendation = geminiResponse.text;
