@@ -46,12 +46,13 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Use a Network-first strategy for navigation and asset requests.
-  // This ensures the user always gets the latest UI when online.
-  if (event.request.method !== 'GET') {
-    return; // Don't handle non-GET requests
+  // Ignore non-GET requests and requests from browser extensions.
+  if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
+    return;
   }
 
+  // Use a Network-first strategy for navigation and asset requests.
+  // This ensures the user always gets the latest UI when online.
   event.respondWith(
     fetch(event.request)
       .then(networkResponse => {
