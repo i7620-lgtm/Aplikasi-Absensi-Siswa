@@ -1,4 +1,3 @@
-
 import { initializeGsi, handleSignIn, handleSignOut } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus } from './ui.js';
@@ -23,12 +22,14 @@ export let state = {
     recapSortOrder: 'total',
     adminPanel: {
         users: [],
-        schools: [], // To store list of all schools
+        schools: [],
         isLoading: true,
         polling: {
             timeoutId: null,
             interval: 10000,
         },
+        currentPage: 1,
+        groupBySchool: false,
     },
     dashboard: {
         allTeacherData: [],
