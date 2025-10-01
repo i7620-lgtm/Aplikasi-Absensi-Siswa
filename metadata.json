@@ -1,5 +1,5 @@
 {
-  "name": "Aplikasi Absensi Siswa - Finish with Google Sync and Neon Database",
+  "name": "Aplikasi Absensi Siswa - GgNeon",
   "description": "Progressive Web Application (PWA) untuk mencatat absensi siswa secara online, terinspirasi dari sketsa alur kerja manual. Aplikasi ini memungkinkan guru untuk memilih kelas, tanggal, dan mencatat status kehadiran setiap siswa (Hadir, Sakit, Izin, Alpha) dengan mudah. Data kemudian disimpan dan dikonfirmasi melalui antarmuka yang bersih dan intuitif.",
   "requestFramePermissions": []
 }
