@@ -253,20 +253,23 @@ export default async function handler(request, response) {
                     if (user.role === 'SUPER_ADMIN') {
                         usersQuery = sql`
                             SELECT 
-                                email, name, picture, role, school_id, assigned_classes,
-                                (role = 'GURU' AND school_id IS NULL) AS is_unmanaged
-                            FROM users 
-                            ORDER BY name;
+                                u.email, u.name, u.picture, u.role, u.school_id, u.assigned_classes,
+                                s.name as school_name,
+                                (u.role = 'GURU' AND u.school_id IS NULL) AS is_unmanaged
+                            FROM users u
+                            LEFT JOIN schools s ON u.school_id = s.id
+                            ORDER BY u.name;
                         `;
                     } else { // ADMIN_SEKOLAH
                         if (!user.school_id) return response.status(200).json({ allUsers: [] });
                         usersQuery = sql`
                             SELECT 
-                                email, name, picture, role, school_id, assigned_classes,
-                                (role = 'GURU' AND school_id IS NULL) AS is_unmanaged
-                            FROM users
-                            WHERE school_id = ${user.school_id} AND role IN ('GURU', 'KEPALA_SEKOLAH')
-                            ORDER BY name;
+                                u.email, u.name, u.picture, u.role, u.school_id, u.assigned_classes,
+                                s.name as school_name
+                            FROM users u
+                            LEFT JOIN schools s ON u.school_id = s.id
+                            WHERE u.school_id = ${user.school_id} AND u.role IN ('GURU', 'KEPALA_SEKOLAH')
+                            ORDER BY u.name;
                         `;
                     }
                     const { rows: allUsers } = await usersQuery;
