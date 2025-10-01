@@ -1,4 +1,6 @@
-import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES } from './main.js';
+
+
+import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
 import { apiService } from './api.js';
@@ -179,7 +181,7 @@ function renderSetupScreen() {
     if (!needsAssignment && state.userProfile) {
         document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
         document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(true));
-        document.getElementById('recapBtn').addEventListener('click', () => navigateTo('recap'));
+        document.getElementById('recapBtn').addEventListener('click', handleViewRecap);
         document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
         document.getElementById('downloadDataBtn').addEventListener('click', handleDownloadData);
 
@@ -635,7 +637,7 @@ async function renderDashboardScreen() {
         } else if (activeView === 'ai') {
             const { isLoading, result, error } = aiRecommendation;
             if (isLoading) {
-                aiContent.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div><p class="loader-text">Menganalisis data absensi...</p></div>`;
+                aiContent.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div><p class="loader-text">Menganalisis data absensi...</p></div></div>`;
             } else if (error) {
                 aiContent.innerHTML = `<div class="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200"><p class="font-bold">Terjadi Kesalahan</p><p>${error}</p><button id="retry-ai-btn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Coba Lagi</button></div>`;
                 document.getElementById('retry-ai-btn').addEventListener('click', handleGenerateAiRecommendation);
@@ -732,8 +734,8 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
     // 1. Logika Pengurutan & Pengelompokan
     if (groupBySchool && state.userProfile.role === 'SUPER_ADMIN') {
         usersToRender.sort((a, b) => {
-            const schoolA = allSchools.find(s => s.id === a.school_id)?.name || 'zzz_Unassigned';
-            const schoolB = allSchools.find(s => s.id === b.school_id)?.name || 'zzz_Unassigned';
+            const schoolA = a.school_name || 'zzz_Unassigned';
+            const schoolB = b.school_name || 'zzz_Unassigned';
             if (schoolA < schoolB) return -1;
             if (schoolA > schoolB) return 1;
             return a.name.localeCompare(b.name);
@@ -766,12 +768,11 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
     if (paginatedUsers.length === 0) {
         tableHtml += `<tr><td colspan="4" class="text-center text-slate-500 py-8">Tidak ada pengguna yang cocok.</td></tr>`;
     } else {
-        let currentSchoolId = -1; 
+        let currentSchoolName = null;
         paginatedUsers.forEach(user => {
-            if (groupBySchool && state.userProfile.role === 'SUPER_ADMIN' && user.school_id !== currentSchoolId) {
-                currentSchoolId = user.school_id;
-                const school = allSchools.find(s => s.id === currentSchoolId);
-                const schoolName = school ? school.name : 'Belum Ditugaskan';
+            if (groupBySchool && state.userProfile.role === 'SUPER_ADMIN' && user.school_name !== currentSchoolName) {
+                currentSchoolName = user.school_name;
+                const schoolName = currentSchoolName || 'Belum Ditugaskan';
                 tableHtml += `
                     <tr class="bg-slate-100 sticky top-0">
                         <td colspan="4" class="p-2 font-bold text-slate-600">${schoolName}</td>
@@ -779,7 +780,6 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
                 `;
             }
             
-            const school = allSchools.find(s => s.id === user.school_id);
             const isNew = user.is_unmanaged;
             const newBadge = isNew ? `<span class="ml-2 px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full">BARU</span>` : '';
 
@@ -795,7 +795,7 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
                         </div>
                     </td>
                     <td class="p-3 text-sm text-slate-600">${user.role}</td>
-                    <td class="p-3 text-sm text-slate-600">${school ? school.name : '<span class="italic text-slate-400">Belum Ditugaskan</span>'}</td>
+                    <td class="p-3 text-sm text-slate-600">${user.school_name || '<span class="italic text-slate-400">Belum Ditugaskan</span>'}</td>
                     <td class="p-3 text-center">
                         <button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" 
                                 data-user='${JSON.stringify(user)}'>
@@ -892,10 +892,13 @@ async function renderAdminPanelScreen() {
         }
 
         try {
-            const [{ allUsers }, { allSchools }] = await Promise.all([
-                apiService.getAllUsers(),
-                state.userProfile.role === 'SUPER_ADMIN' ? apiService.getAllSchools() : Promise.resolve({ allSchools: [] })
-            ]);
+            const isSuperAdmin = state.userProfile.role === 'SUPER_ADMIN';
+            
+            // SUPER_ADMIN needs both users and schools. ADMIN_SEKOLAH only needs users (school_name is joined).
+            const usersPromise = apiService.getAllUsers();
+            const schoolsPromise = isSuperAdmin ? apiService.getAllSchools() : Promise.resolve({ allSchools: state.adminPanel.schools });
+
+            const [{ allUsers }, { allSchools }] = await Promise.all([usersPromise, schoolsPromise]);
 
             const oldData = { users: state.adminPanel.users, schools: state.adminPanel.schools };
             const newData = { users: allUsers, schools: allSchools };
@@ -1085,30 +1088,45 @@ function renderAttendanceScreen() {
 function renderDataScreen() {
     appContainer.innerHTML = templates.data();
     document.getElementById('data-back-to-start-btn').addEventListener('click', () => {
-        const targetScreen = state.userProfile.role === 'SUPER_ADMIN' ? 'adminHome' : 'setup';
+        const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
+        const targetScreen = isAdmin ? 'adminHome' : 'setup';
         navigateTo(targetScreen);
     });
     const container = document.getElementById('data-container');
     const titleEl = document.getElementById('data-title');
     
+    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
     const isAdminGlobalView = state.userProfile.role === 'SUPER_ADMIN' && state.adminAllLogsView;
 
-    const logsToShow = isAdminGlobalView 
-        ? state.adminAllLogsView
-        : (state.historyClassFilter 
-            ? state.savedLogs.filter(log => log.class === state.historyClassFilter)
-            : state.savedLogs);
-        
+    // Determine which logs to use based on context
+    let logsToShow;
     if (isAdminGlobalView) {
-        titleEl.textContent = `Semua Riwayat Absensi (Tampilan Admin)`;
-    } else if (state.historyClassFilter) {
-        titleEl.textContent = `Riwayat Absensi Kelas ${state.historyClassFilter}`;
-    } else {
-         titleEl.textContent = `Semua Riwayat Absensi`;
+        logsToShow = state.adminAllLogsView;
+        titleEl.textContent = `Semua Riwayat Absensi (Tampilan Super Admin)`;
+    } else if (isAdmin && state.schoolDataContext) {
+        logsToShow = state.schoolDataContext.savedLogs;
+        // Filter by class if a specific class history was requested
+        if (state.historyClassFilter) {
+            logsToShow = logsToShow.filter(log => log.class === state.historyClassFilter);
+            titleEl.textContent = `Riwayat Absensi Kelas ${state.historyClassFilter}`;
+        } else {
+            // This case should ideally not be hit from the UI, but as a fallback:
+            titleEl.textContent = `Semua Riwayat Absensi Sekolah`;
+        }
+    } else { // Regular user or admin viewing their own data
+        logsToShow = state.historyClassFilter 
+            ? state.savedLogs.filter(log => log.class === state.historyClassFilter)
+            : state.savedLogs;
+            
+        if (state.historyClassFilter) {
+            titleEl.textContent = `Riwayat Absensi Kelas ${state.historyClassFilter}`;
+        } else {
+            titleEl.textContent = `Semua Riwayat Absensi Saya`;
+        }
     }
-
+        
     if (logsToShow.length === 0) {
-        container.innerHTML = `<p class="text-center text-slate-500">Belum ada riwayat absensi yang tersimpan.</p>`;
+        container.innerHTML = `<p class="text-center text-slate-500">Belum ada riwayat absensi yang tersimpan untuk tampilan ini.</p>`;
         return;
     }
 
@@ -1151,16 +1169,24 @@ function renderDataScreen() {
 
 function renderRecapScreen() {
     appContainer.innerHTML = templates.recap();
+    const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
     document.getElementById('recap-back-to-start-btn').addEventListener('click', () => {
-        const targetScreen = state.userProfile.role === 'SUPER_ADMIN' ? 'adminHome' : 'setup';
+        const targetScreen = isAdmin ? 'adminHome' : 'setup';
         navigateTo(targetScreen);
     });
-    document.getElementById('sort-by-total-btn').addEventListener('click', () => { setState({ recapSortOrder: 'total' }); navigateTo('recap'); });
-    document.getElementById('sort-by-absen-btn').addEventListener('click', () => { setState({ recapSortOrder: 'absen' }); navigateTo('recap'); });
+    document.getElementById('sort-by-total-btn').addEventListener('click', () => { setState({ recapSortOrder: 'total' }); renderRecapScreen(); });
+    document.getElementById('sort-by-absen-btn').addEventListener('click', () => { setState({ recapSortOrder: 'absen' }); renderRecapScreen(); });
 
     const container = document.getElementById('recap-container');
+    
+    // Determine which data to use: school-wide context for admins, or personal data for others.
+    const dataContext = (isAdmin && state.schoolDataContext) 
+        ? state.schoolDataContext 
+        : { studentsByClass: state.studentsByClass, savedLogs: state.savedLogs };
 
-    if (!state.studentsByClass || Object.keys(state.studentsByClass).length === 0) {
+    const { studentsByClass: studentsByClassToUse, savedLogs: logsToUse } = dataContext;
+
+    if (!studentsByClassToUse || Object.keys(studentsByClassToUse).length === 0) {
         container.innerHTML = `<p class="text-center text-slate-500">Belum ada data siswa untuk ditampilkan.</p>`;
         return;
     }
@@ -1168,16 +1194,16 @@ function renderRecapScreen() {
     const recapData = {};
     const studentToClassMap = {};
 
-    for (const className in state.studentsByClass) {
-        if (state.studentsByClass[className] && state.studentsByClass[className].students) {
-            state.studentsByClass[className].students.forEach(studentName => {
+    for (const className in studentsByClassToUse) {
+        if (studentsByClassToUse[className] && studentsByClassToUse[className].students) {
+            studentsByClassToUse[className].students.forEach(studentName => {
                 recapData[studentName] = { S: 0, I: 0, A: 0 };
                 studentToClassMap[studentName] = className;
             });
         }
     }
 
-    state.savedLogs.forEach(log => {
+    logsToUse.forEach(log => {
         Object.entries(log.attendance).forEach(([studentName, status]) => {
             if (recapData[studentName] && status !== 'H') {
                 if (recapData[studentName][status] !== undefined) {
@@ -1200,7 +1226,7 @@ function renderRecapScreen() {
         } else { // 'absen'
             const classCompare = a.class.localeCompare(b.class);
             if (classCompare !== 0) return classCompare;
-            const classStudents = state.studentsByClass[a.class]?.students;
+            const classStudents = studentsByClassToUse[a.class]?.students;
             return classStudents ? classStudents.indexOf(a.name) - classStudents.indexOf(b.name) : 0;
         }
     });
@@ -1260,7 +1286,8 @@ export function renderScreen(screen) {
         case 'success':
              appContainer.innerHTML = templates.success();
              document.getElementById('success-back-to-start-btn').addEventListener('click', () => {
-                const targetScreen = state.userProfile.role === 'SUPER_ADMIN' ? 'adminHome' : 'setup';
+                const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
+                const targetScreen = isAdmin ? 'adminHome' : 'setup';
                 navigateTo(targetScreen);
              });
              document.getElementById('success-view-data-btn').addEventListener('click', () => handleViewHistory(false));
