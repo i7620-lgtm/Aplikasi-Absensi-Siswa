@@ -61,6 +61,7 @@ export let state = {
     },
     adminAllLogsView: null,
     adminActingAsSchool: null, // Stores {id, name} for SUPER_ADMIN context
+    schoolDataContext: null, // Stores aggregated { studentsByClass, savedLogs } for admin school-wide views
 };
 
 // Function to update state and persist it
@@ -100,6 +101,15 @@ export function navigateTo(screen) {
         if (state.adminActingAsSchool) {
             console.log("Leaving school context flow. Clearing Super Admin context.");
             setState({ adminActingAsSchool: null });
+        }
+    }
+    
+    // Clear school-wide data context when leaving relevant screens
+    const contextHoldingScreens = ['data', 'recap'];
+    if (contextHoldingScreens.includes(state.currentScreen) && !contextHoldingScreens.includes(screen)) {
+        if (state.schoolDataContext) {
+            console.log("Leaving data/recap view. Clearing school-wide data context.");
+            setState({ schoolDataContext: null });
         }
     }
 
@@ -191,6 +201,53 @@ async function findAndLoadClassDataForAdmin(className) {
     }
     
     return false;
+}
+
+// --- NEW HELPER FUNCTION FOR ADMINS ---
+async function getAndSetSchoolWideData() {
+    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
+    if (!isAdmin) return { success: true }; // Not an admin, proceed with own data
+
+    const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+    if (!schoolId) {
+        showNotification('Konteks sekolah tidak dipilih atau admin tidak ditugaskan ke sekolah.', 'error');
+        return { success: false };
+    }
+
+    showLoader('Mengumpulkan data sekolah...');
+    try {
+        const { allData } = await apiService.getGlobalData(schoolId);
+        
+        const aggregatedStudentsByClass = {};
+        const aggregatedLogs = [];
+
+        allData.forEach(teacherData => {
+            if (teacherData.students_by_class) {
+                // This simple merge overwrites, assuming the latest saved data is what we want.
+                // A more complex strategy could be used if versioning was available.
+                Object.assign(aggregatedStudentsByClass, teacherData.students_by_class);
+            }
+            if (teacherData.saved_logs) {
+                aggregatedLogs.push(...teacherData.saved_logs);
+            }
+        });
+        
+        // This helper now returns the data instead of setting state directly,
+        // allowing the caller to decide how to use it (e.g., filter it first).
+        return {
+            success: true,
+            data: {
+                studentsByClass: aggregatedStudentsByClass,
+                savedLogs: aggregatedLogs
+            }
+        };
+    } catch (error) {
+        showNotification(error.message, 'error');
+        console.error("Gagal mengambil data sekolah teragregasi:", error);
+        return { success: false };
+    } finally {
+        hideLoader();
+    }
 }
 
 
@@ -287,8 +344,20 @@ export async function handleSaveAttendance() {
 }
 
 export async function handleViewHistory(isClassSpecific = false) {
-    state.historyClassFilter = isClassSpecific ? document.getElementById('class-select').value : null;
+    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
+    
+    if (isAdmin) {
+        const result = await getAndSetSchoolWideData();
+        if (!result.success) return;
+        await setState({ schoolDataContext: result.data });
+    }
 
+    await setState({ 
+        historyClassFilter: isClassSpecific ? document.getElementById('class-select').value : null,
+        adminAllLogsView: null // Clear this view to ensure school context is used
+    });
+    
+    // Specific logic for SUPER_ADMIN wanting a truly global, non-school-context view
     if (state.userProfile.role === 'SUPER_ADMIN' && !isClassSpecific) {
         showLoader('Memuat semua riwayat guru...');
         try {
@@ -296,18 +365,49 @@ export async function handleViewHistory(isClassSpecific = false) {
             const flattenedLogs = allData.flatMap(teacher => 
                 (teacher.saved_logs || []).map(log => ({ ...log, teacherName: teacher.user_name }))
             );
-            state.adminAllLogsView = flattenedLogs;
+            await setState({ adminAllLogsView: flattenedLogs, schoolDataContext: null });
         } catch (error) {
             showNotification(error.message, 'error');
             hideLoader();
             return;
         }
-    } else {
-        state.adminAllLogsView = null;
     }
 
     navigateTo('data');
 }
+
+export async function handleViewRecap() {
+    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
+    state.selectedClass = document.getElementById('class-select').value; // Ensure selected class is captured
+
+    if (isAdmin) {
+        const result = await getAndSetSchoolWideData();
+        if (!result.success) return;
+
+        // --- NEW LOGIC: Filter the aggregated data for the selected class ---
+        const { studentsByClass, savedLogs } = result.data;
+        const selectedClass = state.selectedClass;
+
+        const filteredStudentsByClass = {
+            [selectedClass]: studentsByClass[selectedClass] || { students: [] }
+        };
+        const filteredLogs = savedLogs.filter(log => log.class === selectedClass);
+        
+        await setState({ 
+            schoolDataContext: {
+                studentsByClass: filteredStudentsByClass,
+                savedLogs: filteredLogs
+            } 
+        });
+
+    } else {
+        // For non-admins, clear any potential stale context
+        await setState({ schoolDataContext: null });
+    }
+
+    navigateTo('recap');
+}
+
 
 export async function handleGenerateAiRecommendation() {
     await setState({ dashboard: { ...state.dashboard, aiRecommendation: { isLoading: true, result: null, error: null } } });
