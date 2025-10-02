@@ -410,6 +410,118 @@ function renderStructuredAiResponse(markdownText) {
     </div>`;
 }
 
+function createCustomDatePicker(wrapper, initialDateStr, mode) {
+    const displayInput = wrapper.querySelector('#ks-date-display');
+    const popup = wrapper.querySelector('#ks-datepicker-popup');
+    if (!displayInput || !popup) return;
+    
+    let viewDate = new Date(initialDateStr + 'T00:00:00');
+
+    function renderCalendar() {
+        popup.innerHTML = '';
+        const year = viewDate.getFullYear();
+        const month = viewDate.getMonth();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const selectedDate = new Date(state.dashboard.selectedDate + 'T00:00:00');
+        
+        let weekStart, weekEnd;
+        if (mode === 'weekly') {
+            const d = new Date(selectedDate);
+            const dayOfWeek = d.getDay();
+            const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+            weekStart = new Date(d.setDate(diff));
+            weekEnd = new Date(new Date(weekStart).setDate(weekStart.getDate() + 6));
+            weekStart.setHours(0,0,0,0);
+            weekEnd.setHours(0,0,0,0);
+        }
+
+        const header = document.createElement('div');
+        header.className = 'datepicker-header';
+        header.innerHTML = `
+            <button class="nav-btn prev-month">&lt;</button>
+            <span class="month-year">${viewDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</span>
+            <button class="nav-btn next-month">&gt;</button>
+        `;
+
+        const table = document.createElement('table');
+        table.className = 'datepicker-grid';
+        table.innerHTML = `
+            <thead><tr><th>Min</th><th>Sen</th><th>Sel</th><th>Rab</th><th>Kam</th><th>Jum</th><th>Sab</th></tr></thead>
+            <tbody></tbody>
+        `;
+        const tbody = table.querySelector('tbody');
+
+        const firstDayOfMonth = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        let date = 1;
+        for (let i = 0; i < 6; i++) {
+            const row = document.createElement('tr');
+            for (let j = 0; j < 7; j++) {
+                const cell = document.createElement('td');
+                if (i === 0 && j < firstDayOfMonth) {
+                    // Empty cells for previous month
+                } else if (date > daysInMonth) {
+                    // Empty cells for next month
+                } else {
+                    const dayButton = document.createElement('button');
+                    const currentDate = new Date(year, month, date);
+                    let dayClasses = ['day'];
+
+                    if (currentDate.getTime() === today.getTime()) dayClasses.push('today');
+                    if (currentDate.getTime() === selectedDate.getTime()) dayClasses.push('selected');
+                    if (mode === 'weekly' && currentDate >= weekStart && currentDate <= weekEnd) {
+                        dayClasses.push('in-range');
+                        if (currentDate.getTime() === weekStart.getTime()) dayClasses.push('range-start');
+                        if (currentDate.getTime() === weekEnd.getTime()) dayClasses.push('range-end');
+                    }
+                    
+                    dayButton.className = dayClasses.join(' ');
+                    dayButton.textContent = date;
+                    dayButton.onclick = async () => {
+                        const newDateStr = currentDate.toISOString().split('T')[0];
+                        popup.classList.add('hidden');
+                        await setState({ dashboard: { ...state.dashboard, selectedDate: newDateStr } });
+                        renderScreen('dashboard');
+                    };
+                    cell.appendChild(dayButton);
+                    date++;
+                }
+                row.appendChild(cell);
+            }
+            tbody.appendChild(row);
+        }
+
+        popup.appendChild(header);
+        popup.appendChild(table);
+
+        header.querySelector('.prev-month').onclick = () => {
+            viewDate.setMonth(viewDate.getMonth() - 1);
+            renderCalendar();
+        };
+        header.querySelector('.next-month').onclick = () => {
+            viewDate.setMonth(viewDate.getMonth() + 1);
+            renderCalendar();
+        };
+    }
+
+    displayInput.onclick = (e) => {
+        e.stopPropagation();
+        popup.classList.toggle('hidden');
+        if (!popup.classList.contains('hidden')) {
+            renderCalendar();
+        }
+    };
+    
+    document.addEventListener('click', (e) => {
+        if (!wrapper.contains(e.target)) {
+            popup.classList.add('hidden');
+        }
+    });
+}
+
 
 async function renderDashboardScreen() {
     appContainer.innerHTML = templates.dashboard();
@@ -827,12 +939,14 @@ async function renderDashboardScreen() {
         });
     });
 
-    const datePicker = document.getElementById('ks-date-picker');
-    if (datePicker) {
-        datePicker.addEventListener('change', async (e) => {
-            await setState({ dashboard: { ...state.dashboard, selectedDate: e.target.value } });
-            renderScreen('dashboard');
-        });
+    const datePickerWrapper = document.getElementById('ks-datepicker-wrapper');
+    if (datePickerWrapper) {
+        const mode = (state.dashboard.activeView === 'percentage' && state.dashboard.chartViewMode === 'weekly') ? 'weekly' : 'daily';
+        createCustomDatePicker(
+            datePickerWrapper,
+            state.dashboard.selectedDate,
+            mode
+        );
     }
 
     renderDashboardPanels();
