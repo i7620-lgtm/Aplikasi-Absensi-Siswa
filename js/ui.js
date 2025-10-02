@@ -570,7 +570,7 @@ async function renderDashboardScreen() {
             document.querySelectorAll('.chart-time-btn').forEach(btn => {
                 btn.onclick = async (e) => {
                     await setState({ dashboard: { ...state.dashboard, chartViewMode: e.currentTarget.dataset.mode }});
-                    renderDashboardPanels();
+                    renderScreen('dashboard');
                 };
             });
             document.getElementById('chart-class-filter').onchange = async (e) => {
@@ -600,7 +600,7 @@ async function renderDashboardScreen() {
             }
 
             // 3. Filter all logs based on the selected time period
-            const today = new Date();
+            const today = new Date(state.dashboard.selectedDate + 'T00:00:00');
             today.setHours(0, 0, 0, 0);
 
             const startOfWeek = new Date(today);
@@ -614,8 +614,8 @@ async function renderDashboardScreen() {
                 .filter(log => {
                     const logDate = new Date(log.date + 'T00:00:00');
                     switch (state.dashboard.chartViewMode) {
-                        case 'daily': return logDate.getTime() === new Date(state.dashboard.selectedDate + 'T00:00:00').getTime();
-                        case 'weekly': return logDate >= startOfWeek;
+                        case 'daily': return logDate.getTime() === today.getTime();
+                        case 'weekly': return logDate >= startOfWeek && logDate < new Date(startOfWeek).setDate(startOfWeek.getDate() + 7) ;
                         case 'monthly': return logDate.getFullYear() === today.getFullYear() && logDate.getMonth() === today.getMonth();
                         case 'semester1': // Juli - Desember
                             return logDate.getFullYear() === today.getFullYear() && logDate.getMonth() >= 6 && logDate.getMonth() <= 11;
@@ -628,7 +628,7 @@ async function renderDashboardScreen() {
 
             // 4. Determine the number of school days based on unique log dates
             const uniqueDates = new Set(allLogsInPeriod.map(log => log.date));
-            const numSchoolDays = state.dashboard.chartViewMode === 'daily' ? 1 : uniqueDates.size;
+            const numSchoolDays = state.dashboard.chartViewMode === 'daily' ? 1 : (uniqueDates.size || 1);
             
             // 5. Calculate total potential attendance records (student-days)
             const totalAttendanceOpportunities = totalStudentsInScope * numSchoolDays;
@@ -826,10 +826,14 @@ async function renderDashboardScreen() {
             renderScreen('dashboard'); 
         });
     });
-    document.getElementById('ks-date-picker').addEventListener('change', async (e) => {
-        await setState({ dashboard: { ...state.dashboard, selectedDate: e.target.value, chartViewMode: 'daily' } });
-        renderDashboardPanels();
-    });
+
+    const datePicker = document.getElementById('ks-date-picker');
+    if (datePicker) {
+        datePicker.addEventListener('change', async (e) => {
+            await setState({ dashboard: { ...state.dashboard, selectedDate: e.target.value } });
+            renderScreen('dashboard');
+        });
+    }
 
     renderDashboardPanels();
     dashboardPoller();
