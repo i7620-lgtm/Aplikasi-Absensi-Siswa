@@ -532,7 +532,8 @@ async function renderDashboardScreen() {
 
             const timeFilters = [
                 { id: 'daily', text: 'Harian' }, { id: 'weekly', text: 'Mingguan' },
-                { id: 'monthly', text: 'Bulanan' }, { id: 'yearly', text: 'Tahunan' },
+                { id: 'monthly', text: 'Bulanan' }, { id: 'semester1', text: 'Semester I' },
+                { id: 'semester2', text: 'Semester II' }, { id: 'yearly', text: 'Tahunan' },
             ];
 
             percentageContent.innerHTML = `
@@ -541,13 +542,13 @@ async function renderDashboardScreen() {
                         <label class="block text-sm font-medium text-slate-700 mb-2">Periode Waktu</label>
                         <div id="chart-time-filter" class="flex flex-wrap gap-2">
                             ${timeFilters.map(f => `
-                                <button data-mode="${f.id}" class="chart-time-btn flex-1 sm:flex-initial text-sm font-semibold py-2 px-4 rounded-lg transition ${state.dashboard.chartViewMode === f.id ? 'bg-blue-600 text-white' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'}">
+                                <button data-mode="${f.id}" class="chart-time-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${state.dashboard.chartViewMode === f.id ? 'bg-blue-600 text-white' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'}">
                                     ${f.text}
                                 </button>
                             `).join('')}
                         </div>
                     </div>
-                    <div class="flex-1">
+                    <div class="flex-1 md:max-w-xs">
                         <label for="chart-class-filter" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Kelas</label>
                         <select id="chart-class-filter" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
                             <option value="all">Seluruh Sekolah</option>
@@ -616,6 +617,10 @@ async function renderDashboardScreen() {
                         case 'daily': return logDate.getTime() === new Date(state.dashboard.selectedDate + 'T00:00:00').getTime();
                         case 'weekly': return logDate >= startOfWeek;
                         case 'monthly': return logDate.getFullYear() === today.getFullYear() && logDate.getMonth() === today.getMonth();
+                        case 'semester1': // Juli - Desember
+                            return logDate.getFullYear() === today.getFullYear() && logDate.getMonth() >= 6 && logDate.getMonth() <= 11;
+                        case 'semester2': // Januari - Juni
+                            return logDate.getFullYear() === today.getFullYear() && logDate.getMonth() >= 0 && logDate.getMonth() <= 5;
                         case 'yearly': return logDate.getFullYear() === today.getFullYear();
                         default: return true;
                     }
