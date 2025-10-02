@@ -227,8 +227,11 @@ export const templates = {
                     <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
                         ${isDatePickerVisible ? `
                         <div class="flex items-center gap-2 w-full">
-                             <label for="ks-date-picker" class="text-sm font-medium text-slate-600 flex-shrink-0">Pilih Tanggal:</label>
-                             <input type="date" id="ks-date-picker" value="${state.dashboard.selectedDate}" class="w-full sm:w-auto p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm"/>
+                             <label for="ks-date-display" class="text-sm font-medium text-slate-600 flex-shrink-0">Pilih Tanggal:</label>
+                             <div id="ks-datepicker-wrapper" class="custom-datepicker-wrapper">
+                                <input type="text" id="ks-date-display" value="${new Date(state.dashboard.selectedDate + 'T00:00:00').toLocaleDateString('id-ID', {day: '2-digit', month: '2-digit', year: 'numeric'})}" readonly class="w-full sm:w-auto p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm"/>
+                                <div id="ks-datepicker-popup" class="datepicker-popup hidden"></div>
+                             </div>
                         </div>
                         ` : ''}
                         <div class="flex items-center gap-2">
