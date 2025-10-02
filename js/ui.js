@@ -265,7 +265,7 @@ function renderSetupScreen() {
             } catch (error) {
                 console.error(`Failed to fetch class data update for admin:`, error);
                 const newTimeoutId = setTimeout(adminClassDataPoller, state.setup.polling.interval);
-                await setState({ setup: { ...state.setup, polling: { ...state.setup.polling, timeoutId: newTimeoutId } } });
+                await setState({ setup: { ...state.setup, polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
             }
         };
         
@@ -577,17 +577,38 @@ async function renderDashboardScreen() {
                 renderDashboardPanels();
             };
 
-            const counts = { H: 0, S: 0, I: 0, A: 0 };
+            // --- START: NEW, CORRECTED ATTENDANCE PERCENTAGE CALCULATION ---
+            
+            // 1. Aggregate all student data from all teachers
+            const allStudentsByClass = {};
+            allTeacherData.forEach(teacher => {
+                if (teacher.students_by_class) {
+                    Object.assign(allStudentsByClass, teacher.students_by_class);
+                }
+            });
+
+            // 2. Determine the total number of students within the current filter scope
+            const classFilter = state.dashboard.chartClassFilter;
+            let totalStudentsInScope = 0;
+            if (classFilter === 'all') {
+                totalStudentsInScope = Object.values(allStudentsByClass).reduce((sum, classData) => {
+                    return sum + (classData?.students?.length || 0);
+                }, 0);
+            } else {
+                totalStudentsInScope = allStudentsByClass[classFilter]?.students?.length || 0;
+            }
+
+            // 3. Filter all logs based on the selected time period
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
             const startOfWeek = new Date(today);
             const dayOfWeek = today.getDay();
-            const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+            const diff = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Monday as start of week
             startOfWeek.setDate(diff);
             startOfWeek.setHours(0, 0, 0, 0);
 
-            const filteredLogs = allTeacherData
+            const allLogsInPeriod = allTeacherData
                 .flatMap(teacher => teacher.saved_logs || [])
                 .filter(log => {
                     const logDate = new Date(log.date + 'T00:00:00');
@@ -598,25 +619,50 @@ async function renderDashboardScreen() {
                         case 'yearly': return logDate.getFullYear() === today.getFullYear();
                         default: return true;
                     }
-                })
-                .filter(log => state.dashboard.chartClassFilter === 'all' || log.class === state.dashboard.chartClassFilter);
+                });
 
-            filteredLogs.forEach(log => {
+            // 4. Determine the number of school days based on unique log dates
+            const uniqueDates = new Set(allLogsInPeriod.map(log => log.date));
+            const numSchoolDays = state.dashboard.chartViewMode === 'daily' ? 1 : uniqueDates.size;
+            
+            // 5. Calculate total potential attendance records (student-days)
+            const totalAttendanceOpportunities = totalStudentsInScope * numSchoolDays;
+
+            // 6. Filter the period logs by the class filter and calculate total absences
+            const filteredLogsByClass = allLogsInPeriod.filter(log => classFilter === 'all' || log.class === classFilter);
+
+            const absenceCounts = { S: 0, I: 0, A: 0 };
+            filteredLogsByClass.forEach(log => {
                 Object.values(log.attendance).forEach(status => {
-                    if (counts[status] !== undefined) counts[status]++;
+                    if (absenceCounts[status] !== undefined) {
+                        absenceCounts[status]++;
+                    }
                 });
             });
 
-            const totalRecords = Object.values(counts).reduce((sum, val) => sum + val, 0);
+            // 7. Calculate final counts based on the formula: Hadir = Total - (S + I + A)
+            const totalAbsent = absenceCounts.S + absenceCounts.I + absenceCounts.A;
+            const totalPresent = Math.max(0, totalAttendanceOpportunities - totalAbsent);
+
+            const finalCounts = {
+                H: totalPresent,
+                S: absenceCounts.S,
+                I: absenceCounts.I,
+                A: absenceCounts.A,
+            };
+            
+            const totalRecords = totalAttendanceOpportunities;
+            // --- END: NEW, CORRECTED ATTENDANCE PERCENTAGE CALCULATION ---
+
             const chartCanvas = document.getElementById('dashboard-pie-chart');
             const noDataEl = document.getElementById('chart-no-data');
             const legendContainer = document.getElementById('custom-legend-container');
             
             const chartData = [
-                { label: 'Hadir', value: counts.H, color: '#22c55e' },
-                { label: 'Sakit', value: counts.S, color: '#fbbf24' },
-                { label: 'Izin', value: counts.I, color: '#3b82f6' },
-                { label: 'Alpa', value: counts.A, color: '#ef4444' }
+                { label: 'Hadir', value: finalCounts.H, color: '#22c55e' },
+                { label: 'Sakit', value: finalCounts.S, color: '#fbbf24' },
+                { label: 'Izin', value: finalCounts.I, color: '#3b82f6' },
+                { label: 'Alpa', value: finalCounts.A, color: '#ef4444' }
             ];
 
             if (window.dashboardPieChart instanceof Chart) {
