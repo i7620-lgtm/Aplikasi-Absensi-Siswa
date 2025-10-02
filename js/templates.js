@@ -11,6 +11,21 @@ function getRoleDisplayName(role) {
     }
 }
 
+function getWeekRange(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const dayOfWeek = d.getDay(); 
+    const diffToMonday = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const monday = new Date(d.setDate(diffToMonday));
+    const sunday = new Date(new Date(monday).setDate(monday.getDate() + 6));
+    
+    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+    const locale = 'id-ID';
+
+    return `${monday.toLocaleDateString(locale, options)} - ${sunday.toLocaleDateString(locale, options)}`;
+}
+
+
 export const templates = {
     setup: () => {
         const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
@@ -152,10 +167,44 @@ export const templates = {
         </div>`;
     },
     dashboard: () => {
-        const displayDate = new Date(state.dashboard.selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const { activeView, chartViewMode, selectedDate } = state.dashboard;
+        const dateObj = new Date(selectedDate + 'T00:00:00');
+        let displayDate;
+        let isDatePickerVisible = true;
+
+        if (activeView === 'report' || activeView === 'ai') {
+            displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        } else if (activeView === 'percentage') {
+            switch (chartViewMode) {
+                case 'daily':
+                    displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    break;
+                case 'weekly':
+                    displayDate = getWeekRange(dateObj);
+                    break;
+                case 'monthly':
+                    displayDate = dateObj.toLocaleDateString('id-ID', { year: 'numeric', month: 'long' });
+                    break;
+                case 'semester1':
+                    displayDate = `Semester I (Juli - Desember ${dateObj.getFullYear()})`;
+                    isDatePickerVisible = false;
+                    break;
+                case 'semester2':
+                    displayDate = `Semester II (Januari - Juni ${dateObj.getFullYear()})`;
+                    isDatePickerVisible = false;
+                    break;
+                case 'yearly':
+                    displayDate = `Tahun ${dateObj.getFullYear()}`;
+                    break;
+                default:
+                     displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            }
+        } else {
+            displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+        
         const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
         const backTarget = isAdmin ? 'adminHome' : 'setup';
-        const { activeView } = state.dashboard;
 
         const getButtonClass = (viewName) => {
             return activeView === viewName
@@ -176,10 +225,12 @@ export const templates = {
                         <p class="text-slate-500">${displayDate}</p>
                     </div>
                     <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
+                        ${isDatePickerVisible ? `
                         <div class="flex items-center gap-2 w-full">
                              <label for="ks-date-picker" class="text-sm font-medium text-slate-600 flex-shrink-0">Pilih Tanggal:</label>
                              <input type="date" id="ks-date-picker" value="${state.dashboard.selectedDate}" class="w-full sm:w-auto p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm"/>
                         </div>
+                        ` : ''}
                         <div class="flex items-center gap-2">
                            ${isAdmin ? `<button id="dashboard-back-btn" data-target="${backTarget}" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>` : ''}
                            <button id="logoutBtn-ks" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full flex items-center gap-2 text-sm font-semibold">
