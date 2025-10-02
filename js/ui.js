@@ -441,6 +441,57 @@ async function renderDashboardScreen() {
         });
 
         if (activeView === 'report') {
+            // --- NEW LOGIC: Summary Stats Calculation ---
+            const allStudentsByClass = {};
+            allTeacherData.forEach(teacher => {
+                if (teacher.students_by_class) {
+                    Object.assign(allStudentsByClass, teacher.students_by_class);
+                }
+            });
+        
+            const totalStudents = Object.values(allStudentsByClass).reduce((sum, classData) => {
+                return sum + (classData?.students?.length || 0);
+            }, 0);
+        
+            const absenceCounts = { S: 0, I: 0, A: 0 };
+            logsForDate.forEach(log => {
+                Object.values(log.attendance).forEach(status => {
+                    if (absenceCounts[status] !== undefined) {
+                        absenceCounts[status]++;
+                    }
+                });
+            });
+        
+            const totalAbsent = absenceCounts.S + absenceCounts.I + absenceCounts.A;
+            // Ensure 'present' is not negative if student list is out of sync with logs
+            const totalPresent = Math.max(0, totalStudents - totalAbsent); 
+        
+            const summaryStatsHtml = `
+            <div id="dashboard-summary-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+                <div class="bg-slate-100 p-4 rounded-xl text-center">
+                    <p class="text-sm font-semibold text-slate-600">Total Siswa</p>
+                    <p class="text-3xl font-bold text-slate-800">${totalStudents}</p>
+                </div>
+                <div class="bg-green-100 p-4 rounded-xl text-center">
+                    <p class="text-sm font-semibold text-green-700">Hadir</p>
+                    <p class="text-3xl font-bold text-green-800">${totalPresent}</p>
+                </div>
+                <div class="bg-yellow-100 p-4 rounded-xl text-center">
+                    <p class="text-sm font-semibold text-yellow-700">Sakit</p>
+                    <p class="text-3xl font-bold text-yellow-800">${absenceCounts.S}</p>
+                </div>
+                <div class="bg-blue-100 p-4 rounded-xl text-center">
+                    <p class="text-sm font-semibold text-blue-700">Izin</p>
+                    <p class="text-3xl font-bold text-blue-800">${absenceCounts.I}</p>
+                </div>
+                <div class="bg-red-100 p-4 rounded-xl text-center">
+                    <p class="text-sm font-semibold text-red-700">Alpa</p>
+                    <p class="text-3xl font-bold text-red-800">${absenceCounts.A}</p>
+                </div>
+            </div>
+            `;
+        
+            // --- EXISTING LOGIC for detailed absent list ---
             const absentStudentsByClass = {};
             logsForDate.forEach(log => {
                 if (!absentStudentsByClass[log.class]) {
@@ -453,10 +504,12 @@ async function renderDashboardScreen() {
                 });
             });
             const classNames = Object.keys(absentStudentsByClass).sort();
+            
+            let detailedReportHtml = '';
             if (classNames.length === 0 || classNames.every(c => absentStudentsByClass[c].students.length === 0)) {
-                reportContent.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada siswa yang absen pada tanggal yang dipilih.</p>`;
+                detailedReportHtml = `<div class="p-4 bg-slate-50 rounded-lg"><p class="text-center text-slate-500 py-4">Tidak ada siswa yang tercatat absen pada tanggal yang dipilih.</p></div>`;
             } else {
-                reportContent.innerHTML = classNames.map(className => {
+                const reportList = classNames.map(className => {
                     const classData = absentStudentsByClass[className];
                     if (classData.students.length === 0) return '';
                     classData.students.sort((a, b) => a.name.localeCompare(b.name));
@@ -467,7 +520,11 @@ async function renderDashboardScreen() {
                             <tbody>${classData.students.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${s.name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
                         </table></div></div>`;
                 }).join('');
+                detailedReportHtml = `<h2 class="text-lg font-bold text-slate-700 mb-4">Detail Siswa Tidak Hadir</h2>` + reportList;
             }
+            
+            reportContent.innerHTML = summaryStatsHtml + detailedReportHtml;
+
         } else if (activeView === 'percentage') {
             const allClasses = [...new Set(allTeacherData.flatMap(teacher => 
                 teacher.students_by_class ? Object.keys(teacher.students_by_class) : []
