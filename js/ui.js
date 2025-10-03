@@ -33,14 +33,39 @@ export function hideLoader() {
     }, 300);
 }
 
-export function showNotification(message, type = 'success') {
-    notificationEl.textContent = message;
+export function showNotification(message, type = 'success', options = {}) {
+    const { isPermanent = false, onRetry = null } = options;
+
+    let content = `<span>${message}</span>`;
+    if (onRetry) {
+        content += `<button id="notification-retry-btn" class="notification-retry-btn">Coba Lagi</button>`;
+    }
+
+    notificationEl.innerHTML = content;
     notificationEl.className = ''; // Clear previous classes
     notificationEl.classList.add(type);
     notificationEl.classList.add('show');
-    setTimeout(() => {
-        notificationEl.classList.remove('show');
-    }, 5000);
+
+    if (onRetry) {
+        const retryBtn = document.getElementById('notification-retry-btn');
+        if (retryBtn) {
+            retryBtn.onclick = () => {
+                showLoader('Mencoba lagi...');
+                // Hide the notification before retrying
+                notificationEl.classList.remove('show');
+                // Use a timeout to allow the loader to appear before the heavy work
+                setTimeout(() => {
+                    onRetry();
+                }, 200);
+            };
+        }
+    }
+
+    if (!isPermanent) {
+        setTimeout(() => {
+            notificationEl.classList.remove('show');
+        }, 5000);
+    }
 }
 
 export function updateOnlineStatus(isOnline) {
@@ -397,12 +422,23 @@ async function renderAdminHomeScreen() {
 
     if (isSuperAdmin) {
         const maintenanceContainer = document.getElementById('maintenance-toggle-container');
-        try {
-            const { isMaintenance } = await apiService.getMaintenanceStatus();
-            renderMaintenanceToggle(maintenanceContainer, isMaintenance);
-        } catch (e) {
-            maintenanceContainer.innerHTML = `<p class="text-sm text-red-500 font-semibold text-center">Gagal memuat status mode perbaikan. <br> <span class="font-normal text-slate-500 text-xs">${e.message}</span></p>`;
-        }
+        
+        const fetchAndRenderMaintenanceStatus = async () => {
+             maintenanceContainer.innerHTML = `<p class="text-sm text-slate-500">Memuat status...</p>`;
+             try {
+                const { isMaintenance } = await apiService.getMaintenanceStatus();
+                await setState({ maintenanceMode: { ...state.maintenanceMode, isActive: isMaintenance, statusChecked: true } });
+                renderMaintenanceToggle(maintenanceContainer, isMaintenance);
+            } catch (e) {
+                maintenanceContainer.innerHTML = `<div class="text-center">
+                    <p class="text-sm text-red-500 font-semibold">Gagal memuat status.</p>
+                    <button id="retry-maintenance-status" class="text-xs text-blue-600 hover:underline font-semibold mt-2">Coba Lagi</button>
+                </div>`;
+                document.getElementById('retry-maintenance-status').addEventListener('click', fetchAndRenderMaintenanceStatus);
+            }
+        };
+
+        fetchAndRenderMaintenanceStatus();
     }
 }
 
