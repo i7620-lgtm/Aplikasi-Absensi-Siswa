@@ -685,14 +685,6 @@ async function loadInitialData() {
         state.savedLogs = userData.saved_logs || [];
         
         console.log('Data dipulihkan dari penyimpanan offline untuk:', userProfile.name);
-        
-        if (userProfile.role === 'SUPER_ADMIN') {
-            state.currentScreen = 'adminHome';
-        } else if (userProfile.role === 'KEPALA_SEKOLAH') {
-            state.currentScreen = 'dashboard';
-        } else {
-            state.currentScreen = 'setup';
-        }
     }
 }
 
@@ -710,44 +702,91 @@ function setupGlobalEventListeners() {
 }
 
 async function initApp() {
+    // Hide notification from previous sessions
     const notificationEl = document.getElementById('notification');
     if (notificationEl) notificationEl.classList.remove('show');
-    const appContainer = document.getElementById('app-container');
 
+    // 1. Load local data first to enable offline use immediately.
+    await loadInitialData();
+    
+    // 2. Render the screen based on local data if available.
+    if (state.userProfile) {
+        // Determine initial screen based on offline role
+        if (state.userProfile.role === 'SUPER_ADMIN') {
+            state.currentScreen = 'adminHome';
+        } else if (state.userProfile.role === 'KEPALA_SEKOLAH') {
+            state.currentScreen = 'dashboard';
+        } else {
+            state.currentScreen = 'setup';
+        }
+        render(); 
+    } else {
+        // For new users, default to setup screen but don't render yet
+        state.currentScreen = 'setup';
+    }
+    
+    setupGlobalEventListeners();
+    updateOnlineStatus(navigator.onLine);
+
+    // 3. Now, try to connect to the server.
     try {
         const { isMaintenance } = await apiService.getMaintenanceStatus();
-        state.maintenanceMode.isActive = isMaintenance;
-        state.maintenanceMode.statusChecked = true;
+        await setState({ 
+            maintenanceMode: { 
+                isActive: isMaintenance, 
+                statusChecked: true 
+            } 
+        });
 
-        await loadInitialData();
-        
+        // If maintenance is on and user is not super admin, show maintenance screen.
         if (state.maintenanceMode.isActive && state.userProfile?.role !== 'SUPER_ADMIN') {
             navigateTo('maintenance');
-        } else {
-            initializeGsi();
-            render();
+            hideLoader();
+            return;
         }
-        
-        setupGlobalEventListeners();
-        updateOnlineStatus(navigator.onLine);
+
+        // If we don't have a user, it's their first time or they signed out.
+        // Initialize GSI for login and render the setup screen.
+        if (!state.userProfile) {
+            initializeGsi();
+            render(); // Render setup screen, now with GSI ready.
+        } else {
+            // User is logged in from offline data, we are good to go.
+            console.log("Server is online. App is ready.");
+            if (navigator.onLine) {
+                syncData().catch(err => console.error("Initial sync failed:", err));
+            }
+        }
+        hideLoader(); // Hide the initial "Memuat Aplikasi..." loader.
 
     } catch (e) {
-        console.error("Tidak dapat memulai aplikasi:", e.message);
+        console.error("Tidak dapat memulai aplikasi (server check failed):", e.message);
+        hideLoader(); // Hide initial loader regardless of error.
         
-        // Periksa apakah ini adalah error konfigurasi database kritis yang tidak dapat dipulihkan.
-        if (e.message.startsWith('CRITICAL:')) {
+        const appContainer = document.getElementById('app-container');
+        const isCriticalError = e.message.startsWith('CRITICAL:');
+
+        // If it's a critical error AND the user has no offline profile,
+        // the app is unusable. Show the full-page error.
+        if (isCriticalError && !state.userProfile) {
             const userFriendlyMessage = e.message.replace('CRITICAL: ', '');
             appContainer.innerHTML = templates.criticalError(userFriendlyMessage);
         } else {
-             // Untuk error lain yang mungkin bersifat sementara, tampilkan notifikasi dengan opsi coba lagi.
+            // Otherwise, the user has offline data and can continue.
+            // Show a non-blocking, permanent notification about the connection issue.
             showNotification(
-                e.message, 
+                'Gagal terhubung ke server. Aplikasi dalam mode offline.', 
                 'error', 
                 { isPermanent: true, onRetry: initApp }
             );
-            appContainer.innerHTML = `<div class="p-8 text-center"><h2 class="text-xl font-bold text-slate-700">Gagal Memuat Aplikasi</h2><p class="text-slate-500 mt-2">Terjadi kesalahan saat mencoba terhubung ke server.</p></div>`;
+            
+            // If there's no user profile, render the setup/login screen
+            // so they see something, even if login won't work.
+            if (!state.userProfile) {
+                 initializeGsi(); // Will display its own error message if it fails.
+                 render();
+            }
         }
-        hideLoader();
     }
 }
 
