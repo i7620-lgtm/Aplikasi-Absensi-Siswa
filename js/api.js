@@ -19,9 +19,17 @@ async function _fetch(action, payload = {}) {
     
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            let errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
+            let errorMessage;
+
             if (response.status >= 500) {
-                errorMessage = `Kesalahan Server (${response.status}): ${errorData.error || 'Gagal terhubung ke database. Periksa log Vercel.'}`;
+                 // Periksa pesan error kustom dari backend kami.
+                if (errorData.error && errorData.error.includes('Koneksi Database')) {
+                     errorMessage = 'Gagal terhubung ke layanan data. Ini mungkin masalah sementara.';
+                } else {
+                     errorMessage = `Terjadi masalah pada server (Error ${response.status}). Coba lagi nanti.`;
+                }
+            } else {
+                 errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
             }
             throw new Error(errorMessage);
         }
@@ -33,8 +41,8 @@ async function _fetch(action, payload = {}) {
         console.error(`Panggilan API '${action}' gagal:`, error);
         
         // Memeriksa apakah ini sudah merupakan pesan yang ramah untuk menghindari pesan error bertumpuk.
-        if (error.message.startsWith('Kesalahan Server')) {
-            throw error; // Menyebarkan error server yang spesifik.
+        if (error.message.startsWith('Gagal terhubung')) {
+            throw error; // Menyebarkan error yang sudah ramah pengguna.
         }
         // Melempar pesan error yang lebih umum dan ramah pengguna untuk masalah koneksi.
         throw new Error('Gagal terhubung ke server. Periksa koneksi internet Anda.');
