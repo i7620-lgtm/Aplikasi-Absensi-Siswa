@@ -1,5 +1,7 @@
 
 
+
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -115,6 +117,45 @@ export function showSchoolSelectorModal(title) {
             showNotification(error.message, 'error');
             resolve(null);
         }
+    });
+}
+
+function showRoleSelectorModal() {
+    return new Promise((resolve) => {
+        const currentUserRole = state.userProfile.role;
+        const isSuperAdmin = currentUserRole === 'SUPER_ADMIN';
+
+        const availableRoles = [
+            { value: 'GURU', text: 'Guru' },
+            { value: 'KEPALA_SEKOLAH', text: 'Kepala Sekolah' },
+        ];
+        if (isSuperAdmin) {
+            availableRoles.push({ value: 'ADMIN_SEKOLAH', text: 'Admin Sekolah' });
+            // Cannot bulk-assign SUPER_ADMIN
+        }
+        
+        const existingModal = document.getElementById('role-selector-modal');
+        if (existingModal) existingModal.remove();
+
+        const modalContainer = document.createElement('div');
+        modalContainer.innerHTML = templates.roleSelectorModal(availableRoles);
+        document.body.appendChild(modalContainer);
+
+        const cleanup = () => {
+            if (document.body.contains(modalContainer)) {
+                document.body.removeChild(modalContainer);
+            }
+        };
+
+        document.getElementById('role-selector-confirm-btn').onclick = () => {
+            const selectedRole = document.getElementById('role-select-bulk-modal').value;
+            cleanup();
+            resolve(selectedRole);
+        };
+        document.getElementById('role-selector-cancel-btn').onclick = () => {
+            cleanup();
+            resolve(null);
+        };
     });
 }
 
@@ -469,18 +510,36 @@ function createCustomDatePicker(wrapper, initialDateStr, mode) {
                     const dayButton = document.createElement('button');
                     const currentDate = new Date(year, month, date);
                     let dayClasses = ['day'];
+                    dayButton.disabled = false; // Reset state
 
-                    if (currentDate.getTime() === today.getTime()) dayClasses.push('today');
-                    if (currentDate.getTime() === selectedDate.getTime()) dayClasses.push('selected');
-                    if (mode === 'weekly' && currentDate >= weekStart && currentDate <= weekEnd) {
-                        dayClasses.push('in-range');
-                        if (currentDate.getTime() === weekStart.getTime()) dayClasses.push('range-start');
-                        if (currentDate.getTime() === weekEnd.getTime()) dayClasses.push('range-end');
+                    // Disable future dates first
+                    if (currentDate > today) {
+                        dayClasses.push('disabled-future');
+                        dayButton.disabled = true;
+                    }
+                    
+                    // Only apply other styles if the date is not disabled
+                    if (!dayButton.disabled) {
+                        if (currentDate.getTime() === today.getTime()) dayClasses.push('today');
+                        if (currentDate.getTime() === selectedDate.getTime()) dayClasses.push('selected');
+                        
+                        if (mode === 'weekly' && currentDate >= weekStart && currentDate <= weekEnd) {
+                            dayClasses.push('in-range');
+                            if (currentDate.getTime() === weekStart.getTime()) dayClasses.push('range-start');
+                            if (currentDate.getTime() === weekEnd.getTime()) dayClasses.push('range-end');
+                        } else if (mode === 'monthly') {
+                            const selectedMonth = selectedDate.getMonth();
+                            const selectedYear = selectedDate.getFullYear();
+                            if (currentDate.getMonth() === selectedMonth && currentDate.getFullYear() === selectedYear) {
+                                dayClasses.push('in-range');
+                            }
+                        }
                     }
                     
                     dayButton.className = dayClasses.join(' ');
                     dayButton.textContent = date;
                     dayButton.onclick = async () => {
+                        if (dayButton.disabled) return; // Prevent action on disabled dates
                         const newDateStr = currentDate.toISOString().split('T')[0];
                         popup.classList.add('hidden');
                         await setState({ dashboard: { ...state.dashboard, selectedDate: newDateStr } });
@@ -855,22 +914,63 @@ async function renderDashboardScreen() {
                 legendContainer.innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada data untuk ditampilkan di legenda.</p>`;
             }
         } else if (activeView === 'ai') {
-            const { isLoading, result, error } = aiRecommendation;
+            const { isLoading, result, error, selectedRange } = aiRecommendation;
+
+            const aiRanges = [
+                { id: 'last30days', text: '30 Hari Terakhir' },
+                { id: 'semester', text: 'Semester Ini' },
+                { id: 'year', text: 'Tahun Ajaran Ini' },
+            ];
+
+            const getAiButtonClass = (rangeId) => {
+                return selectedRange === rangeId
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-300';
+            };
+
+            let contentHtml = `
+                <div class="mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200">
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Pilih Periode Analisis</label>
+                    <div id="ai-range-filter" class="flex flex-wrap gap-2">
+                        ${aiRanges.map(r => `
+                            <button data-range="${r.id}" class="ai-range-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${getAiButtonClass(r.id)}">
+                                ${r.text}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
             if (isLoading) {
-                aiContent.innerHTML = `<div class="text-center py-8"><div class="loader mx-auto"></div><p class="loader-text">Menganalisis data absensi...</p></div></div>`;
+                contentHtml += `<div class="text-center py-8"><div class="loader mx-auto"></div><p class="loader-text">Menganalisis data absensi...</p></div></div>`;
             } else if (error) {
-                aiContent.innerHTML = `<div class="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200"><p class="font-bold">Terjadi Kesalahan</p><p>${error}</p><button id="retry-ai-btn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Coba Lagi</button></div>`;
-                document.getElementById('retry-ai-btn').addEventListener('click', handleGenerateAiRecommendation);
+                contentHtml += `<div class="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200"><p class="font-bold">Terjadi Kesalahan</p><p>${error}</p><button id="retry-ai-btn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Coba Lagi</button></div>`;
             } else if (result) {
-                aiContent.innerHTML = renderStructuredAiResponse(result);
+                contentHtml += renderStructuredAiResponse(result);
             } else {
-                aiContent.innerHTML = `<div class="text-center p-8 bg-slate-50 rounded-lg">
+                contentHtml += `<div class="text-center p-8 bg-slate-50 rounded-lg">
                     <h3 class="text-lg font-bold text-slate-800">Dapatkan Wawasan dengan AI</h3>
-                    <p class="text-slate-500 my-4">Klik tombol di bawah untuk meminta Gemini menganalisis data absensi 30 hari terakhir. AI akan menemukan pola, mengidentifikasi siswa yang perlu perhatian, dan memberikan rekomendasi yang dapat ditindaklanjuti.</p>
+                    <p class="text-slate-500 my-4">Pilih periode di atas, lalu klik tombol di bawah untuk meminta Gemini menganalisis data absensi. AI akan menemukan pola, mengidentifikasi siswa yang perlu perhatian, dan memberikan rekomendasi yang dapat ditindaklanjuti.</p>
                     <button id="generate-ai-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition">Buat Rekomendasi Sekarang</button>
                 </div>`;
-                document.getElementById('generate-ai-btn').addEventListener('click', handleGenerateAiRecommendation);
             }
+
+            aiContent.innerHTML = contentHtml;
+
+            document.querySelectorAll('.ai-range-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const newRange = e.currentTarget.dataset.range;
+                    // Reset result when range changes to force re-generation
+                    await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, selectedRange: newRange, result: null, error: null } } });
+                    renderDashboardPanels();
+                });
+            });
+
+            const generateBtn = document.getElementById('generate-ai-btn');
+            if (generateBtn) generateBtn.addEventListener('click', handleGenerateAiRecommendation);
+            
+            const retryBtn = document.getElementById('retry-ai-btn');
+            if (retryBtn) retryBtn.addEventListener('click', handleGenerateAiRecommendation);
         }
     };
 
@@ -941,7 +1041,14 @@ async function renderDashboardScreen() {
 
     const datePickerWrapper = document.getElementById('ks-datepicker-wrapper');
     if (datePickerWrapper) {
-        const mode = (state.dashboard.activeView === 'percentage' && state.dashboard.chartViewMode === 'weekly') ? 'weekly' : 'daily';
+        let mode = 'daily';
+        if (state.dashboard.activeView === 'percentage') {
+            if (state.dashboard.chartViewMode === 'weekly') {
+                mode = 'weekly';
+            } else if (state.dashboard.chartViewMode === 'monthly') {
+                mode = 'monthly';
+            }
+        }
         createCustomDatePicker(
             datePickerWrapper,
             state.dashboard.selectedDate,
@@ -953,11 +1060,64 @@ async function renderDashboardScreen() {
     dashboardPoller();
 }
 
+async function renderBulkActionsBar() {
+    const container = document.getElementById('admin-bulk-actions-container');
+    if (!container) return;
+    
+    const selectedCount = state.adminPanel.selectedUsers.length;
+
+    if (selectedCount > 0) {
+        container.innerHTML = templates.bulkActionsBar(selectedCount);
+        
+        document.getElementById('bulk-assign-school-btn').addEventListener('click', async () => {
+            const selectedSchool = await showSchoolSelectorModal('Tugaskan Pengguna ke Sekolah');
+            if (selectedSchool) {
+                showLoader(`Menugaskan ${selectedCount} pengguna ke ${selectedSchool.name}...`);
+                try {
+                    await apiService.updateUsersBulkConfiguration({
+                        targetEmails: state.adminPanel.selectedUsers,
+                        newSchoolId: selectedSchool.id
+                    });
+                    showNotification('Pengguna berhasil ditugaskan.');
+                    await setState({ adminPanel: { ...state.adminPanel, selectedUsers: [] } });
+                    navigateTo('adminPanel');
+                } catch (error) {
+                    showNotification(error.message, 'error');
+                } finally {
+                    hideLoader();
+                }
+            }
+        });
+        
+        document.getElementById('bulk-change-role-btn').addEventListener('click', async () => {
+            const newRole = await showRoleSelectorModal();
+            if (newRole) {
+                showLoader(`Mengubah peran ${selectedCount} pengguna menjadi ${newRole}...`);
+                 try {
+                    await apiService.updateUsersBulkConfiguration({
+                        targetEmails: state.adminPanel.selectedUsers,
+                        newRole: newRole
+                    });
+                    showNotification('Peran pengguna berhasil diubah.');
+                    await setState({ adminPanel: { ...state.adminPanel, selectedUsers: [] } });
+                    navigateTo('adminPanel');
+                } catch (error) {
+                    showNotification(error.message, 'error');
+                } finally {
+                    hideLoader();
+                }
+            }
+        });
+
+    } else {
+        container.innerHTML = '';
+    }
+}
+
 function renderAdminPanelTable(container, allUsers, allSchools) {
-    const { currentPage, groupBySchool } = state.adminPanel;
+    const { currentPage, groupBySchool, selectedUsers } = state.adminPanel;
     let usersToRender = [...allUsers];
 
-    // 1. Logika Pengurutan & Pengelompokan
     if (groupBySchool && state.userProfile.role === 'SUPER_ADMIN') {
         usersToRender.sort((a, b) => {
             const schoolA = a.school_name || 'zzz_Unassigned';
@@ -970,18 +1130,22 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
         usersToRender.sort((a, b) => a.name.localeCompare(b.name));
     }
 
-    // 2. Logika Paginasi
     const totalPages = Math.ceil(usersToRender.length / USERS_PER_PAGE);
     const validCurrentPage = Math.max(1, Math.min(currentPage, totalPages || 1));
     const startIndex = (validCurrentPage - 1) * USERS_PER_PAGE;
     const endIndex = startIndex + USERS_PER_PAGE;
     const paginatedUsers = usersToRender.slice(startIndex, endIndex);
 
-    // 3. Merender Tabel
+    const paginatedUserEmails = new Set(paginatedUsers.map(u => u.email));
+    const allVisibleSelected = paginatedUsers.length > 0 && [...paginatedUserEmails].every(email => selectedUsers.includes(email));
+
     let tableHtml = `
         <table class="w-full text-left">
             <thead>
                 <tr class="border-b bg-slate-50">
+                    <th class="p-3 w-12 text-center">
+                        <input type="checkbox" id="select-all-users-checkbox" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${allVisibleSelected ? 'checked' : ''} />
+                    </th>
                     <th class="p-3 text-sm font-semibold text-slate-600">Pengguna</th>
                     <th class="p-3 text-sm font-semibold text-slate-600">Peran</th>
                     <th class="p-3 text-sm font-semibold text-slate-600">Sekolah</th>
@@ -992,7 +1156,7 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
     `;
     
     if (paginatedUsers.length === 0) {
-        tableHtml += `<tr><td colspan="4" class="text-center text-slate-500 py-8">Tidak ada pengguna yang cocok.</td></tr>`;
+        tableHtml += `<tr><td colspan="5" class="text-center text-slate-500 py-8">Tidak ada pengguna yang cocok.</td></tr>`;
     } else {
         let currentSchoolName = null;
         paginatedUsers.forEach(user => {
@@ -1001,7 +1165,7 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
                 const schoolName = currentSchoolName || 'Belum Ditugaskan';
                 tableHtml += `
                     <tr class="bg-slate-100 sticky top-0">
-                        <td colspan="4" class="p-2 font-bold text-slate-600">${schoolName}</td>
+                        <td colspan="5" class="p-2 font-bold text-slate-600">${schoolName}</td>
                     </tr>
                 `;
             }
@@ -1011,6 +1175,9 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
 
             tableHtml += `
                 <tr class="border-b hover:bg-slate-50 transition">
+                     <td class="p-3 text-center">
+                        <input type="checkbox" class="user-select-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="${user.email}" ${selectedUsers.includes(user.email) ? 'checked' : ''} />
+                    </td>
                     <td class="p-3">
                         <div class="flex items-center gap-3">
                             <img src="${user.picture}" alt="${user.name}" class="w-10 h-10 rounded-full"/>
@@ -1036,7 +1203,6 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
     tableHtml += `</tbody></table>`;
     container.innerHTML = tableHtml;
 
-    // 4. Merender Kontrol Paginasi
     const paginationContainer = document.getElementById('admin-pagination-container');
     if (paginationContainer) {
         if (totalPages > 1) {
@@ -1070,14 +1236,6 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
             paginationContainer.innerHTML = '';
         }
     }
-    
-    // 5. Melampirkan kembali Event Listener untuk tombol kelola
-    document.querySelectorAll('.manage-user-btn').forEach(button => {
-        button.addEventListener('click', (e) => {
-            const user = JSON.parse(e.currentTarget.dataset.user);
-            showManageUserModal(user, allSchools);
-        });
-    });
 }
 
 
@@ -1107,6 +1265,48 @@ async function renderAdminPanelScreen() {
     }
     const container = document.getElementById('admin-panel-container');
 
+    container.addEventListener('click', async (e) => {
+        const target = e.target;
+        
+        if (target.classList.contains('user-select-checkbox')) {
+            const email = target.value;
+            const currentSelected = [...state.adminPanel.selectedUsers];
+            if (target.checked) {
+                if (!currentSelected.includes(email)) currentSelected.push(email);
+            } else {
+                const index = currentSelected.indexOf(email);
+                if (index > -1) currentSelected.splice(index, 1);
+            }
+            await setState({ adminPanel: { ...state.adminPanel, selectedUsers: currentSelected } });
+            renderAdminPanelTable(container, state.adminPanel.users, state.adminPanel.schools);
+            renderBulkActionsBar();
+        }
+
+        if (target.id === 'select-all-users-checkbox') {
+            const { currentPage, users, selectedUsers: currentSelected } = state.adminPanel;
+            const startIndex = (currentPage - 1) * USERS_PER_PAGE;
+            const endIndex = startIndex + USERS_PER_PAGE;
+            const paginatedEmails = users.slice(startIndex, endIndex).map(u => u.email);
+            let newSelected = [...currentSelected];
+
+            if (target.checked) {
+                paginatedEmails.forEach(email => {
+                    if (!newSelected.includes(email)) newSelected.push(email);
+                });
+            } else {
+                newSelected = newSelected.filter(email => !paginatedEmails.includes(email));
+            }
+            await setState({ adminPanel: { ...state.adminPanel, selectedUsers: newSelected } });
+            renderAdminPanelTable(container, state.adminPanel.users, state.adminPanel.schools);
+            renderBulkActionsBar();
+        }
+        
+        if (target.classList.contains('manage-user-btn')) {
+            const user = JSON.parse(target.dataset.user);
+            showManageUserModal(user, state.adminPanel.schools);
+        }
+    });
+
     await setState({ adminPanel: { ...state.adminPanel, isLoading: true } });
     container.innerHTML = `<p class="text-center text-slate-500 py-8">Memuat daftar pengguna...</p>`;
 
@@ -1120,7 +1320,6 @@ async function renderAdminPanelScreen() {
         try {
             const isSuperAdmin = state.userProfile.role === 'SUPER_ADMIN';
             
-            // SUPER_ADMIN needs both users and schools. ADMIN_SEKOLAH only needs users (school_name is joined).
             const usersPromise = apiService.getAllUsers();
             const schoolsPromise = isSuperAdmin ? apiService.getAllSchools() : Promise.resolve({ allSchools: state.adminPanel.schools });
 
@@ -1144,15 +1343,17 @@ async function renderAdminPanelScreen() {
                 const totalPages = Math.ceil(allUsers.length / USERS_PER_PAGE);
                 const newCurrentPage = Math.min(state.adminPanel.currentPage, totalPages) || 1;
 
-                renderAdminPanelTable(container, allUsers, allSchools);
                 await setState({ adminPanel: { ...state.adminPanel, ...newData, isLoading: false, currentPage: newCurrentPage } });
+                renderAdminPanelTable(container, allUsers, allSchools);
+                renderBulkActionsBar();
                 nextInterval = INITIAL_POLLING_INTERVAL;
             } else {
                 console.log("Admin panel data unchanged. Increasing interval.");
                 nextInterval = getNextInterval(state.adminPanel.polling.interval);
                 if (state.adminPanel.isLoading) {
-                    renderAdminPanelTable(container, allUsers, allSchools);
                     await setState({ adminPanel: { ...state.adminPanel, ...newData, isLoading: false } });
+                    renderAdminPanelTable(container, allUsers, allSchools);
+                    renderBulkActionsBar();
                 }
             }
 
@@ -1313,53 +1514,111 @@ function renderAttendanceScreen() {
 
 function renderDataScreen() {
     appContainer.innerHTML = templates.data();
-    document.getElementById('data-back-to-start-btn').addEventListener('click', () => {
+    
+    // --- Setup DOM Elements and Event Listeners ---
+    const backButton = document.getElementById('data-back-to-start-btn');
+    const container = document.getElementById('data-container');
+    const titleEl = document.getElementById('data-title');
+    const studentNameInput = document.getElementById('filter-student-name');
+    const statusSelect = document.getElementById('filter-status');
+    const startDateInput = document.getElementById('filter-start-date');
+    const endDateInput = document.getElementById('filter-end-date');
+    const clearButton = document.getElementById('clear-filters-btn');
+
+    backButton.addEventListener('click', () => {
         const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
         const targetScreen = isAdmin ? 'adminHome' : 'setup';
         navigateTo(targetScreen);
     });
-    const container = document.getElementById('data-container');
-    const titleEl = document.getElementById('data-title');
+
+    // --- State & Filter Handling ---
+    const { studentName, status, startDate, endDate } = state.dataScreenFilters;
+    studentNameInput.value = studentName;
+    statusSelect.value = status;
+    startDateInput.value = startDate;
+    endDateInput.value = endDate;
+
+    const applyFilters = () => {
+        if (applyFilters.timeout) clearTimeout(applyFilters.timeout);
+        applyFilters.timeout = setTimeout(async () => {
+            await setState({
+                dataScreenFilters: {
+                    studentName: studentNameInput.value.trim(),
+                    status: statusSelect.value,
+                    startDate: startDateInput.value,
+                    endDate: endDateInput.value
+                }
+            });
+            renderDataScreen(); // Re-render the screen with new state
+        }, studentNameInput === document.activeElement ? 300 : 0); // Debounce for text input
+    };
     
+    studentNameInput.addEventListener('input', applyFilters);
+    statusSelect.addEventListener('change', applyFilters);
+    startDateInput.addEventListener('change', applyFilters);
+    endDateInput.addEventListener('change', applyFilters);
+
+    clearButton.addEventListener('click', async () => {
+        if (applyFilters.timeout) clearTimeout(applyFilters.timeout);
+        await setState({
+            dataScreenFilters: { studentName: '', status: 'all', startDate: '', endDate: '' }
+        });
+        renderDataScreen();
+    });
+
+    // --- Data Retrieval and Context Setting ---
     const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
     const isAdminGlobalView = state.userProfile.role === 'SUPER_ADMIN' && state.adminAllLogsView;
 
-    // Determine which logs to use based on context
     let logsToShow;
     if (isAdminGlobalView) {
         logsToShow = state.adminAllLogsView;
         titleEl.textContent = `Semua Riwayat Absensi (Tampilan Super Admin)`;
     } else if (isAdmin && state.schoolDataContext) {
         logsToShow = state.schoolDataContext.savedLogs;
-        // Filter by class if a specific class history was requested
         if (state.historyClassFilter) {
             logsToShow = logsToShow.filter(log => log.class === state.historyClassFilter);
             titleEl.textContent = `Riwayat Absensi Kelas ${state.historyClassFilter}`;
         } else {
-            // This case should ideally not be hit from the UI, but as a fallback:
             titleEl.textContent = `Semua Riwayat Absensi Sekolah`;
         }
-    } else { // Regular user or admin viewing their own data
+    } else {
         logsToShow = state.historyClassFilter 
             ? state.savedLogs.filter(log => log.class === state.historyClassFilter)
             : state.savedLogs;
-            
-        if (state.historyClassFilter) {
-            titleEl.textContent = `Riwayat Absensi Kelas ${state.historyClassFilter}`;
-        } else {
-            titleEl.textContent = `Semua Riwayat Absensi Saya`;
-        }
+        titleEl.textContent = state.historyClassFilter 
+            ? `Riwayat Absensi Kelas ${state.historyClassFilter}` 
+            : `Semua Riwayat Absensi Saya`;
     }
         
-    if (logsToShow.length === 0) {
+    const hasActiveFilters = studentName || startDate || endDate || status !== 'all';
+    if (logsToShow.length === 0 && !hasActiveFilters) {
         container.innerHTML = `<p class="text-center text-slate-500">Belum ada riwayat absensi yang tersimpan untuk tampilan ini.</p>`;
         return;
     }
 
-    const groupedByDate = logsToShow.reduce((acc, log) => {
-        const dateStr = log.date;
-        if (!acc[dateStr]) acc[dateStr] = [];
-        acc[dateStr].push(log);
+    // --- Applying Filters ---
+    let filteredLogs = [...logsToShow];
+    if (startDate) filteredLogs = filteredLogs.filter(log => log.date >= startDate);
+    if (endDate) filteredLogs = filteredLogs.filter(log => log.date <= endDate);
+
+    const processedLogs = filteredLogs.map(log => {
+        let absentStudents = Object.entries(log.attendance).filter(([_, s]) => s !== 'H');
+        if (studentName) absentStudents = absentStudents.filter(([name, _]) => name.toLowerCase().includes(studentName.toLowerCase()));
+        if (status !== 'all') absentStudents = absentStudents.filter(([_, s]) => s === status);
+        
+        return absentStudents.length > 0 ? { ...log, filteredAbsences: absentStudents } : null;
+    }).filter(Boolean);
+
+    // --- Rendering Results ---
+    if (processedLogs.length === 0) {
+        container.innerHTML = `<p class="text-center text-slate-500">Tidak ada riwayat absensi yang cocok dengan filter yang diterapkan.</p>`;
+        return;
+    }
+
+    const groupedByDate = processedLogs.reduce((acc, log) => {
+        if (!acc[log.date]) acc[log.date] = [];
+        acc[log.date].push(log);
         return acc;
     }, {});
 
@@ -1368,16 +1627,7 @@ function renderDataScreen() {
         .map(([date, logs]) => {
             const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             const logsHtml = logs.map(log => {
-                const absentStudents = Object.entries(log.attendance)
-                    .filter(([_, status]) => status !== 'H');
-                
-                let contentHtml;
-                if (absentStudents.length > 0) {
-                    contentHtml = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead><tbody>${Object.entries(Object.fromEntries(absentStudents)).map(([name, status]) => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${status === 'S' ? 'bg-yellow-100 text-yellow-800' : status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${status}</span></td></tr>`).join('')}</tbody></table></div>`;
-                } else {
-                    contentHtml = `<p class="text-sm text-slate-500 italic px-1 py-2">Semua siswa hadir.</p>`;
-                }
-
+                const contentHtml = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead><tbody>${log.filteredAbsences.map(([name, status]) => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${status === 'S' ? 'bg-yellow-100 text-yellow-800' : status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${status}</span></td></tr>`).join('')}</tbody></table></div>`;
                 const teacherInfo = log.teacherName ? `<p class="text-xs text-slate-400 font-medium">Oleh: ${log.teacherName}</p>` : '';
 
                 return `<div class="bg-slate-50 p-4 rounded-lg">
@@ -1392,6 +1642,7 @@ function renderDataScreen() {
             return `<div><h2 class="text-lg font-semibold text-slate-700 mb-3">${displayDate}</h2><div class="space-y-4">${logsHtml}</div></div>`;
         }).join('');
 }
+
 
 function renderRecapScreen() {
     appContainer.innerHTML = templates.recap();
