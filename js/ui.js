@@ -609,7 +609,6 @@ async function renderDashboardScreen() {
 
 async function dashboardPoller() {
     if (state.currentScreen !== 'dashboard') return;
-    console.log(`Dashboard polling...`);
     if (state.dashboard.polling.timeoutId) clearTimeout(state.dashboard.polling.timeoutId);
 
     try {
