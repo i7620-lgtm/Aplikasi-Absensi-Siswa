@@ -712,6 +712,7 @@ function setupGlobalEventListeners() {
 async function initApp() {
     const notificationEl = document.getElementById('notification');
     if (notificationEl) notificationEl.classList.remove('show');
+    const appContainer = document.getElementById('app-container');
 
     try {
         const { isMaintenance } = await apiService.getMaintenanceStatus();
@@ -731,14 +732,21 @@ async function initApp() {
         updateOnlineStatus(navigator.onLine);
 
     } catch (e) {
-        console.error("Tidak dapat memulai aplikasi:", e);
-        showNotification(
-            e.message, 
-            'error', 
-            { isPermanent: true, onRetry: initApp }
-        );
-        const appContainer = document.getElementById('app-container');
-        appContainer.innerHTML = `<div class="p-8 text-center"><h2 class="text-xl font-bold text-slate-700">Gagal Memuat Aplikasi</h2><p class="text-slate-500 mt-2">Terjadi kesalahan saat mencoba terhubung ke server.</p></div>`;
+        console.error("Tidak dapat memulai aplikasi:", e.message);
+        
+        // Periksa apakah ini adalah error konfigurasi database kritis yang tidak dapat dipulihkan.
+        if (e.message.startsWith('CRITICAL:')) {
+            const userFriendlyMessage = e.message.replace('CRITICAL: ', '');
+            appContainer.innerHTML = templates.criticalError(userFriendlyMessage);
+        } else {
+             // Untuk error lain yang mungkin bersifat sementara, tampilkan notifikasi dengan opsi coba lagi.
+            showNotification(
+                e.message, 
+                'error', 
+                { isPermanent: true, onRetry: initApp }
+            );
+            appContainer.innerHTML = `<div class="p-8 text-center"><h2 class="text-xl font-bold text-slate-700">Gagal Memuat Aplikasi</h2><p class="text-slate-500 mt-2">Terjadi kesalahan saat mencoba terhubung ke server.</p></div>`;
+        }
         hideLoader();
     }
 }
