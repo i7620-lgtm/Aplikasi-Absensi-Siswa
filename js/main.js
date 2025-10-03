@@ -702,6 +702,7 @@ async function initApp() {
         state.maintenanceMode.isActive = isMaintenance;
     } catch (e) {
         console.error("Tidak dapat memeriksa status perbaikan:", e);
+        showNotification(`Gagal memuat status aplikasi: ${e.message}`, 'error');
     } finally {
         state.maintenanceMode.statusChecked = true;
     }
