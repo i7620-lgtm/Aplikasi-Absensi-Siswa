@@ -19,17 +19,17 @@ async function _fetch(action, payload = {}) {
     
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            let errorMessage;
+            
+            // Tangani error konfigurasi database kritis secara spesifik
+            if (errorData.errorCode === 'DB_CONNECTION_FAILED') {
+                throw new Error(`CRITICAL: ${errorData.details || 'Gagal terhubung ke database.'}`);
+            }
 
+            let errorMessage;
             if (response.status >= 500) {
-                 // Periksa pesan error kustom dari backend kami.
-                if (errorData.error && errorData.error.includes('Koneksi Database')) {
-                     errorMessage = 'Gagal terhubung ke layanan data. Ini mungkin masalah sementara.';
-                } else {
-                     errorMessage = `Terjadi masalah pada server (Error ${response.status}). Coba lagi nanti.`;
-                }
+                errorMessage = `Terjadi masalah pada server (Error ${response.status}). Coba lagi nanti.`;
             } else {
-                 errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
+                errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
             }
             throw new Error(errorMessage);
         }
@@ -40,11 +40,15 @@ async function _fetch(action, payload = {}) {
         // dan error HTTP yang dilempar dari blok di atas.
         console.error(`Panggilan API '${action}' gagal:`, error);
         
-        // Memeriksa apakah ini sudah merupakan pesan yang ramah untuk menghindari pesan error bertumpuk.
-        if (error.message.startsWith('Gagal terhubung')) {
-            throw error; // Menyebarkan error yang sudah ramah pengguna.
+        // Periksa apakah ini adalah pesan error kritis yang sudah diformat.
+        if (error.message.startsWith('CRITICAL:')) {
+            throw error;
         }
-        // Melempar pesan error yang lebih umum dan ramah pengguna untuk masalah koneksi.
+        // Menyebarkan error yang sudah ramah pengguna.
+        if (error.message.startsWith('Koneksi internet terputus')) {
+            throw error; 
+        }
+        // Melempar pesan error yang lebih umum dan ramah pengguna untuk masalah koneksi lainnya.
         throw new Error('Gagal terhubung ke server. Periksa koneksi internet Anda.');
     }
 }
