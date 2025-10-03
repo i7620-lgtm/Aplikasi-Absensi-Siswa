@@ -581,7 +581,7 @@ async function renderDashboardScreen() {
             else contentHtml += `<div class="text-center p-8 bg-slate-50 rounded-lg"><h3 class="text-lg font-bold text-slate-800">Dapatkan Wawasan dengan AI</h3><p class="text-slate-500 my-4">Pilih periode di atas, lalu klik tombol di bawah untuk meminta Gemini menganalisis data absensi.</p><button id="generate-ai-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition">Buat Rekomendasi Sekarang</button></div>`;
             
             aiContent.innerHTML = contentHtml;
-            document.querySelectorAll('.ai-range-btn').forEach(btn => btn.addEventListener('click', async (e) => { await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, selectedRange: e.currentTarget.dataset.range, result: null, error: null } } }); renderDashboardPanels(); }));
+            document.querySelectorAll('.ai-range-btn').forEach(btn => btn.addEventListener('click', async (e) => { await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, selectedRange: e.currentTarget.dataset.range, result: null, error: null } } }); renderScreen('dashboard'); }));
             document.getElementById('generate-ai-btn')?.addEventListener('click', handleGenerateAiRecommendation);
             document.getElementById('retry-ai-btn')?.addEventListener('click', handleGenerateAiRecommendation);
         }
