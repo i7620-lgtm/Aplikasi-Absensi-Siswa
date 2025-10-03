@@ -696,34 +696,51 @@ async function loadInitialData() {
     }
 }
 
-async function initApp() {
-    try {
-        const { isMaintenance } = await apiService.getMaintenanceStatus();
-        state.maintenanceMode.isActive = isMaintenance;
-    } catch (e) {
-        console.error("Tidak dapat memeriksa status perbaikan:", e);
-        showNotification(`Gagal memuat status aplikasi: ${e.message}`, 'error');
-    } finally {
-        state.maintenanceMode.statusChecked = true;
-    }
+let hasInitialized = false;
 
-    await loadInitialData();
-    
-    if (state.maintenanceMode.isActive && state.userProfile?.role !== 'SUPER_ADMIN') {
-        navigateTo('maintenance');
-    } else {
-        initializeGsi();
-        render();
-    }
-
+function setupGlobalEventListeners() {
+    if (hasInitialized) return;
     window.addEventListener('online', () => {
         updateOnlineStatus(true);
         showNotification('Koneksi internet kembali pulih.', 'success');
         syncData();
     });
     window.addEventListener('offline', () => updateOnlineStatus(false));
-    
-    updateOnlineStatus(navigator.onLine);
+    hasInitialized = true;
+}
+
+async function initApp() {
+    const notificationEl = document.getElementById('notification');
+    if (notificationEl) notificationEl.classList.remove('show');
+
+    try {
+        const { isMaintenance } = await apiService.getMaintenanceStatus();
+        state.maintenanceMode.isActive = isMaintenance;
+        state.maintenanceMode.statusChecked = true;
+
+        await loadInitialData();
+        
+        if (state.maintenanceMode.isActive && state.userProfile?.role !== 'SUPER_ADMIN') {
+            navigateTo('maintenance');
+        } else {
+            initializeGsi();
+            render();
+        }
+        
+        setupGlobalEventListeners();
+        updateOnlineStatus(navigator.onLine);
+
+    } catch (e) {
+        console.error("Tidak dapat memulai aplikasi:", e);
+        showNotification(
+            e.message, 
+            'error', 
+            { isPermanent: true, onRetry: initApp }
+        );
+        const appContainer = document.getElementById('app-container');
+        appContainer.innerHTML = `<div class="p-8 text-center"><h2 class="text-xl font-bold text-slate-700">Gagal Memuat Aplikasi</h2><p class="text-slate-500 mt-2">Terjadi kesalahan saat mencoba terhubung ke server.</p></div>`;
+        hideLoader();
+    }
 }
 
 initApp();
