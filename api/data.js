@@ -199,24 +199,67 @@ export default async function handler(request, response) {
             
             case 'getHistoryData': {
                 const { schoolId, filters, isClassSpecific, classFilter, isGlobalView } = payload;
+                const { studentName, status, startDate, endDate } = filters || {};
+
+                // Handle GURU case separately for clarity and correctness
+                if (user.role === 'GURU') {
+                    let guruQuery;
+                    // If a specific class is requested, filter inside the DB for efficiency and accuracy.
+                    if (isClassSpecific && classFilter) {
+                        guruQuery = sql`
+                            WITH unnested_logs AS (
+                              SELECT jsonb_array_elements(saved_logs) as log_obj
+                              FROM absensi_data
+                              WHERE user_email = ${user.email}
+                            )
+                            SELECT log_obj FROM unnested_logs
+                            WHERE log_obj ->> 'class' = ${classFilter};
+                        `;
+                    } else {
+                        // Otherwise, get all logs for the teacher.
+                        guruQuery = sql`
+                            SELECT jsonb_array_elements(saved_logs) as log_obj
+                            FROM absensi_data
+                            WHERE user_email = ${user.email};
+                        `;
+                    }
+
+                    const { rows } = await guruQuery;
+                    let allLogs = rows.map(row => ({ ...row.log_obj, teacherName: user.name }));
+
+                    // Apply remaining filters (date, student name, etc.)
+                    if (startDate) allLogs = allLogs.filter(log => log.date >= startDate);
+                    if (endDate) allLogs = allLogs.filter(log => log.date <= endDate);
+                    const processedLogs = allLogs.map(log => {
+                        let absentStudents = Object.entries(log.attendance).filter(([, s]) => s !== 'H');
+                        if (studentName) absentStudents = absentStudents.filter(([name]) => name.toLowerCase().includes(studentName.toLowerCase()));
+                        if (status && status !== 'all') absentStudents = absentStudents.filter(([, s]) => s === status);
+                        return absentStudents.length > 0 ? { ...log, filteredAbsences: absentStudents } : null;
+                    }).filter(Boolean);
+
+                    return response.status(200).json({ filteredLogs: processedLogs });
+                }
+
+                // Existing logic for other roles (Admins, KS)
                 let effectiveSchoolId = (user.role === 'KEPALA_SEKOLAH' || user.role === 'ADMIN_SEKOLAH') ? user.school_id : schoolId;
                 let query;
+
                 if (isGlobalView && user.role === 'SUPER_ADMIN') {
                     query = sql`SELECT ad.saved_logs, u.name as user_name FROM absensi_data ad JOIN users u ON ad.user_email = u.email`;
                 } else if (effectiveSchoolId) {
                     query = sql`SELECT ad.saved_logs, u.name as user_name FROM absensi_data ad JOIN users u ON ad.user_email = u.email WHERE ad.school_id = ${effectiveSchoolId}`;
-                } else if (user.role === 'GURU') {
-                    query = sql`SELECT saved_logs FROM absensi_data WHERE user_email = ${user.email}`;
                 } else {
                     return response.status(200).json({ filteredLogs: [] });
                 }
+
                 const { rows } = await query;
                 let allLogs = rows.flatMap(row => (row.saved_logs || []).map(log => ({...log, teacherName: row.user_name || user.name })));
                 
-                const { studentName, status, startDate, endDate } = filters || {};
+                // Admins can also filter by class, this needs to remain
                 if (classFilter) allLogs = allLogs.filter(log => log.class === classFilter);
                 if (startDate) allLogs = allLogs.filter(log => log.date >= startDate);
                 if (endDate) allLogs = allLogs.filter(log => log.date <= endDate);
+
                 const processedLogs = allLogs.map(log => {
                     let absentStudents = Object.entries(log.attendance).filter(([, s]) => s !== 'H');
                     if (studentName) absentStudents = absentStudents.filter(([name]) => name.toLowerCase().includes(studentName.toLowerCase()));
