@@ -65,10 +65,6 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             max-width: 90%;
             text-align: center;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
         }
         #notification.show {
             top: 20px;
@@ -76,20 +72,6 @@
         #notification.error { background-color: #ef4444; }
         #notification.success { background-color: #22c55e; }
         #notification.info { background-color: #3b82f6; }
-        .notification-retry-btn {
-            background-color: rgba(255, 255, 255, 0.2);
-            border: 1px solid white;
-            color: white;
-            padding: 0.25rem 0.75rem;
-            border-radius: 0.25rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            white-space: nowrap;
-        }
-        .notification-retry-btn:hover {
-            background-color: rgba(255, 255, 255, 0.4);
-        }
 
         /* --- Offline Indicator --- */
         #offline-indicator {
@@ -120,62 +102,6 @@
         .gemini-response .card-content strong { font-weight: 600; color: #1e293b; }
         .gemini-response { background-color: transparent !important; padding: 0 !important; }
 
-        /* --- Custom Date Picker --- */
-        .custom-datepicker-wrapper { position: relative; display: inline-block; }
-        #ks-date-display {
-            cursor: pointer; user-select: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E");
-            background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 1.25rem;
-            padding-right: 2.5rem;
-        }
-        .datepicker-popup {
-            position: absolute; top: calc(100% + 5px); right: 0;
-            background-color: white; border-radius: 0.75rem;
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
-            z-index: 1000; width: 320px; padding: 1rem; border: 1px solid #e2e8f0;
-        }
-        .datepicker-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-        .datepicker-header .month-year { font-weight: 600; color: #1e293b; }
-        .datepicker-header .nav-btn { background: none; border: none; cursor: pointer; padding: 0.5rem; border-radius: 9999px; transition: background-color 0.2s; }
-        .datepicker-header .nav-btn:hover { background-color: #f1f5f9; }
-        .datepicker-grid { width: 100%; border-collapse: collapse; text-align: center; }
-        .datepicker-grid th { color: #64748b; font-weight: 500; font-size: 0.75rem; padding-bottom: 0.5rem; }
-        .datepicker-grid td { padding: 0; }
-        .datepicker-grid .day {
-            width: 40px; height: 40px; border: none; background: none; cursor: pointer;
-            border-radius: 9999px; transition: background-color 0.2s, color 0.2s; color: #334155;
-        }
-        .datepicker-grid .day:hover { background-color: #e0f2fe; color: #0c4a6e; }
-        .datepicker-grid .day.other-month { color: #94a3b8; cursor: not-allowed; }
-        .datepicker-grid .day.today { font-weight: 700; color: #2563eb; border: 1px solid #93c5fd; }
-        .datepicker-grid .day.selected { background-color: #3b82f6; color: white; }
-        .datepicker-grid .day.in-range {
-            background: linear-gradient(90deg, #fffde7, #fff9c4);
-            border-radius: 0; color: #334155;
-        }
-        .datepicker-grid .day.in-range.selected { background: #3b82f6; color: white; border-radius: 9999px; }
-        .datepicker-grid .day.range-start { border-top-left-radius: 9999px; border-bottom-left-radius: 9999px; }
-        .datepicker-grid .day.range-end { border-top-right-radius: 9999px; border-bottom-right-radius: 9999px; }
-        .datepicker-grid .day.selected.in-range { position: relative; z-index: 1; }
-        .datepicker-grid .day.disabled-future {
-            color: #cbd5e1; /* slate-300 */
-            cursor: not-allowed;
-            background-color: transparent !important; /* Ensure no background on hover */
-        }
-        .datepicker-grid .day.disabled-future:hover {
-            color: #cbd5e1; /* Keep color same on hover */
-        }
-
-        /* --- Critical Error Screen --- */
-        .critical-error-screen {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 2rem;
-            min-height: calc(100vh - 100px); /* Adjust to leave space for header/footer if any */
-        }
     </style>
 <script type="importmap">
 {
