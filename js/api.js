@@ -19,6 +19,7 @@ async function _fetch(action, payload = {}) {
     
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
+            console.log('Server Error Response:', errorData); // Logging diagnostik ditambahkan
             
             // Tangani error konfigurasi database kritis secara spesifik
             if (errorData.errorCode === 'DB_CONNECTION_FAILED') {
