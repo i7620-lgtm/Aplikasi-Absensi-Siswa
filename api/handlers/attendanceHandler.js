@@ -9,19 +9,16 @@ export async function handleSaveData({ payload, user, sql, response }) {
     let targetEmail = user.email;
     let finalSchoolId = user.school_id;
 
-    // Super Admin dan Admin Sekolah bertindak atas nama guru.
     if ((user.role === 'SUPER_ADMIN' && actingAsSchoolId) || user.role === 'ADMIN_SEKOLAH') {
-        // Tentukan ID sekolah yang menjadi konteks
         if (user.role === 'ADMIN_SEKOLAH') {
             if (!user.school_id) {
                 return response.status(403).json({ error: 'Admin Sekolah tidak ditugaskan ke sekolah manapun dan tidak dapat menyimpan data.' });
             }
             finalSchoolId = user.school_id;
-        } else { // SUPER_ADMIN
+        } else {
             finalSchoolId = actingAsSchoolId;
         }
         
-        // Temukan guru yang memiliki data kelas ini dalam konteks sekolah tersebut.
         const classNames = Object.keys(studentsByClass);
         if (classNames.length === 0) {
             return response.status(400).json({ error: 'Tidak ada data kelas yang dikirim untuk disimpan.' });
@@ -34,13 +31,15 @@ export async function handleSaveData({ payload, user, sql, response }) {
         `;
 
         if (teacherRows.length === 0) {
-            return response.status(404).json({ error: `Tidak ditemukan guru yang ditugaskan untuk kelas ${className} di sekolah ini.` });
-        }
-        if (teacherRows.length > 1) {
+            // Jika tidak ada guru yang ditugaskan, simpan data di bawah akun admin itu sendiri.
+            // Ini memungkinkan admin untuk mengelola kelas 'yatim'.
+            console.log(`No teacher found for class ${className}. Saving data under admin ${user.email}`);
+            targetEmail = user.email;
+        } else if (teacherRows.length > 1) {
             return response.status(409).json({ error: `Konflik: Lebih dari satu guru ditugaskan untuk kelas ${className}. Harap perbaiki di panel admin.` });
+        } else {
+             targetEmail = teacherRows[0].email;
         }
-        
-        targetEmail = teacherRows[0].email;
     }
 
     await sql`
@@ -56,41 +55,89 @@ export async function handleSaveData({ payload, user, sql, response }) {
     return response.status(200).json({ success: true });
 }
 
-export async function handleGetGlobalData({ payload, user, sql, response }) {
-     if (user.role !== 'SUPER_ADMIN' && user.role !== 'KEPALA_SEKOLAH') {
+export async function handleGetHistoryData({ payload, user, sql, response }) {
+    if (!['SUPER_ADMIN', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'GURU'].includes(user.role)) {
         return response.status(403).json({ error: 'Forbidden: Access denied' });
     }
-    
-    const { schoolId } = payload;
+
+    const { schoolId, filters, isClassSpecific, classFilter, isGlobalView } = payload;
+    let effectiveSchoolId = schoolId;
+    if (user.role === 'KEPALA_SEKOLAH' || user.role === 'ADMIN_SEKOLAH') {
+        effectiveSchoolId = user.school_id;
+    }
 
     let query;
-    if (user.role === 'KEPALA_SEKOLAH') {
-        if (!user.school_id) {
-             return response.status(200).json({ allData: [] });
-        }
-        query = sql`
-            SELECT ad.saved_logs, ad.students_by_class, u.name as user_name 
-            FROM absensi_data ad 
-            JOIN users u ON ad.user_email = u.email
-            WHERE ad.school_id = ${user.school_id}
-        `;
-    } else { // SUPER_ADMIN
-        if (schoolId) {
-            query = sql`
-                SELECT ad.saved_logs, ad.students_by_class, u.name as user_name 
-                FROM absensi_data ad 
-                JOIN users u ON ad.user_email = u.email
-                WHERE ad.school_id = ${schoolId}
-            `;
-        } else {
-            query = sql`
-                SELECT ad.saved_logs, ad.students_by_class, u.name as user_name 
-                FROM absensi_data ad 
-                JOIN users u ON ad.user_email = u.email
-            `;
-        }
+    if (isGlobalView && user.role === 'SUPER_ADMIN') {
+        // Super Admin Global View: Fetch from all schools
+        query = sql`SELECT ad.saved_logs, u.name as user_name FROM absensi_data ad JOIN users u ON ad.user_email = u.email`;
+    } else if (effectiveSchoolId) {
+        // School-specific view for Admins/KS
+        query = sql`SELECT ad.saved_logs, u.name as user_name FROM absensi_data ad JOIN users u ON ad.user_email = u.email WHERE ad.school_id = ${effectiveSchoolId}`;
+    } else if (user.role === 'GURU' || (isClassSpecific && !effectiveSchoolId)) {
+        // Teacher's own data
+        query = sql`SELECT saved_logs FROM absensi_data WHERE user_email = ${user.email}`;
+    } else {
+        return response.status(200).json({ filteredLogs: [] });
     }
-    
-    const { rows: allData } = await query;
-    return response.status(200).json({ allData });
+
+    const { rows } = await query;
+
+    let allLogs = rows.flatMap(row => (row.saved_logs || []).map(log => ({
+        ...log,
+        teacherName: row.user_name || user.name
+    })));
+
+    // Apply filters on the server-side JS
+    const { studentName, status, startDate, endDate } = filters || {};
+
+    if (classFilter) {
+        allLogs = allLogs.filter(log => log.class === classFilter);
+    }
+    if (startDate) {
+        allLogs = allLogs.filter(log => log.date >= startDate);
+    }
+    if (endDate) {
+        allLogs = allLogs.filter(log => log.date <= endDate);
+    }
+
+    const processedLogs = allLogs.map(log => {
+        let absentStudents = Object.entries(log.attendance).filter(([_, s]) => s !== 'H');
+        if (studentName) {
+            absentStudents = absentStudents.filter(([name, _]) => name.toLowerCase().includes(studentName.toLowerCase()));
+        }
+        if (status && status !== 'all') {
+            absentStudents = absentStudents.filter(([_, s]) => s === status);
+        }
+        return absentStudents.length > 0 ? { ...log, filteredAbsences: absentStudents } : null;
+    }).filter(Boolean);
+
+    return response.status(200).json({ filteredLogs: processedLogs });
+}
+
+export async function handleGetSchoolStudentData({ payload, user, sql, response }) {
+    if (!['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(user.role)) {
+        return response.status(403).json({ error: 'Forbidden: Access denied' });
+    }
+
+    let { schoolId } = payload;
+    if (user.role === 'ADMIN_SEKOLAH') {
+        schoolId = user.school_id;
+    }
+
+    if (!schoolId) {
+        return response.status(400).json({ error: 'School ID is required' });
+    }
+
+    const { rows } = await sql`
+        SELECT students_by_class FROM absensi_data WHERE school_id = ${schoolId};
+    `;
+
+    const aggregatedStudentsByClass = {};
+    rows.forEach(row => {
+        if (row.students_by_class) {
+            Object.assign(aggregatedStudentsByClass, row.students_by_class);
+        }
+    });
+
+    return response.status(200).json({ aggregatedStudentsByClass });
 }
