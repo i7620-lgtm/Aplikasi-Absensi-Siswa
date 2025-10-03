@@ -139,7 +139,14 @@
         .datepicker-grid .day.range-start { border-top-left-radius: 9999px; border-bottom-left-radius: 9999px; }
         .datepicker-grid .day.range-end { border-top-right-radius: 9999px; border-bottom-right-radius: 9999px; }
         .datepicker-grid .day.selected.in-range { position: relative; z-index: 1; }
-
+        .datepicker-grid .day.disabled-future {
+            color: #cbd5e1; /* slate-300 */
+            cursor: not-allowed;
+            background-color: transparent !important; /* Ensure no background on hover */
+        }
+        .datepicker-grid .day.disabled-future:hover {
+            color: #cbd5e1; /* Keep color same on hover */
+        }
     </style>
 <script type="importmap">
 {
