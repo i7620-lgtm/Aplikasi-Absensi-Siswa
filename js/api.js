@@ -18,12 +18,28 @@ async function _fetch(action, payload = {}) {
         });
     
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            console.log('Server Error Response:', errorData); // Logging diagnostik ditambahkan
+            const errorText = await response.text();
+            let errorData = {};
+            let isJson = false;
+
+            try {
+                errorData = JSON.parse(errorText);
+                isJson = true;
+            } catch (e) {
+                // Bukan respons JSON, errorData tetap {}, error ada di errorText
+            }
             
-            // Tangani error konfigurasi database kritis secara spesifik
-            if (errorData.errorCode === 'DB_CONNECTION_FAILED') {
-                throw new Error(`CRITICAL: ${errorData.details || 'Gagal terhubung ke database.'}`);
+            console.log('Server Error Response:', errorData);
+
+            // Deteksi yang lebih tangguh: periksa kode error kita ATAU teks mentah untuk tanda-tanda crash Vercel.
+            const isDbConnectionError = (isJson && errorData.errorCode === 'DB_CONNECTION_FAILED') || 
+                                      (!isJson && /FUNCTION_INVOCATION_FAILED|database connection|timeout/i.test(errorText));
+
+            if (isDbConnectionError) {
+                const details = isJson 
+                    ? errorData.details 
+                    : 'Fungsi server gagal dieksekusi, kemungkinan besar karena timeout koneksi database.';
+                throw new Error(`CRITICAL: ${details}`);
             }
 
             let errorMessage;
