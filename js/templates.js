@@ -282,7 +282,7 @@ export const templates = {
                     </div>
                 </div>
                 <div class="mb-4 flex justify-end">
-                    <label class="flex items-center space-x-2 cursor-pointer text-sm text-slate-600">
+                    <label for="group-by-school-toggle" class="flex items-center space-x-2 cursor-pointer text-sm text-slate-600">
                         <input type="checkbox" id="group-by-school-toggle" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                         <span>Kelompokkan berdasarkan sekolah</span>
                     </label>
@@ -407,7 +407,7 @@ export const templates = {
                         </select>
                     </div>
                     <div class="lg:col-span-2">
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Rentang Tanggal</label>
+                        <div class="block text-sm font-medium text-slate-700 mb-1">Rentang Tanggal</div>
                         <div class="flex items-center gap-2">
                             <input type="date" id="filter-start-date" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
                             <span class="text-slate-500">-</span>
@@ -528,11 +528,11 @@ export const templates = {
                 </div>
 
                 <div id="manage-classes-container" class="mt-6 pt-4 border-t border-slate-200 ${user.role !== 'GURU' ? 'hidden' : ''}">
-                     <label class="block text-sm font-medium text-slate-700 mb-2">Tugaskan Kelas (untuk Guru)</label>
+                     <p class="block text-sm font-medium text-slate-700 mb-2">Tugaskan Kelas (untuk Guru)</p>
                      <div id="class-checkbox-container" class="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-48 overflow-y-auto border p-4 rounded-lg">
                         ${CLASSES.map(c => `
-                            <label class="flex items-center space-x-2 text-slate-700">
-                                <input type="checkbox" value="${c}" class="class-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${assignedClasses.includes(c) ? 'checked' : ''}>
+                            <label for="class-checkbox-${c}" class="flex items-center space-x-2 text-slate-700 cursor-pointer">
+                                <input type="checkbox" id="class-checkbox-${c}" value="${c}" class="class-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${assignedClasses.includes(c) ? 'checked' : ''}>
                                 <span>${c}</span>
                             </label>
                         `).join('')}
