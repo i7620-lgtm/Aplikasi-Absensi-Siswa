@@ -18,6 +18,12 @@ export let state = {
     attendance: {},
     savedLogs: [], 
     historyClassFilter: null,
+    dataScreenFilters: {
+        studentName: '',
+        status: 'all',
+        startDate: '',
+        endDate: '',
+    },
     newStudents: [''],
     recapSortOrder: 'total',
     adminPanel: {
@@ -30,6 +36,7 @@ export let state = {
         },
         currentPage: 1,
         groupBySchool: false,
+        selectedUsers: [],
     },
     dashboard: {
         allTeacherData: [],
@@ -47,6 +54,7 @@ export let state = {
             isLoading: false,
             result: null,
             error: null,
+            selectedRange: 'last30days', // 'last30days', 'semester', 'year'
         },
     },
     setup: {
@@ -110,6 +118,15 @@ export function navigateTo(screen) {
         if (state.schoolDataContext) {
             console.log("Leaving data/recap view. Clearing school-wide data context.");
             setState({ schoolDataContext: null });
+        }
+    }
+    
+    // Clear admin panel selections when leaving
+    const adminPanelScreens = ['adminPanel'];
+    if (adminPanelScreens.includes(state.currentScreen) && !adminPanelScreens.includes(screen)) {
+        if (state.adminPanel.selectedUsers.length > 0) {
+            console.log("Leaving admin panel. Clearing user selections.");
+            setState({ adminPanel: { ...state.adminPanel, selectedUsers: [] } });
         }
     }
 
@@ -352,7 +369,14 @@ export async function handleViewHistory(isClassSpecific = false) {
         await setState({ schoolDataContext: result.data });
     }
 
+    // Reset filters every time the history screen is entered
     await setState({ 
+        dataScreenFilters: {
+            studentName: '',
+            status: 'all',
+            startDate: '',
+            endDate: '',
+        },
         historyClassFilter: isClassSpecific ? document.getElementById('class-select').value : null,
         adminAllLogsView: null // Clear this view to ensure school context is used
     });
@@ -410,21 +434,47 @@ export async function handleViewRecap() {
 
 
 export async function handleGenerateAiRecommendation() {
-    await setState({ dashboard: { ...state.dashboard, aiRecommendation: { isLoading: true, result: null, error: null } } });
+    const aiRange = state.dashboard.aiRecommendation.selectedRange;
+    await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: true, result: null, error: null } } });
     render();
     
     try {
-        // --- START: Client-side data processing ---
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        thirtyDaysAgo.setHours(0, 0, 0, 0);
+        // --- START: Client-side data processing with dynamic date ranges ---
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        let startDate = new Date(today);
+        let dateRangeContext = "30 Hari Terakhir";
+
+        switch (aiRange) {
+            case 'last30days':
+                startDate.setDate(today.getDate() - 30);
+                break;
+            case 'semester':
+                const currentMonth = today.getMonth(); // 0-11
+                if (currentMonth >= 0 && currentMonth <= 5) { // Semester 2 (Jan-Juni)
+                    startDate = new Date(today.getFullYear(), 0, 1);
+                    dateRangeContext = `Semester II (Januari - Juni ${today.getFullYear()})`;
+                } else { // Semester 1 (Juli-Des)
+                    startDate = new Date(today.getFullYear(), 6, 1);
+                    dateRangeContext = `Semester I (Juli - Desember ${today.getFullYear()})`;
+                }
+                break;
+            case 'year':
+                startDate = new Date(today.getFullYear(), 6, 1); // Tahun ajaran dimulai Juli
+                if (today.getMonth() < 6) { // Jika sekarang sebelum Juli, tahun ajaran dimulai tahun lalu
+                    startDate.setFullYear(today.getFullYear() - 1);
+                }
+                dateRangeContext = `Tahun Ajaran ${startDate.getFullYear()}/${startDate.getFullYear() + 1}`;
+                break;
+        }
+        startDate.setHours(0, 0, 0, 0);
 
         const studentSummary = {};
 
         state.dashboard.allTeacherData.forEach(teacher => {
             (teacher.saved_logs || []).forEach(log => {
                 const logDate = new Date(log.date + 'T00:00:00');
-                if (logDate >= thirtyDaysAgo) {
+                if (logDate >= startDate) {
                     Object.entries(log.attendance).forEach(([studentName, status]) => {
                         if (status !== 'H') {
                             if (!studentSummary[studentName]) {
@@ -452,8 +502,9 @@ export async function handleGenerateAiRecommendation() {
                 dashboard: {
                     ...state.dashboard,
                     aiRecommendation: {
+                        ...state.dashboard.aiRecommendation,
                         isLoading: false,
-                        result: "Tidak ada data absensi (sakit, izin, alpa) dalam 30 hari terakhir untuk dianalisis.",
+                        result: `Tidak ada data absensi (sakit, izin, alpa) dalam periode **${dateRangeContext}** untuk dianalisis.`,
                         error: null,
                     },
                 },
@@ -462,13 +513,13 @@ export async function handleGenerateAiRecommendation() {
             return;
         }
 
-        const { recommendation } = await apiService.generateAiRecommendation(topStudentsData);
-        await setState({ dashboard: { ...state.dashboard, aiRecommendation: { isLoading: false, result: recommendation, error: null } } });
+        const { recommendation } = await apiService.generateAiRecommendation(topStudentsData, dateRangeContext);
+        await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: recommendation, error: null } } });
     
     } catch(error) {
         console.error("AI Recommendation Error:", error);
         const errorMessage = error.message || 'Gagal menghasilkan rekomendasi. Coba lagi nanti.';
-        await setState({ dashboard: { ...state.dashboard, aiRecommendation: { isLoading: false, result: null, error: errorMessage } } });
+        await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: null, error: errorMessage } } });
     } finally {
         render();
     }
