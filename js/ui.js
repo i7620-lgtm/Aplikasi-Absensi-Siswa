@@ -613,8 +613,17 @@ async function renderDashboardScreen() {
 
             percentageContent.innerHTML = `
                 <div class="flex flex-col md:flex-row gap-4 mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200">
-                    <div class="flex-1"><div class="block text-sm font-medium text-slate-700 mb-2">Periode Waktu</div><div id="chart-time-filter" class="flex flex-wrap gap-2">${timeFilters.map(f => `<button data-mode="${f.id}" class="chart-time-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${state.dashboard.chartViewMode === f.id ? 'bg-blue-600 text-white' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'}">${f.text}</button>`).join('')}</div></div>
-                    <div class="flex-1 md:max-w-xs"><label for="chart-class-filter" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Kelas</label><select id="chart-class-filter" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"><option value="all">Seluruh Sekolah</option>${allClasses.map(c => `<option value="${c}" ${state.dashboard.chartClassFilter === c ? 'selected' : ''}>Kelas ${c}</option>`).join('')}</select></div>
+                    <div class="flex-1">
+                        <div class="block text-sm font-medium text-slate-700 mb-2">Periode Waktu</div>
+                        <div id="chart-time-filter" class="flex flex-wrap gap-2">${timeFilters.map(f => `<button data-mode="${f.id}" class="chart-time-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${state.dashboard.chartViewMode === f.id ? 'bg-blue-600 text-white' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'}">${f.text}</button>`).join('')}</div>
+                    </div>
+                    <div class="flex-1 md:max-w-xs">
+                        <div id="chart-class-filter-label" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Kelas</div>
+                        <select id="chart-class-filter" aria-labelledby="chart-class-filter-label" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
+                            <option value="all">Seluruh Sekolah</option>
+                            ${allClasses.map(c => `<option value="${c}" ${state.dashboard.chartClassFilter === c ? 'selected' : ''}>Kelas ${c}</option>`).join('')}
+                        </select>
+                    </div>
                 </div>
                 <div class="flex flex-col md:flex-row items-center justify-center gap-8 p-4">
                     <div id="chart-container" class="relative w-full md:w-1/2" style="max-width: 400px; max-height: 400px;"><canvas id="dashboard-pie-chart"></canvas><div id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center"><p class="text-slate-500 bg-white p-4 rounded-lg">Tidak ada data absensi untuk filter yang dipilih.</p></div></div>
