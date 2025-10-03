@@ -1,3 +1,5 @@
+
+
 import { state, CLASSES } from './main.js';
 import { getGsiReadyState } from './auth.js';
 
@@ -33,8 +35,9 @@ export const templates = {
         const assignedClasses = state.userProfile?.assigned_classes || [];
         const needsAssignment = isTeacher && assignedClasses.length === 0;
         const availableClasses = isAdmin ? CLASSES : assignedClasses;
-        const title = state.userProfile?.role === 'SUPER_ADMIN' && state.adminActingAsSchool 
-            ? `Absensi (Konteks: ${state.adminActingAsSchool.name})`
+        const isSuperAdminInContext = state.userProfile?.role === 'SUPER_ADMIN' && state.adminActingAsSchool;
+        const title = isSuperAdminInContext 
+            ? `Absensi Sekolah`
             : "Absensi Online Siswa";
         
         return `
@@ -52,6 +55,11 @@ export const templates = {
                                 </button>
                             </div>
                         </div>
+                        ${isSuperAdminInContext ? `
+                        <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6 text-sm text-indigo-800" role="alert">
+                            <p><span class="font-bold">Mode Konteks:</span> Anda bertindak sebagai admin untuk sekolah <strong class="font-semibold">${state.adminActingAsSchool.name}</strong>.</p>
+                        </div>
+                        ` : ''}
                         <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
                             <img src="${state.userProfile.picture}" alt="User" class="w-12 h-12 rounded-full"/>
                             <div>
@@ -273,14 +281,13 @@ export const templates = {
                          <button id="admin-panel-back-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
                     </div>
                 </div>
-                ${isSuperAdmin ? `
                 <div class="mb-4 flex justify-end">
                     <label class="flex items-center space-x-2 cursor-pointer text-sm text-slate-600">
                         <input type="checkbox" id="group-by-school-toggle" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                         <span>Kelompokkan berdasarkan sekolah</span>
                     </label>
                 </div>
-                ` : ''}
+                <div id="admin-bulk-actions-container" class="mb-4 transition-all"></div>
                 <div id="admin-panel-container" class="overflow-x-auto">
                      <p class="text-center text-slate-500 py-8">Memuat daftar pengguna...</p>
                 </div>
@@ -288,6 +295,15 @@ export const templates = {
              </div>
         </div>
     `},
+    bulkActionsBar: (count) => `
+        <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p class="font-semibold text-blue-800">${count} pengguna terpilih</p>
+            <div class="flex items-center gap-2">
+                <button id="bulk-assign-school-btn" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold py-2 px-3 rounded-lg text-sm transition">Tugaskan Sekolah</button>
+                <button id="bulk-change-role-btn" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold py-2 px-3 rounded-lg text-sm transition">Ubah Peran</button>
+            </div>
+        </div>
+    `,
     addStudents: (className) => {
         const isEditing = (state.students && state.students.length > 0);
         const message = isEditing
@@ -375,6 +391,34 @@ export const templates = {
                     <h1 id="data-title" class="text-2xl font-bold text-slate-800">Riwayat Data Absensi</h1>
                     <button id="data-back-to-start-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
                 </div>
+
+                <div id="data-filters" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div>
+                        <label for="filter-student-name" class="block text-sm font-medium text-slate-700 mb-1">Cari Nama Siswa</label>
+                        <input type="text" id="filter-student-name" placeholder="Ketik nama..." class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                    </div>
+                    <div>
+                        <label for="filter-status" class="block text-sm font-medium text-slate-700 mb-1">Filter Status</label>
+                        <select id="filter-status" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition bg-white">
+                            <option value="all">Semua Absen</option>
+                            <option value="S">Sakit (S)</option>
+                            <option value="I">Izin (I)</option>
+                            <option value="A">Alpa (A)</option>
+                        </select>
+                    </div>
+                    <div class="lg:col-span-2">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Rentang Tanggal</label>
+                        <div class="flex items-center gap-2">
+                            <input type="date" id="filter-start-date" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                            <span class="text-slate-500">-</span>
+                            <input type="date" id="filter-end-date" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                        </div>
+                    </div>
+                    <div class="md:col-span-2 lg:col-span-4 text-right mt-2">
+                         <button id="clear-filters-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Hapus Filter</button>
+                    </div>
+                </div>
+
                 <div id="data-container" class="space-y-6"></div>
              </div>
         </div>`,
@@ -415,6 +459,21 @@ export const templates = {
                 </div>
             </div>
         </div>`,
+    roleSelectorModal: (availableRoles) => `
+        <div id="role-selector-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
+             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-sm w-full animate-fade-in">
+                <h2 class="text-xl font-bold text-slate-800 mb-4">Pilih Peran Baru</h2>
+                <p class="text-slate-600 mb-6">Pilih peran baru untuk diterapkan pada pengguna yang dipilih.</p>
+                <select id="role-select-bulk-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                   ${availableRoles.map(role => `<option value="${role.value}">${role.text}</option>`).join('')}
+                </select>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button id="role-selector-cancel-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Batal</button>
+                    <button id="role-selector-confirm-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition">Terapkan</button>
+                </div>
+            </div>
+        </div>
+    `,
     manageUserModal: (user, schools) => {
         const assignedClasses = user.assigned_classes || [];
         const currentUserRole = state.userProfile.role;
