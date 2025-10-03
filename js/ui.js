@@ -423,22 +423,23 @@ async function renderAdminHomeScreen() {
     if (isSuperAdmin) {
         const maintenanceContainer = document.getElementById('maintenance-toggle-container');
         
-        const fetchAndRenderMaintenanceStatus = async () => {
-             maintenanceContainer.innerHTML = `<p class="text-sm text-slate-500">Memuat status...</p>`;
-             try {
-                const { isMaintenance } = await apiService.getMaintenanceStatus();
-                await setState({ maintenanceMode: { ...state.maintenanceMode, isActive: isMaintenance, statusChecked: true } });
-                renderMaintenanceToggle(maintenanceContainer, isMaintenance);
-            } catch (e) {
+        // The maintenance status is now checked once during app initialization.
+        // This function simply renders the result of that initial check.
+        if (state.maintenanceMode.statusChecked) {
+            if (state.serverStatus === 'error') {
+                // If the initial check failed, show a static error message without a retry button.
                 maintenanceContainer.innerHTML = `<div class="text-center">
                     <p class="text-sm text-red-500 font-semibold">Gagal memuat status.</p>
-                    <button id="retry-maintenance-status" class="text-xs text-blue-600 hover:underline font-semibold mt-2">Coba Lagi</button>
+                    <p class="text-xs text-slate-500 mt-1">Server tidak merespon saat aplikasi dimulai.</p>
                 </div>`;
-                document.getElementById('retry-maintenance-status').addEventListener('click', fetchAndRenderMaintenanceStatus);
+            } else {
+                // If the initial check was successful, render the interactive toggle.
+                renderMaintenanceToggle(maintenanceContainer, state.maintenanceMode.isActive);
             }
-        };
-
-        fetchAndRenderMaintenanceStatus();
+        } else {
+            // This case should not be reached if initApp runs correctly, but serves as a fallback.
+            maintenanceContainer.innerHTML = `<p class="text-sm text-slate-500">Memuat status...</p>`;
+        }
     }
 }
 
