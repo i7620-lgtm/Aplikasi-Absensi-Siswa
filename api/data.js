@@ -10,7 +10,7 @@ import handleAiRecommendation from './handlers/aiHandler.js';
 
 // --- KONFIGURASI ---
 // Daftar email yang akan otomatis menjadi SUPER_ADMIN saat pertama kali login.
-export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
+export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id'];
 
 export default async function handler(request, response) {
     try {
