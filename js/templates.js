@@ -1,4 +1,4 @@
-<![CDATA[
+
 
 import { state, CLASSES } from './main.js';
 import { getGsiReadyState } from './auth.js';
@@ -112,7 +112,7 @@ export const templates = {
                     <div class="space-y-4">
                         <div>
                             <label for="class-select" class="block text-sm font-medium text-slate-700 mb-1">Pilih Kelas</label>
-                            <select id="class-select" name="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${!state.userProfile || availableClasses.length === 0 ? 'disabled' : ''}>
+                            <select id="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${!state.userProfile || availableClasses.length === 0 ? 'disabled' : ''}>
                                 ${ availableClasses.length > 0 
                                     ? availableClasses.map(c => `<option value="${c}">${c}</option>`).join('')
                                     : `<option>Tidak ada kelas ditugaskan</option>`
@@ -121,7 +121,7 @@ export const templates = {
                         </div>
                         <div>
                             <label for="date-input" class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
-                            <input type="date" id="date-input" name="date-input" value="${state.selectedDate}" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${!state.userProfile ? 'disabled' : ''}/>
+                            <input type="date" id="date-input" value="${state.selectedDate}" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${!state.userProfile ? 'disabled' : ''}/>
                         </div>
                     </div>
                     <div class="mt-6 space-y-3">
@@ -237,7 +237,7 @@ export const templates = {
                         <div class="flex items-center gap-2 w-full">
                              <label for="ks-date-display" class="text-sm font-medium text-slate-600 flex-shrink-0">Pilih Tanggal:</label>
                              <div id="ks-datepicker-wrapper" class="custom-datepicker-wrapper">
-                                <input type="text" id="ks-date-display" name="ks-date-display" value="${new Date(state.dashboard.selectedDate + 'T00:00:00').toLocaleDateString('id-ID', {day: '2-digit', month: '2-digit', year: 'numeric'})}" readonly class="w-full sm:w-auto p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm"/>
+                                <input type="text" id="ks-date-display" value="${new Date(state.dashboard.selectedDate + 'T00:00:00').toLocaleDateString('id-ID', {day: '2-digit', month: '2-digit', year: 'numeric'})}" readonly class="w-full sm:w-auto p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm"/>
                                 <div id="ks-datepicker-popup" class="datepicker-popup hidden"></div>
                              </div>
                         </div>
@@ -282,8 +282,8 @@ export const templates = {
                     </div>
                 </div>
                 <div class="mb-4 flex justify-end">
-                    <label class="flex items-center space-x-2 cursor-pointer text-sm text-slate-600">
-                        <input type="checkbox" id="group-by-school-toggle" name="group-by-school-toggle" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                    <label for="group-by-school-toggle" class="flex items-center space-x-2 cursor-pointer text-sm text-slate-600">
+                        <input type="checkbox" id="group-by-school-toggle" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                         <span>Kelompokkan berdasarkan sekolah</span>
                     </label>
                 </div>
@@ -326,8 +326,8 @@ export const templates = {
                         <h2 class="text-lg font-semibold text-slate-700 mb-4">Impor dari File</h2>
                         <p class="text-sm text-slate-500 mb-4">Unggah file .xlsx untuk <span class="font-bold">menimpa</span> daftar saat ini.</p>
                         <button id="download-template-btn" class="w-full mb-3 text-sm bg-green-100 hover:bg-green-200 text-green-700 font-semibold py-2 px-4 rounded-lg transition">Unduh Template (.csv)</button>
-                        <label for="excel-upload" id="import-excel-btn" class="cursor-pointer w-full text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg transition block text-center">Pilih File Excel untuk Diimpor</label>
                         <input type="file" id="excel-upload" class="hidden" accept=".xlsx, .xls, .csv"/>
+                        <button id="import-excel-btn" class="w-full text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg transition">Pilih File Excel untuk Diimpor</button>
                     </div>
                 </div>
                 <div class="mt-8 pt-6 border-t border-slate-200 flex justify-end gap-4">
@@ -395,24 +395,26 @@ export const templates = {
                 <div id="data-filters" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
                     <div>
                         <label for="filter-student-name" class="block text-sm font-medium text-slate-700 mb-1">Cari Nama Siswa</label>
-                        <input type="text" id="filter-student-name" name="filter-student-name" placeholder="Ketik nama..." class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                        <input type="text" id="filter-student-name" placeholder="Ketik nama..." class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
                     </div>
                     <div>
                         <label for="filter-status" class="block text-sm font-medium text-slate-700 mb-1">Filter Status</label>
-                        <select id="filter-status" name="filter-status" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition bg-white">
+                        <select id="filter-status" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition bg-white">
                             <option value="all">Semua Absen</option>
                             <option value="S">Sakit (S)</option>
                             <option value="I">Izin (I)</option>
                             <option value="A">Alpa (A)</option>
                         </select>
                     </div>
-                    <div>
-                        <label for="filter-start-date" class="block text-sm font-medium text-slate-700 mb-1">Tanggal Mulai</label>
-                        <input type="date" id="filter-start-date" name="filter-start-date" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
-                    </div>
-                    <div>
-                        <label for="filter-end-date" class="block text-sm font-medium text-slate-700 mb-1">Tanggal Selesai</label>
-                        <input type="date" id="filter-end-date" name="filter-end-date" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                    <div class="lg:col-span-2">
+                        <p class="block text-sm font-medium text-slate-700 mb-1">Rentang Tanggal</p>
+                        <div class="flex items-center gap-2">
+                            <label for="filter-start-date" class="sr-only">Tanggal Mulai</label>
+                            <input type="date" id="filter-start-date" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                            <span class="text-slate-500">-</span>
+                            <label for="filter-end-date" class="sr-only">Tanggal Selesai</label>
+                            <input type="date" id="filter-end-date" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                        </div>
                     </div>
                     <div class="md:col-span-2 lg:col-span-4 text-right mt-2">
                          <button id="clear-filters-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Hapus Filter</button>
@@ -478,7 +480,7 @@ export const templates = {
              <div class="bg-white p-8 rounded-2xl shadow-lg max-w-sm w-full animate-fade-in">
                 <h2 class="text-xl font-bold text-slate-800 mb-4">Pilih Peran Baru</h2>
                 <p class="text-slate-600 mb-6">Pilih peran baru untuk diterapkan pada pengguna yang dipilih.</p>
-                <select id="role-select-bulk-modal" name="role-select-bulk-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                <select id="role-select-bulk-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                    ${availableRoles.map(role => `<option value="${role.value}">${role.text}</option>`).join('')}
                 </select>
                 <div class="flex justify-end gap-4 mt-8">
@@ -512,14 +514,14 @@ export const templates = {
                 <div class="space-y-4">
                     <div>
                         <label for="role-select-modal" class="block text-sm font-medium text-slate-700 mb-1">Peran Pengguna</label>
-                        <select id="role-select-modal" name="role-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <select id="role-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                            ${availableRoles.map(role => `<option value="${role.value}" ${user.role === role.value ? 'selected' : ''}>${role.text}</option>`).join('')}
                         </select>
                     </div>
                     ${isSuperAdmin ? `
                     <div>
                         <label for="school-select-modal" class="block text-sm font-medium text-slate-700 mb-1">Tugaskan ke Sekolah</label>
-                        <select id="school-select-modal" name="school-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${isTargetSuperAdmin ? 'bg-slate-100 cursor-not-allowed' : ''}" ${isTargetSuperAdmin ? 'disabled' : ''}>
+                        <select id="school-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${isTargetSuperAdmin ? 'bg-slate-100 cursor-not-allowed' : ''}" ${isTargetSuperAdmin ? 'disabled' : ''}>
                             <option value="">-- Tidak Ditugaskan --</option>
                             ${schools.map(school => `<option value="${school.id}" ${user.school_id === school.id ? 'selected' : ''}>${school.name}</option>`).join('')}
                         </select>
@@ -531,8 +533,8 @@ export const templates = {
                      <p class="block text-sm font-medium text-slate-700 mb-2">Tugaskan Kelas (untuk Guru)</p>
                      <div id="class-checkbox-container" class="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-48 overflow-y-auto border p-4 rounded-lg">
                         ${CLASSES.map(c => `
-                            <label class="flex items-center space-x-2 text-slate-700 cursor-pointer">
-                                <input type="checkbox" name="class-checkbox-${c}" value="${c}" class="class-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${assignedClasses.includes(c) ? 'checked' : ''}>
+                            <label for="class-checkbox-${c}" class="flex items-center space-x-2 text-slate-700 cursor-pointer">
+                                <input type="checkbox" id="class-checkbox-${c}" value="${c}" class="class-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${assignedClasses.includes(c) ? 'checked' : ''}>
                                 <span>${c}</span>
                             </label>
                         `).join('')}
@@ -563,4 +565,4 @@ export const templates = {
             </div>
         </div>
     `
-};]]>
+};
