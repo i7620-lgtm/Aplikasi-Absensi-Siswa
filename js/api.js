@@ -1,7 +1,6 @@
 import { state } from './main.js';
 
 async function _fetch(action, payload = {}) {
-    // Secara proaktif memeriksa status offline untuk memberikan pesan error yang lebih baik.
     if (!navigator.onLine) {
         throw new Error('Koneksi internet terputus. Silakan periksa jaringan Anda.');
     }
@@ -13,7 +12,7 @@ async function _fetch(action, payload = {}) {
             body: JSON.stringify({
                 action,
                 payload,
-                userEmail: state.userProfile?.email // Mengirim email pengguna terotentikasi untuk verifikasi
+                userEmail: state.userProfile?.email
             }),
         });
     
@@ -28,15 +27,11 @@ async function _fetch(action, payload = {}) {
     
         return response.json();
     } catch (error) {
-        // Blok catch terpadu ini menangani error jaringan (seperti 'Failed to fetch') 
-        // dan error HTTP yang dilempar dari blok di atas.
         console.error(`Panggilan API '${action}' gagal:`, error);
         
-        // Memeriksa apakah ini sudah merupakan pesan yang ramah untuk menghindari pesan error bertumpuk.
         if (error.message.startsWith('Kesalahan Server')) {
-            throw error; // Menyebarkan error server yang spesifik.
+            throw error;
         }
-        // Melempar pesan error yang lebih umum dan ramah pengguna untuk masalah koneksi.
         throw new Error('Gagal terhubung ke server. Periksa koneksi internet Anda.');
     }
 }
@@ -58,8 +53,20 @@ export const apiService = {
         return await _fetch('saveData', payload);
     },
 
-    async getGlobalData(schoolId = null) {
-        return await _fetch('getGlobalData', { schoolId });
+    async getHistoryData(params) {
+        return await _fetch('getHistoryData', params);
+    },
+    
+    async getDashboardData(params) {
+        return await _fetch('getDashboardData', params);
+    },
+
+    async getRecapData(params) {
+        return await _fetch('getRecapData', params);
+    },
+    
+    async getSchoolStudentData(schoolId) {
+        return await _fetch('getSchoolStudentData', { schoolId });
     },
 
     async getAllUsers() {
@@ -78,8 +85,11 @@ export const apiService = {
         return await _fetch('updateUserConfiguration', { targetEmail, newRole, newSchoolId, newClasses });
     },
 
+    async updateUsersBulkConfiguration({ targetEmails, newRole, newSchoolId }) {
+        return await _fetch('updateUsersBulk', { targetEmails, newRole, newSchoolId });
+    },
+
     async getMaintenanceStatus() {
-        // Tidak memerlukan payload atau userEmail
         return await _fetch('getMaintenanceStatus');
     },
 
@@ -87,7 +97,7 @@ export const apiService = {
         return await _fetch('setMaintenanceStatus', { enabled });
     },
 
-    async generateAiRecommendation(preprocessedData) {
-        return await _fetch('generateAiRecommendation', { preprocessedData });
+    async generateAiRecommendation(params) {
+        return await _fetch('generateAiRecommendation', params);
     }
 };
