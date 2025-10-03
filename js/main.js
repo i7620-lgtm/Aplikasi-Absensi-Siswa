@@ -710,26 +710,10 @@ async function initApp() {
     // 1. Load local data first to enable offline use immediately.
     await loadInitialData();
     
-    // 2. Render the screen based on local data if available.
-    if (state.userProfile) {
-        // Determine initial screen based on offline role
-        if (state.userProfile.role === 'SUPER_ADMIN') {
-            state.currentScreen = 'adminHome';
-        } else if (state.userProfile.role === 'KEPALA_SEKOLAH') {
-            state.currentScreen = 'dashboard';
-        } else {
-            state.currentScreen = 'setup';
-        }
-        render(); 
-    } else {
-        // For new users, default to setup screen but don't render yet
-        state.currentScreen = 'setup';
-    }
-    
     setupGlobalEventListeners();
     updateOnlineStatus(navigator.onLine);
 
-    // 3. Now, try to connect to the server.
+    // 2. Now, try to connect to the server to determine final state BEFORE rendering.
     try {
         const { isMaintenance } = await apiService.getMaintenanceStatus();
         await setState({ 
@@ -747,23 +731,29 @@ async function initApp() {
             return;
         }
 
-        // If we don't have a user, it's their first time or they signed out.
-        // Initialize GSI for login and render the setup screen.
         if (!state.userProfile) {
+            // New user, online.
+            state.currentScreen = 'setup';
             initializeGsi();
-            render(); // Render setup screen, now with GSI ready.
+            render();
         } else {
-            // User is logged in from offline data, we are good to go.
-            console.log("Server is online. App is ready.");
+            // Existing user, online.
+            if (state.userProfile.role === 'SUPER_ADMIN') {
+                state.currentScreen = 'adminHome';
+            } else if (state.userProfile.role === 'KEPALA_SEKOLAH') {
+                state.currentScreen = 'dashboard';
+            } else {
+                state.currentScreen = 'setup';
+            }
+            render(); 
+
             if (navigator.onLine) {
                 syncData().catch(err => console.error("Initial sync failed:", err));
             }
         }
-        hideLoader(); // Hide the initial "Memuat Aplikasi..." loader.
 
     } catch (e) {
         console.error("Tidak dapat memulai aplikasi (server check failed):", e.message);
-        hideLoader(); // Hide initial loader regardless of error.
         
         await setState({ 
             serverStatus: 'error',
@@ -776,27 +766,36 @@ async function initApp() {
         const appContainer = document.getElementById('app-container');
         const isCriticalError = e.message.startsWith('CRITICAL:');
 
-        // If it's a critical error AND the user has no offline profile,
-        // the app is unusable. Show the full-page error.
         if (isCriticalError && !state.userProfile) {
+            // New user, offline with critical error -> unusable.
             const userFriendlyMessage = e.message.replace('CRITICAL: ', '');
             appContainer.innerHTML = templates.criticalError(userFriendlyMessage);
         } else {
-            // Otherwise, the user has offline data and can continue.
-            // Show a non-blocking, permanent notification about the connection issue.
+            // Existing user, offline OR new user, non-critical offline -> usable.
             showNotification(
                 'Gagal terhubung ke server. Aplikasi berjalan dalam mode offline.', 
                 'error', 
-                { isPermanent: true } // No retry button for persistent errors
+                { isPermanent: true }
             );
             
-            // If there's no user profile, render the setup/login screen
-            // so they see something, even if login won't work.
             if (!state.userProfile) {
-                 initializeGsi(); // Will display its own error message if it fails.
-                 render();
+                 state.currentScreen = 'setup';
+                 initializeGsi();
+            } else {
+                // Determine screen based on offline role
+                if (state.userProfile.role === 'SUPER_ADMIN') {
+                    state.currentScreen = 'adminHome';
+                } else if (state.userProfile.role === 'KEPALA_SEKOLAH') {
+                    state.currentScreen = 'dashboard';
+                } else {
+                    state.currentScreen = 'setup';
+                }
             }
+            render(); // Render the determined screen for offline mode.
         }
+    } finally {
+        // Hide the loader only after a conclusion (render or critical error) is reached.
+        hideLoader();
     }
 }
 
