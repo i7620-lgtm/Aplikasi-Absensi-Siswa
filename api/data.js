@@ -75,15 +75,22 @@ export default async function handler(request, response) {
 
     } catch (error) {
         console.error('API Error:', error);
-        // Periksa error koneksi database yang umum untuk memberikan pesan yang lebih jelas.
-        const isConnectionError = /connect|database|env var|does not exist|credentials|timeout/i.test(error.message);
+        // Kesalahan yang terjadi selama `setupTables` sangat mungkin merupakan masalah konfigurasi yang persisten.
+        // Kita perlakukan semua error dari Vercel Postgres dengan `code` sebagai error koneksi.
+        // Properti `code` adalah non-standar tetapi umum di pustaka driver DB.
+        const isConnectionError = /connect|database|env var|does not exist|credentials|timeout/i.test(error.message) || (error.code && typeof error.code === 'string');
+        
         if (isConnectionError) {
+            // Log pesan yang lebih detail di sisi server untuk debugging
+            console.error('Identified as a potential DB connection error. Message:', error.message, 'Code:', error.code);
+            
             return response.status(500).json({ 
-                error: 'Kesalahan Koneksi Database', 
-                details: 'Server tidak dapat terhubung ke database. Periksa variabel lingkungan Vercel atau status database.',
-                errorCode: 'DB_CONNECTION_FAILED' // Tambahkan kode error spesifik
+                error: 'Kesalahan Koneksi Database Kritis', 
+                details: 'Server gagal berkomunikasi dengan database. Ini kemungkinan besar adalah masalah konfigurasi di sisi server (misalnya, variabel lingkungan database).',
+                errorCode: 'DB_CONNECTION_FAILED'
             });
         }
+        
         return response.status(500).json({ error: 'Terjadi kesalahan internal pada server.', details: error.message });
     }
 }
