@@ -1,22 +1,21 @@
 import { sql } from '@vercel/postgres';
-// Hapus impor setupTables karena tidak akan lagi dipanggil pada setiap permintaan.
-// import setupTables from './utils/dbSetup.js'; 
+import setupTables from './utils/dbSetup.js';
 import handleLoginOrRegister from './handlers/authHandler.js';
 import { handleGetMaintenanceStatus, handleSetMaintenanceStatus } from './handlers/configHandler.js';
 import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk } from './handlers/userHandler.js';
 import { handleGetAllSchools, handleCreateSchool } from './handlers/schoolHandler.js';
-import { handleSaveData, handleGetGlobalData } from './handlers/attendanceHandler.js';
+import { handleSaveData, handleGetHistoryData, handleGetSchoolStudentData } from './handlers/attendanceHandler.js';
 import handleAiRecommendation from './handlers/aiHandler.js';
+import handleGetDashboardData from './handlers/dashboardHandler.js';
+import handleGetRecapData from './handlers/recapHandler.js';
 
 // --- KONFIGURASI ---
 // Daftar email yang akan otomatis menjadi SUPER_ADMIN saat pertama kali login.
-export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id'];
+export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
 
 export default async function handler(request, response) {
     try {
-        // PERBAIKAN KRITIS: Panggilan ke setupTables DIHAPUS dari sini.
-        // Skema database diasumsikan sudah ada di produksi.
-        // await setupTables(sql);
+        await setupTables(sql);
 
         if (request.method !== 'POST') {
             return response.status(405).json({ error: 'Method Not Allowed' });
@@ -50,21 +49,24 @@ export default async function handler(request, response) {
         }
         const user = userRows[0];
         
-        // Membuat objek handler untuk pemetaan yang lebih bersih
         const actionHandlers = {
             // Config
             setMaintenanceStatus: handleSetMaintenanceStatus,
             // User
-            getUserProfile: (params) => response.status(200).json({ userProfile: params.user }), // Aksi sederhana bisa langsung ditangani
+            getUserProfile: (params) => response.status(200).json({ userProfile: params.user }),
             getAllUsers: handleGetAllUsers,
             updateUserConfiguration: handleUpdateUserConfiguration,
             updateUsersBulk: handleUpdateUsersBulk,
             // School
             getAllSchools: handleGetAllSchools,
             createSchool: handleCreateSchool,
+            getSchoolStudentData: handleGetSchoolStudentData,
             // Attendance
             saveData: handleSaveData,
-            getGlobalData: handleGetGlobalData,
+            getHistoryData: handleGetHistoryData,
+            // Aggregated Data (Optimized Endpoints)
+            getDashboardData: handleGetDashboardData,
+            getRecapData: handleGetRecapData,
             // AI
             generateAiRecommendation: handleAiRecommendation,
         };
@@ -78,22 +80,6 @@ export default async function handler(request, response) {
 
     } catch (error) {
         console.error('API Error:', error);
-        // Kesalahan yang terjadi selama `setupTables` sangat mungkin merupakan masalah konfigurasi yang persisten.
-        // Kita perlakukan semua error dari Vercel Postgres dengan `code` sebagai error koneksi.
-        // Properti `code` adalah non-standar tetapi umum di pustaka driver DB.
-        const isConnectionError = /connect|database|env var|does not exist|credentials|timeout|suspended|authentication/i.test(error.message) || (error.code && typeof error.code === 'string');
-        
-        if (isConnectionError) {
-            // Log pesan yang lebih detail di sisi server untuk debugging
-            console.error('Identified as a potential DB connection error. Message:', error.message, 'Code:', error.code);
-            
-            return response.status(500).json({ 
-                error: 'Kesalahan Koneksi Database Kritis', 
-                details: 'Server gagal berkomunikasi dengan database. Ini kemungkinan besar adalah masalah konfigurasi di sisi server (misalnya, variabel lingkungan database).',
-                errorCode: 'DB_CONNECTION_FAILED'
-            });
-        }
-        
-        return response.status(500).json({ error: 'Terjadi kesalahan internal pada server.', details: error.message });
+        return response.status(500).json({ error: 'An internal server error occurred', details: error.message });
     }
 }
