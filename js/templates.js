@@ -1,3 +1,5 @@
+
+
 import { state, CLASSES } from './main.js';
 import { getGsiReadyState } from './auth.js';
 
@@ -11,6 +13,21 @@ function getRoleDisplayName(role) {
     }
 }
 
+function getWeekRange(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const dayOfWeek = d.getDay(); 
+    const diffToMonday = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const monday = new Date(d.setDate(diffToMonday));
+    const sunday = new Date(new Date(monday).setDate(monday.getDate() + 6));
+    
+    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+    const locale = 'id-ID';
+
+    return `${monday.toLocaleDateString(locale, options)} - ${sunday.toLocaleDateString(locale, options)}`;
+}
+
+
 export const templates = {
     setup: () => {
         const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
@@ -18,8 +35,9 @@ export const templates = {
         const assignedClasses = state.userProfile?.assigned_classes || [];
         const needsAssignment = isTeacher && assignedClasses.length === 0;
         const availableClasses = isAdmin ? CLASSES : assignedClasses;
-        const title = state.userProfile?.role === 'SUPER_ADMIN' && state.adminActingAsSchool 
-            ? `Absensi (Konteks: ${state.adminActingAsSchool.name})`
+        const isSuperAdminInContext = state.userProfile?.role === 'SUPER_ADMIN' && state.adminActingAsSchool;
+        const title = isSuperAdminInContext 
+            ? `Absensi Sekolah`
             : "Absensi Online Siswa";
         
         return `
@@ -37,6 +55,11 @@ export const templates = {
                                 </button>
                             </div>
                         </div>
+                        ${isSuperAdminInContext ? `
+                        <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6 text-sm text-indigo-800" role="alert">
+                            <p><span class="font-bold">Mode Konteks:</span> Anda bertindak sebagai admin untuk sekolah <strong class="font-semibold">${state.adminActingAsSchool.name}</strong>.</p>
+                        </div>
+                        ` : ''}
                         <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
                             <img src="${state.userProfile.picture}" alt="User" class="w-12 h-12 rounded-full"/>
                             <div>
@@ -152,10 +175,44 @@ export const templates = {
         </div>`;
     },
     dashboard: () => {
-        const displayDate = new Date(state.dashboard.selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const { activeView, chartViewMode, selectedDate } = state.dashboard;
+        const dateObj = new Date(selectedDate + 'T00:00:00');
+        let displayDate;
+        let isDatePickerVisible = true;
+
+        if (activeView === 'report' || activeView === 'ai') {
+            displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        } else if (activeView === 'percentage') {
+            switch (chartViewMode) {
+                case 'daily':
+                    displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                    break;
+                case 'weekly':
+                    displayDate = getWeekRange(dateObj);
+                    break;
+                case 'monthly':
+                    displayDate = dateObj.toLocaleDateString('id-ID', { year: 'numeric', month: 'long' });
+                    break;
+                case 'semester1':
+                    displayDate = `Semester I (Juli - Desember ${dateObj.getFullYear()})`;
+                    isDatePickerVisible = false;
+                    break;
+                case 'semester2':
+                    displayDate = `Semester II (Januari - Juni ${dateObj.getFullYear()})`;
+                    isDatePickerVisible = false;
+                    break;
+                case 'yearly':
+                    displayDate = `Tahun ${dateObj.getFullYear()}`;
+                    break;
+                default:
+                     displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            }
+        } else {
+            displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+        
         const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
         const backTarget = isAdmin ? 'adminHome' : 'setup';
-        const { activeView } = state.dashboard;
 
         const getButtonClass = (viewName) => {
             return activeView === viewName
@@ -176,10 +233,15 @@ export const templates = {
                         <p class="text-slate-500">${displayDate}</p>
                     </div>
                     <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
+                        ${isDatePickerVisible ? `
                         <div class="flex items-center gap-2 w-full">
-                             <label for="ks-date-picker" class="text-sm font-medium text-slate-600 flex-shrink-0">Pilih Tanggal:</label>
-                             <input type="date" id="ks-date-picker" value="${state.dashboard.selectedDate}" class="w-full sm:w-auto p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm"/>
+                             <label for="ks-date-display" class="text-sm font-medium text-slate-600 flex-shrink-0">Pilih Tanggal:</label>
+                             <div id="ks-datepicker-wrapper" class="custom-datepicker-wrapper">
+                                <input type="text" id="ks-date-display" value="${new Date(state.dashboard.selectedDate + 'T00:00:00').toLocaleDateString('id-ID', {day: '2-digit', month: '2-digit', year: 'numeric'})}" readonly class="w-full sm:w-auto p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm"/>
+                                <div id="ks-datepicker-popup" class="datepicker-popup hidden"></div>
+                             </div>
                         </div>
+                        ` : ''}
                         <div class="flex items-center gap-2">
                            ${isAdmin ? `<button id="dashboard-back-btn" data-target="${backTarget}" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>` : ''}
                            <button id="logoutBtn-ks" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full flex items-center gap-2 text-sm font-semibold">
@@ -219,14 +281,13 @@ export const templates = {
                          <button id="admin-panel-back-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
                     </div>
                 </div>
-                ${isSuperAdmin ? `
                 <div class="mb-4 flex justify-end">
                     <label class="flex items-center space-x-2 cursor-pointer text-sm text-slate-600">
                         <input type="checkbox" id="group-by-school-toggle" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                         <span>Kelompokkan berdasarkan sekolah</span>
                     </label>
                 </div>
-                ` : ''}
+                <div id="admin-bulk-actions-container" class="mb-4 transition-all"></div>
                 <div id="admin-panel-container" class="overflow-x-auto">
                      <p class="text-center text-slate-500 py-8">Memuat daftar pengguna...</p>
                 </div>
@@ -234,6 +295,15 @@ export const templates = {
              </div>
         </div>
     `},
+    bulkActionsBar: (count) => `
+        <div class="bg-blue-50 border border-blue-200 p-3 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p class="font-semibold text-blue-800">${count} pengguna terpilih</p>
+            <div class="flex items-center gap-2">
+                <button id="bulk-assign-school-btn" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold py-2 px-3 rounded-lg text-sm transition">Tugaskan Sekolah</button>
+                <button id="bulk-change-role-btn" class="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold py-2 px-3 rounded-lg text-sm transition">Ubah Peran</button>
+            </div>
+        </div>
+    `,
     addStudents: (className) => {
         const isEditing = (state.students && state.students.length > 0);
         const message = isEditing
@@ -321,6 +391,34 @@ export const templates = {
                     <h1 id="data-title" class="text-2xl font-bold text-slate-800">Riwayat Data Absensi</h1>
                     <button id="data-back-to-start-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
                 </div>
+
+                <div id="data-filters" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div>
+                        <label for="filter-student-name" class="block text-sm font-medium text-slate-700 mb-1">Cari Nama Siswa</label>
+                        <input type="text" id="filter-student-name" placeholder="Ketik nama..." class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                    </div>
+                    <div>
+                        <label for="filter-status" class="block text-sm font-medium text-slate-700 mb-1">Filter Status</label>
+                        <select id="filter-status" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition bg-white">
+                            <option value="all">Semua Absen</option>
+                            <option value="S">Sakit (S)</option>
+                            <option value="I">Izin (I)</option>
+                            <option value="A">Alpa (A)</option>
+                        </select>
+                    </div>
+                    <div class="lg:col-span-2">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Rentang Tanggal</label>
+                        <div class="flex items-center gap-2">
+                            <input type="date" id="filter-start-date" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                            <span class="text-slate-500">-</span>
+                            <input type="date" id="filter-end-date" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                        </div>
+                    </div>
+                    <div class="md:col-span-2 lg:col-span-4 text-right mt-2">
+                         <button id="clear-filters-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Hapus Filter</button>
+                    </div>
+                </div>
+
                 <div id="data-container" class="space-y-6"></div>
              </div>
         </div>`,
@@ -338,6 +436,20 @@ export const templates = {
                 </div>
                 <div id="recap-container" class="overflow-x-auto"></div>
              </div>
+        </div>`,
+    connectionFailed: (errorMessage) => `
+        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
+            <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-lg w-full animate-fade-in">
+                <svg class="mx-auto h-16 w-16 text-red-500 mb-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+                <h1 class="text-3xl font-bold text-slate-800 mb-3">Gagal Terhubung</h1>
+                <p class="text-slate-500 mb-6">Aplikasi tidak dapat terhubung ke server. Ini mungkin terjadi jika server atau database sedang dalam proses aktivasi setelah periode tidak aktif.</p>
+                <div class="text-xs text-slate-500 bg-slate-100 p-3 rounded-lg mb-8 text-left font-mono">
+                    <strong>Detail Error:</strong> ${errorMessage || 'Tidak ada detail error.'}
+                </div>
+                <button id="retry-connection-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Coba Lagi</button>
+            </div>
         </div>`,
     maintenance: () => `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
@@ -361,6 +473,21 @@ export const templates = {
                 </div>
             </div>
         </div>`,
+    roleSelectorModal: (availableRoles) => `
+        <div id="role-selector-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
+             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-sm w-full animate-fade-in">
+                <h2 class="text-xl font-bold text-slate-800 mb-4">Pilih Peran Baru</h2>
+                <p class="text-slate-600 mb-6">Pilih peran baru untuk diterapkan pada pengguna yang dipilih.</p>
+                <select id="role-select-bulk-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                   ${availableRoles.map(role => `<option value="${role.value}">${role.text}</option>`).join('')}
+                </select>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button id="role-selector-cancel-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Batal</button>
+                    <button id="role-selector-confirm-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition">Terapkan</button>
+                </div>
+            </div>
+        </div>
+    `,
     manageUserModal: (user, schools) => {
         const assignedClasses = user.assigned_classes || [];
         const currentUserRole = state.userProfile.role;
