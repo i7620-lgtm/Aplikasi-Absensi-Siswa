@@ -621,7 +621,7 @@ async function renderDashboardScreen() {
                     </div>
                     <div class="flex-1 md:max-w-xs">
                         <label for="chart-class-filter" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Kelas</label>
-                        <select id="chart-class-filter" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
+                        <select id="chart-class-filter" name="chart-class-filter" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
                             <option value="all">Seluruh Sekolah</option>
                             ${allClasses.map(c => `<option value="${c}" ${state.dashboard.chartClassFilter === c ? 'selected' : ''}>Kelas ${c}</option>`).join('')}
                         </select>
@@ -793,19 +793,19 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
     const paginatedUsers = usersToRender.slice((validCurrentPage - 1) * USERS_PER_PAGE, validCurrentPage * USERS_PER_PAGE);
     const allVisibleSelected = paginatedUsers.length > 0 && paginatedUsers.every(u => selectedUsers.includes(u.email));
 
-    let tableHtml = `<table class="w-full text-left"><thead><tr class="border-b bg-slate-50"><th class="p-3 w-12 text-center"><input type="checkbox" id="select-all-users-checkbox" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${allVisibleSelected ? 'checked' : ''} /></th><th class="p-3 text-sm font-semibold text-slate-600">Pengguna</th><th class="p-3 text-sm font-semibold text-slate-600">Peran</th><th class="p-3 text-sm font-semibold text-slate-600">Sekolah</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Tindakan</th></tr></thead><tbody>`;
+    let tableHtml = `<table class="w-full text-left"><thead><tr class="border-b bg-slate-50"><th class="p-3 w-12 text-center"><label class="sr-only" for="select-all-users-checkbox">Pilih semua pengguna yang terlihat</label><input type="checkbox" id="select-all-users-checkbox" name="select-all-users-checkbox" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${allVisibleSelected ? 'checked' : ''} /></th><th class="p-3 text-sm font-semibold text-slate-600">Pengguna</th><th class="p-3 text-sm font-semibold text-slate-600">Peran</th><th class="p-3 text-sm font-semibold text-slate-600">Sekolah</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Tindakan</th></tr></thead><tbody>`;
     
     if (paginatedUsers.length === 0) {
         tableHtml += `<tr><td colspan="5" class="text-center text-slate-500 py-8">Tidak ada pengguna yang cocok.</td></tr>`;
     } else {
         let currentSchoolName = null;
-        paginatedUsers.forEach(user => {
+        paginatedUsers.forEach((user, index) => {
             if (groupBySchool && state.userProfile.role === 'SUPER_ADMIN' && user.school_name !== currentSchoolName) {
                 currentSchoolName = user.school_name;
                 tableHtml += `<tr class="bg-slate-100 sticky top-0"><td colspan="5" class="p-2 font-bold text-slate-600">${currentSchoolName || 'Belum Ditugaskan'}</td></tr>`;
             }
             const newBadge = user.is_unmanaged ? `<span class="ml-2 px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full">BARU</span>` : '';
-            tableHtml += `<tr class="border-b hover:bg-slate-50 transition"><td class="p-3 text-center"><input type="checkbox" class="user-select-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="${user.email}" ${selectedUsers.includes(user.email) ? 'checked' : ''} /></td><td class="p-3"><div class="flex items-center gap-3"><img src="${user.picture}" alt="${user.name}" class="w-10 h-10 rounded-full"/><div><p class="font-medium text-slate-800">${user.name}${newBadge}</p><p class="text-xs text-slate-500">${user.email}</p></div></div></td><td class="p-3 text-sm text-slate-600">${user.role}</td><td class="p-3 text-sm text-slate-600">${user.school_name || '<span class="italic text-slate-400">Belum Ditugaskan</span>'}</td><td class="p-3 text-center"><button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" data-user='${JSON.stringify(user)}'>Kelola</button></td></tr>`;
+            tableHtml += `<tr class="border-b hover:bg-slate-50 transition"><td class="p-3 text-center"><label class="sr-only" for="user-select-checkbox-${index}">Pilih ${user.name}</label><input type="checkbox" id="user-select-checkbox-${index}" name="user-select-checkbox" class="user-select-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="${user.email}" ${selectedUsers.includes(user.email) ? 'checked' : ''} /></td><td class="p-3"><div class="flex items-center gap-3"><img src="${user.picture}" alt="${user.name}" class="w-10 h-10 rounded-full"/><div><p class="font-medium text-slate-800">${user.name}${newBadge}</p><p class="text-xs text-slate-500">${user.email}</p></div></div></td><td class="p-3 text-sm text-slate-600">${user.role}</td><td class="p-3 text-sm text-slate-600">${user.school_name || '<span class="italic text-slate-400">Belum Ditugaskan</span>'}</td><td class="p-3 text-center"><button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" data-user='${JSON.stringify(user)}'>Kelola</button></td></tr>`;
         });
     }
     tableHtml += `</tbody></table>`;
@@ -953,8 +953,8 @@ function renderStudentInputRows() {
     if (!container) return;
     container.innerHTML = state.newStudents.map((name, index) => `
         <div class="flex items-center gap-2">
-            <input type="text" id="student-name-input-${index}" name="student-name" value="${name}" data-index="${index}" class="student-name-input w-full p-2 border border-slate-300 rounded-lg" placeholder="Nama Siswa ${index + 1}">
-            <button data-index="${index}" class="remove-student-row-btn text-slate-400 hover:text-red-500 p-1 text-2xl">&times;</button>
+            <input type="text" id="student-name-input-${index}" name="student-name-${index}" value="${name}" data-index="${index}" class="student-name-input w-full p-2 border border-slate-300 rounded-lg" placeholder="Nama Siswa ${index + 1}" aria-label="Nama Siswa ${index + 1}">
+            <button data-index="${index}" class="remove-student-row-btn text-slate-400 hover:text-red-500 p-1 text-2xl" aria-label="Hapus Siswa ${index + 1}">&times;</button>
         </div>`).join('');
     
     container.querySelectorAll('.student-name-input').forEach(input => input.addEventListener('input', (e) => state.newStudents[e.target.dataset.index] = e.target.value));
