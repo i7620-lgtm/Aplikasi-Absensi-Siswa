@@ -419,9 +419,17 @@ export default async function handler(request, response) {
                 }
                 if (!process.env.API_KEY) return response.status(500).json({ error: 'Konfigurasi server tidak lengkap' });
                 
-                const { aiRange } = payload;
-                const schoolId = user.school_id;
-                if (!schoolId) return response.status(400).json({ error: 'User not assigned to a school.' });
+                const { aiRange, schoolId } = payload;
+                
+                if (!schoolId) {
+                    return response.status(400).json({ error: 'ID Sekolah diperlukan untuk membuat rekomendasi.' });
+                }
+
+                if (user.role === 'KEPALA_SEKOLAH' || user.role === 'ADMIN_SEKOLAH') {
+                    if (!user.school_id || user.school_id.toString() !== schoolId.toString()) {
+                        return response.status(403).json({ error: 'Akses ditolak: Anda tidak memiliki izin untuk data sekolah ini.' });
+                    }
+                }
 
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
