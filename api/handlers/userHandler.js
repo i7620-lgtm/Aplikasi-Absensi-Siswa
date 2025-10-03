@@ -110,33 +110,38 @@ export async function handleUpdateUsersBulk({ payload, user, sql, response }) {
         }
     }
 
-    if (newSchoolId !== undefined) {
-        const finalSchoolId = newSchoolId === "" || newSchoolId === null ? null : newSchoolId;
-        await sql`
-            UPDATE users SET school_id = ${finalSchoolId}
-            WHERE email = ANY(${targetEmails}::text[]);
-        `;
-    } else if (newRole) {
-         const client = await sql.connect();
-         try {
-            let setClauses = [`role = '${newRole}'`];
-            if (newRole === 'SUPER_ADMIN') {
-                setClauses.push(`school_id = NULL`);
+    const client = await sql.connect();
+    try {
+        await client.query('BEGIN');
+
+        if (newSchoolId !== undefined) {
+            const finalSchoolId = newSchoolId === "" || newSchoolId === null ? null : newSchoolId;
+            await client.query(
+                `UPDATE users SET school_id = $1 WHERE email = ANY($2::text[])`,
+                [finalSchoolId, targetEmails]
+            );
+        } else if (newRole) {
+            let updateQuery;
+            const queryParams = [targetEmails, newRole];
+
+            if (newRole === 'GURU') {
+                updateQuery = `UPDATE users SET role = $2 WHERE email = ANY($1::text[])`;
+            } else if (newRole === 'SUPER_ADMIN') {
+                updateQuery = `UPDATE users SET role = $2, school_id = NULL, assigned_classes = '{}' WHERE email = ANY($1::text[])`;
+            } else { // KEPALA_SEKOLAH or ADMIN_SEKOLAH
+                updateQuery = `UPDATE users SET role = $2, assigned_classes = '{}' WHERE email = ANY($1::text[])`;
             }
-            if (newRole !== 'GURU') {
-                setClauses.push(`assigned_classes = '{}'`);
-            }
-    
-            const queryString = `
-                UPDATE users SET ${setClauses.join(', ')}
-                WHERE email = ANY($1::text[]);
-            `;
-            await client.query(queryString, [targetEmails]);
-         } finally {
-            client.release();
-         }
-    } else {
-        return response.status(400).json({ error: 'Tidak ada tindakan massal yang valid (diperlukan newSchoolId atau newRole).' });
+            await client.query(updateQuery, queryParams);
+        } else {
+             return response.status(400).json({ error: 'Tidak ada tindakan massal yang valid (diperlukan newSchoolId atau newRole).' });
+        }
+        
+        await client.query('COMMIT');
+    } catch (error) {
+        await client.query('ROLLBACK');
+        throw error; // Rethrow the error to be caught by the main handler
+    } finally {
+        client.release();
     }
     
     return response.status(200).json({ success: true });
