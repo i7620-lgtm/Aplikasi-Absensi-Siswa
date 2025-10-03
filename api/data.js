@@ -80,7 +80,8 @@ export default async function handler(request, response) {
         if (isConnectionError) {
             return response.status(500).json({ 
                 error: 'Kesalahan Koneksi Database', 
-                details: 'Server tidak dapat terhubung ke database. Silakan periksa konfigurasi lingkungan Vercel atau status database.' 
+                details: 'Server tidak dapat terhubung ke database. Periksa variabel lingkungan Vercel atau status database.',
+                errorCode: 'DB_CONNECTION_FAILED' // Tambahkan kode error spesifik
             });
         }
         return response.status(500).json({ error: 'Terjadi kesalahan internal pada server.', details: error.message });
