@@ -39,9 +39,8 @@ export let state = {
         selectedUsers: [],
     },
     dashboard: {
-        allTeacherData: [],
+        data: null, // Will store pre-aggregated data from the server
         isLoading: true,
-        isDataLoaded: false, // Flag to check if initial data fetch is complete
         selectedDate: new Date().toISOString().split('T')[0],
         polling: {
             timeoutId: null,
@@ -68,9 +67,7 @@ export let state = {
         statusChecked: false,
     },
     connectionError: null,
-    adminAllLogsView: null,
     adminActingAsSchool: null, // Stores {id, name} for SUPER_ADMIN context
-    schoolDataContext: null, // Stores aggregated { studentsByClass, savedLogs } for admin school-wide views
 };
 
 // Function to update state and persist it
@@ -90,8 +87,6 @@ export async function setState(newState) {
                                JSON.stringify(oldState.savedLogs) !== JSON.stringify(state.savedLogs);
 
         if (hasDataChanged) {
-            // Fire-and-forget the sync process with its own error handling.
-            // This prevents sync errors from crashing the state update flow.
             syncData().catch(err => console.error("Sync process failed:", err));
         }
     }
@@ -103,8 +98,6 @@ export function render() {
 }
 
 export function navigateTo(screen) {
-    // New, more robust logic for clearing SUPER_ADMIN's school context.
-    // The context should persist across all screens that are part of a school-specific workflow.
     const schoolContextScreens = ['setup', 'dashboard', 'add-students', 'attendance', 'data', 'recap'];
     if (schoolContextScreens.includes(state.currentScreen) && !schoolContextScreens.includes(screen)) {
         if (state.adminActingAsSchool) {
@@ -113,16 +106,6 @@ export function navigateTo(screen) {
         }
     }
     
-    // Clear school-wide data context when leaving relevant screens
-    const contextHoldingScreens = ['data', 'recap'];
-    if (contextHoldingScreens.includes(state.currentScreen) && !contextHoldingScreens.includes(screen)) {
-        if (state.schoolDataContext) {
-            console.log("Leaving data/recap view. Clearing school-wide data context.");
-            setState({ schoolDataContext: null });
-        }
-    }
-    
-    // Clear admin panel selections when leaving
     const adminPanelScreens = ['adminPanel'];
     if (adminPanelScreens.includes(state.currentScreen) && !adminPanelScreens.includes(screen)) {
         if (state.adminPanel.selectedUsers.length > 0) {
@@ -130,7 +113,6 @@ export function navigateTo(screen) {
             setState({ adminPanel: { ...state.adminPanel, selectedUsers: [] } });
         }
     }
-
 
     // --- START: Real-time update cleanup ---
     if (state.dashboard.polling.timeoutId) {
@@ -186,88 +168,34 @@ async function findAndLoadClassDataForAdmin(className) {
     const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
     if (!isAdmin) return false;
 
-    // SUPER_ADMIN must have a school context to perform this action.
     const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
     if (!schoolId) {
         showNotification('Konteks sekolah tidak dipilih.', 'error');
         return false;
     }
 
-    showLoader('Mencari data kelas...');
+    showLoader('Mencari data siswa...');
     try {
-        // Fetch data specifically for the school context.
-        const { allData } = await apiService.getGlobalData(schoolId);
-        for (const teacherData of allData) {
-            if (teacherData.students_by_class && teacherData.students_by_class[className]) {
-                const students = teacherData.students_by_class[className].students;
-                if (students && students.length > 0) {
-                    state.studentsByClass[className] = {
-                        ...(state.studentsByClass[className] || {}),
-                        students: students
-                    };
-                    state.students = students;
-                    hideLoader();
-                    return true;
-                }
-            }
+        const { aggregatedStudentsByClass } = await apiService.getSchoolStudentData(schoolId);
+        const classData = aggregatedStudentsByClass[className];
+        
+        if (classData && classData.students && classData.students.length > 0) {
+            state.studentsByClass[className] = {
+                ...(state.studentsByClass[className] || {}),
+                students: classData.students
+            };
+            state.students = classData.students;
+            return true;
         }
     } catch (error) {
         showNotification(error.message, 'error');
-        console.error("Gagal mengambil data global untuk admin", error);
+        console.error("Gagal mengambil data siswa sekolah:", error);
     } finally {
         hideLoader();
     }
     
     return false;
 }
-
-// --- NEW HELPER FUNCTION FOR ADMINS ---
-async function getAndSetSchoolWideData() {
-    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
-    if (!isAdmin) return { success: true }; // Not an admin, proceed with own data
-
-    const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
-    if (!schoolId) {
-        showNotification('Konteks sekolah tidak dipilih atau admin tidak ditugaskan ke sekolah.', 'error');
-        return { success: false };
-    }
-
-    showLoader('Mengumpulkan data sekolah...');
-    try {
-        const { allData } = await apiService.getGlobalData(schoolId);
-        
-        const aggregatedStudentsByClass = {};
-        const aggregatedLogs = [];
-
-        allData.forEach(teacherData => {
-            if (teacherData.students_by_class) {
-                // This simple merge overwrites, assuming the latest saved data is what we want.
-                // A more complex strategy could be used if versioning was available.
-                Object.assign(aggregatedStudentsByClass, teacherData.students_by_class);
-            }
-            if (teacherData.saved_logs) {
-                aggregatedLogs.push(...teacherData.saved_logs);
-            }
-        });
-        
-        // This helper now returns the data instead of setting state directly,
-        // allowing the caller to decide how to use it (e.g., filter it first).
-        return {
-            success: true,
-            data: {
-                studentsByClass: aggregatedStudentsByClass,
-                savedLogs: aggregatedLogs
-            }
-        };
-    } catch (error) {
-        showNotification(error.message, 'error');
-        console.error("Gagal mengambil data sekolah teragregasi:", error);
-        return { success: false };
-    } finally {
-        hideLoader();
-    }
-}
-
 
 // --- EVENT HANDLERS & LOGIC ---
 export async function handleStartAttendance() {
@@ -362,74 +290,20 @@ export async function handleSaveAttendance() {
 }
 
 export async function handleViewHistory(isClassSpecific = false) {
-    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
-    
-    if (isAdmin) {
-        const result = await getAndSetSchoolWideData();
-        if (!result.success) return;
-        await setState({ schoolDataContext: result.data });
-    }
+    const isSuperAdmin = state.userProfile.role === 'SUPER_ADMIN';
+    const isGlobalView = isSuperAdmin && !isClassSpecific && !state.adminActingAsSchool;
 
-    // Reset filters every time the history screen is entered
     await setState({ 
-        dataScreenFilters: {
-            studentName: '',
-            status: 'all',
-            startDate: '',
-            endDate: '',
-        },
+        dataScreenFilters: { studentName: '', status: 'all', startDate: '', endDate: '' },
         historyClassFilter: isClassSpecific ? document.getElementById('class-select').value : null,
-        adminAllLogsView: null // Clear this view to ensure school context is used
+        adminAllLogsView: isGlobalView, // Simplified flag
     });
     
-    // Specific logic for SUPER_ADMIN wanting a truly global, non-school-context view
-    if (state.userProfile.role === 'SUPER_ADMIN' && !isClassSpecific) {
-        showLoader('Memuat semua riwayat guru...');
-        try {
-            const { allData } = await apiService.getGlobalData();
-            const flattenedLogs = allData.flatMap(teacher => 
-                (teacher.saved_logs || []).map(log => ({ ...log, teacherName: teacher.user_name }))
-            );
-            await setState({ adminAllLogsView: flattenedLogs, schoolDataContext: null });
-        } catch (error) {
-            showNotification(error.message, 'error');
-            hideLoader();
-            return;
-        }
-    }
-
     navigateTo('data');
 }
 
 export async function handleViewRecap() {
-    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
-    state.selectedClass = document.getElementById('class-select').value; // Ensure selected class is captured
-
-    if (isAdmin) {
-        const result = await getAndSetSchoolWideData();
-        if (!result.success) return;
-
-        // --- NEW LOGIC: Filter the aggregated data for the selected class ---
-        const { studentsByClass, savedLogs } = result.data;
-        const selectedClass = state.selectedClass;
-
-        const filteredStudentsByClass = {
-            [selectedClass]: studentsByClass[selectedClass] || { students: [] }
-        };
-        const filteredLogs = savedLogs.filter(log => log.class === selectedClass);
-        
-        await setState({ 
-            schoolDataContext: {
-                studentsByClass: filteredStudentsByClass,
-                savedLogs: filteredLogs
-            } 
-        });
-
-    } else {
-        // For non-admins, clear any potential stale context
-        await setState({ schoolDataContext: null });
-    }
-
+    state.selectedClass = document.getElementById('class-select').value;
     navigateTo('recap');
 }
 
@@ -440,81 +314,7 @@ export async function handleGenerateAiRecommendation() {
     render();
     
     try {
-        // --- START: Client-side data processing with dynamic date ranges ---
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        let startDate = new Date(today);
-        let dateRangeContext = "30 Hari Terakhir";
-
-        switch (aiRange) {
-            case 'last30days':
-                startDate.setDate(today.getDate() - 30);
-                break;
-            case 'semester':
-                const currentMonth = today.getMonth(); // 0-11
-                if (currentMonth >= 0 && currentMonth <= 5) { // Semester 2 (Jan-Juni)
-                    startDate = new Date(today.getFullYear(), 0, 1);
-                    dateRangeContext = `Semester II (Januari - Juni ${today.getFullYear()})`;
-                } else { // Semester 1 (Juli-Des)
-                    startDate = new Date(today.getFullYear(), 6, 1);
-                    dateRangeContext = `Semester I (Juli - Desember ${today.getFullYear()})`;
-                }
-                break;
-            case 'year':
-                startDate = new Date(today.getFullYear(), 6, 1); // Tahun ajaran dimulai Juli
-                if (today.getMonth() < 6) { // Jika sekarang sebelum Juli, tahun ajaran dimulai tahun lalu
-                    startDate.setFullYear(today.getFullYear() - 1);
-                }
-                dateRangeContext = `Tahun Ajaran ${startDate.getFullYear()}/${startDate.getFullYear() + 1}`;
-                break;
-        }
-        startDate.setHours(0, 0, 0, 0);
-
-        const studentSummary = {};
-
-        state.dashboard.allTeacherData.forEach(teacher => {
-            (teacher.saved_logs || []).forEach(log => {
-                const logDate = new Date(log.date + 'T00:00:00');
-                if (logDate >= startDate) {
-                    Object.entries(log.attendance).forEach(([studentName, status]) => {
-                        if (status !== 'H') {
-                            if (!studentSummary[studentName]) {
-                                studentSummary[studentName] = { name: studentName, class: log.class, S: 0, I: 0, A: 0, total: 0, absences: [] };
-                            }
-                            if (studentSummary[studentName][status] !== undefined) {
-                                studentSummary[studentName][status]++;
-                                studentSummary[studentName].total++;
-                                studentSummary[studentName].absences.push({ date: log.date, status: status });
-                            }
-                        }
-                    });
-                }
-            });
-        });
-        
-        const topStudentsData = Object.values(studentSummary)
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 20)
-            .map(({ name, class: className, S, I, A, total, absences }) => ({ name, class: className, S, I, A, total, absences }));
-        // --- END: Client-side data processing ---
-
-        if (topStudentsData.length === 0) {
-            await setState({
-                dashboard: {
-                    ...state.dashboard,
-                    aiRecommendation: {
-                        ...state.dashboard.aiRecommendation,
-                        isLoading: false,
-                        result: `Tidak ada data absensi (sakit, izin, alpa) dalam periode **${dateRangeContext}** untuk dianalisis.`,
-                        error: null,
-                    },
-                },
-            });
-            render();
-            return;
-        }
-
-        const { recommendation } = await apiService.generateAiRecommendation(topStudentsData, dateRangeContext);
+        const { recommendation } = await apiService.generateAiRecommendation({ aiRange });
         await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: recommendation, error: null } } });
     
     } catch(error) {
@@ -598,58 +398,30 @@ export function handleExcelImport(event) {
 export async function handleDownloadData() {
     showLoader('Menyiapkan data untuk diunduh...');
 
-    if (!state.studentsByClass || Object.keys(state.studentsByClass).length === 0) {
-        hideLoader();
-        showNotification('Tidak ada data siswa untuk diunduh.', 'error');
-        return;
-    }
-
     try {
-        const recapData = {};
-        const studentToClassMap = {};
+        const { recapArray } = await apiService.getRecapData({
+            schoolId: state.adminActingAsSchool?.id || state.userProfile.school_id,
+            classFilter: null,
+        });
 
-        for (const className in state.studentsByClass) {
-            if (state.studentsByClass[className] && state.studentsByClass[className].students) {
-                state.studentsByClass[className].students.forEach(studentName => {
-                    recapData[studentName] = { S: 0, I: 0, A: 0 };
-                    studentToClassMap[studentName] = className;
-                });
-            }
+        if (!recapArray || recapArray.length === 0) {
+            hideLoader();
+            showNotification('Tidak ada data rekap untuk diunduh.', 'error');
+            return;
         }
 
-        state.savedLogs.forEach(log => {
-            Object.entries(log.attendance).forEach(([studentName, status]) => {
-                if (recapData[studentName] && status !== 'H') {
-                    if (recapData[studentName][status] !== undefined) {
-                        recapData[studentName][status]++;
-                    }
-                }
-            });
-        });
-        
-        const recapArray = Object.keys(recapData).map(name => {
-            const data = recapData[name];
-            const total = data.S + data.I + data.A;
-            return { name, class: studentToClassMap[name] || 'N/A', ...data, total };
-        });
-
-        recapArray.sort((a, b) => {
-            const classCompare = a.class.localeCompare(b.class);
-            if (classCompare !== 0) return classCompare;
-            const classStudents = state.studentsByClass[a.class]?.students;
-            return classStudents ? classStudents.indexOf(a.name) - classStudents.indexOf(b.name) : 0;
-        });
-
         const dataForSheet = [
-            ['Nama Lengkap', 'Sakit (S)', 'Izin (I)', 'Alpa (A)']
+            ['Nama Lengkap', 'Kelas', 'Sakit (S)', 'Izin (I)', 'Alpa (A)', 'Total Absen']
         ];
 
         recapArray.forEach((item) => {
             dataForSheet.push([
                 item.name,
+                item.class,
                 item.S,
                 item.I,
                 item.A,
+                item.total
             ]);
         });
         
@@ -701,7 +473,6 @@ async function loadInitialData() {
 let rootListenerAttached = false;
 
 async function initApp() {
-    // Clear previous connection error state on new attempt
     if(state.connectionError) {
         await setState({ connectionError: null });
     }
@@ -712,10 +483,10 @@ async function initApp() {
         state.maintenanceMode.isActive = isMaintenance;
     } catch (e) {
         console.error("Tidak dapat memeriksa status perbaikan:", e);
-        hideLoader(); // Hide the loader before showing the error screen
+        hideLoader();
         await setState({ connectionError: e.message });
         navigateTo('connectionFailed');
-        return; // Stop execution
+        return;
     } finally {
         state.maintenanceMode.statusChecked = true;
     }
@@ -738,7 +509,6 @@ async function initApp() {
     
     updateOnlineStatus(navigator.onLine);
 
-    // Attach delegated event listener once
     if (!rootListenerAttached) {
         document.getElementById('root').addEventListener('click', (e) => {
             if (e.target.id === 'retry-connection-btn') {
