@@ -1,3 +1,5 @@
+
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -618,8 +620,8 @@ async function renderDashboardScreen() {
                         <div id="chart-time-filter" class="flex flex-wrap gap-2">${timeFilters.map(f => `<button data-mode="${f.id}" class="chart-time-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${state.dashboard.chartViewMode === f.id ? 'bg-blue-600 text-white' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'}">${f.text}</button>`).join('')}</div>
                     </div>
                     <div class="flex-1 md:max-w-xs">
-                        <div id="chart-class-filter-label" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Kelas</div>
-                        <select id="chart-class-filter" aria-labelledby="chart-class-filter-label" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
+                        <label for="chart-class-filter" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Kelas</label>
+                        <select id="chart-class-filter" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
                             <option value="all">Seluruh Sekolah</option>
                             ${allClasses.map(c => `<option value="${c}" ${state.dashboard.chartClassFilter === c ? 'selected' : ''}>Kelas ${c}</option>`).join('')}
                         </select>
@@ -951,7 +953,7 @@ function renderStudentInputRows() {
     if (!container) return;
     container.innerHTML = state.newStudents.map((name, index) => `
         <div class="flex items-center gap-2">
-            <input type="text" value="${name}" data-index="${index}" class="student-name-input w-full p-2 border border-slate-300 rounded-lg" placeholder="Nama Siswa ${index + 1}">
+            <input type="text" id="student-name-input-${index}" name="student-name" value="${name}" data-index="${index}" class="student-name-input w-full p-2 border border-slate-300 rounded-lg" placeholder="Nama Siswa ${index + 1}">
             <button data-index="${index}" class="remove-student-row-btn text-slate-400 hover:text-red-500 p-1 text-2xl">&times;</button>
         </div>`).join('');
     
