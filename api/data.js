@@ -1,5 +1,6 @@
 import { sql } from '@vercel/postgres';
-import setupTables from './utils/dbSetup.js';
+// Hapus impor setupTables karena tidak akan lagi dipanggil pada setiap permintaan.
+// import setupTables from './utils/dbSetup.js'; 
 import handleLoginOrRegister from './handlers/authHandler.js';
 import { handleGetMaintenanceStatus, handleSetMaintenanceStatus } from './handlers/configHandler.js';
 import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk } from './handlers/userHandler.js';
@@ -13,7 +14,9 @@ export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.co
 
 export default async function handler(request, response) {
     try {
-        await setupTables(sql);
+        // PERBAIKAN KRITIS: Panggilan ke setupTables DIHAPUS dari sini.
+        // Skema database diasumsikan sudah ada di produksi.
+        // await setupTables(sql);
 
         if (request.method !== 'POST') {
             return response.status(405).json({ error: 'Method Not Allowed' });
