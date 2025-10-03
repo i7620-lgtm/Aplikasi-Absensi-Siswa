@@ -1,7 +1,3 @@
-
-
-
-
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -405,7 +401,7 @@ async function renderAdminHomeScreen() {
             const { isMaintenance } = await apiService.getMaintenanceStatus();
             renderMaintenanceToggle(maintenanceContainer, isMaintenance);
         } catch (e) {
-            maintenanceContainer.innerHTML = `<p class="text-sm text-red-500">Gagal memuat status mode perbaikan.</p>`;
+            maintenanceContainer.innerHTML = `<p class="text-sm text-red-500 font-semibold text-center">Gagal memuat status mode perbaikan. <br> <span class="font-normal text-slate-500 text-xs">${e.message}</span></p>`;
         }
     }
 }
