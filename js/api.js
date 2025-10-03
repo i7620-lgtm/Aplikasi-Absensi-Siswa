@@ -49,7 +49,7 @@ async function _fetch(action, payload = {}) {
             throw error; 
         }
         // Melempar pesan error yang lebih umum dan ramah pengguna untuk masalah koneksi lainnya.
-        throw new Error('Gagal terhubung ke server. Periksa koneksi internet Anda.');
+        throw new Error('Gagal berkomunikasi dengan server. Konektivitas terbatas.');
     }
 }
 
