@@ -437,6 +437,20 @@ export const templates = {
                 <div id="recap-container" class="overflow-x-auto"></div>
              </div>
         </div>`,
+    connectionFailed: (errorMessage) => `
+        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
+            <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-lg w-full animate-fade-in">
+                <svg class="mx-auto h-16 w-16 text-red-500 mb-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+                <h1 class="text-3xl font-bold text-slate-800 mb-3">Gagal Terhubung</h1>
+                <p class="text-slate-500 mb-6">Aplikasi tidak dapat terhubung ke server. Ini mungkin terjadi jika server atau database sedang dalam proses aktivasi setelah periode tidak aktif.</p>
+                <div class="text-xs text-slate-500 bg-slate-100 p-3 rounded-lg mb-8 text-left font-mono">
+                    <strong>Detail Error:</strong> ${errorMessage || 'Tidak ada detail error.'}
+                </div>
+                <button id="retry-connection-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Coba Lagi</button>
+            </div>
+        </div>`,
     maintenance: () => `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
             <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
@@ -446,22 +460,6 @@ export const templates = {
                 </svg>
                 <h1 class="text-3xl font-bold text-slate-800 mb-3">Aplikasi dalam Perbaikan</h1>
                 <p class="text-slate-500">Kami sedang melakukan beberapa pembaruan untuk meningkatkan pengalaman Anda. Aplikasi akan segera kembali normal. Mohon coba lagi nanti.</p>
-            </div>
-        </div>`,
-    criticalError: (message) => `
-        <div class="critical-error-screen animate-fade-in">
-            <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-lg w-full">
-                <svg class="mx-auto h-16 w-16 text-red-500 mb-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                </svg>
-                <h1 class="text-2xl md:text-3xl font-bold text-slate-800 mb-3">Kesalahan Konfigurasi Kritis</h1>
-                <p class="text-slate-600 leading-relaxed">Aplikasi tidak dapat memulai karena gagal terhubung ke layanan data. Ini biasanya disebabkan oleh kesalahan konfigurasi pada server.</p>
-                <div class="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-lg text-left text-sm text-slate-700">
-                    <p class="font-semibold mb-2">Detail Teknis:</p>
-                    <p class="font-mono bg-slate-200 p-2 rounded text-xs">${message}</p>
-                    <p class="mt-4 font-semibold">Langkah yang Disarankan:</p>
-                    <p class="mt-1">Silakan hubungi administrator sistem atau periksa variabel lingkungan (environment variables) di Vercel untuk memastikan kredensial database sudah benar.</p>
-                </div>
             </div>
         </div>`,
     confirmation: (message) => `
