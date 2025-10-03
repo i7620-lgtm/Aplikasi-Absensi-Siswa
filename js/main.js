@@ -310,11 +310,20 @@ export async function handleViewRecap() {
 
 export async function handleGenerateAiRecommendation() {
     const aiRange = state.dashboard.aiRecommendation.selectedRange;
+    const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+
+    if (!schoolId) {
+        const errorMsg = 'Konteks sekolah tidak ditemukan. Tidak dapat membuat rekomendasi.';
+        await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: null, error: errorMsg } } });
+        render();
+        return;
+    }
+
     await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: true, result: null, error: null } } });
     render();
     
     try {
-        const { recommendation } = await apiService.generateAiRecommendation({ aiRange });
+        const { recommendation } = await apiService.generateAiRecommendation({ aiRange, schoolId });
         await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: recommendation, error: null } } });
     
     } catch(error) {
