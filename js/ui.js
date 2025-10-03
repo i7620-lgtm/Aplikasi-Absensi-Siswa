@@ -1,3 +1,9 @@
+
+
+
+
+
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap } from './main.js';
 import { templates } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -33,39 +39,14 @@ export function hideLoader() {
     }, 300);
 }
 
-export function showNotification(message, type = 'success', options = {}) {
-    const { isPermanent = false, onRetry = null } = options;
-
-    let content = `<span>${message}</span>`;
-    if (onRetry) {
-        content += `<button id="notification-retry-btn" class="notification-retry-btn">Coba Lagi</button>`;
-    }
-
-    notificationEl.innerHTML = content;
+export function showNotification(message, type = 'success') {
+    notificationEl.textContent = message;
     notificationEl.className = ''; // Clear previous classes
     notificationEl.classList.add(type);
     notificationEl.classList.add('show');
-
-    if (onRetry) {
-        const retryBtn = document.getElementById('notification-retry-btn');
-        if (retryBtn) {
-            retryBtn.onclick = () => {
-                showLoader('Mencoba lagi...');
-                // Hide the notification before retrying
-                notificationEl.classList.remove('show');
-                // Use a timeout to allow the loader to appear before the heavy work
-                setTimeout(() => {
-                    onRetry();
-                }, 200);
-            };
-        }
-    }
-
-    if (!isPermanent) {
-        setTimeout(() => {
-            notificationEl.classList.remove('show');
-        }, 5000);
-    }
+    setTimeout(() => {
+        notificationEl.classList.remove('show');
+    }, 5000);
 }
 
 export function updateOnlineStatus(isOnline) {
@@ -422,23 +403,11 @@ async function renderAdminHomeScreen() {
 
     if (isSuperAdmin) {
         const maintenanceContainer = document.getElementById('maintenance-toggle-container');
-        
-        // The maintenance status is now checked once during app initialization.
-        // This function simply renders the result of that initial check.
-        if (state.maintenanceMode.statusChecked) {
-            if (state.serverStatus === 'error') {
-                // If the initial check failed, show a static error message without a retry button.
-                maintenanceContainer.innerHTML = `<div class="text-center">
-                    <p class="text-sm text-red-500 font-semibold">Gagal memuat status.</p>
-                    <p class="text-xs text-slate-500 mt-1">Server tidak merespon saat aplikasi dimulai.</p>
-                </div>`;
-            } else {
-                // If the initial check was successful, render the interactive toggle.
-                renderMaintenanceToggle(maintenanceContainer, state.maintenanceMode.isActive);
-            }
-        } else {
-            // This case should not be reached if initApp runs correctly, but serves as a fallback.
-            maintenanceContainer.innerHTML = `<p class="text-sm text-slate-500">Memuat status...</p>`;
+        try {
+            const { isMaintenance } = await apiService.getMaintenanceStatus();
+            renderMaintenanceToggle(maintenanceContainer, isMaintenance);
+        } catch (e) {
+            maintenanceContainer.innerHTML = `<p class="text-sm text-red-500">Gagal memuat status mode perbaikan.</p>`;
         }
     }
 }
@@ -1807,6 +1776,9 @@ export function renderScreen(screen) {
             break;
         case 'recap':
             renderRecapScreen();
+            break;
+        case 'connectionFailed':
+            appContainer.innerHTML = templates.connectionFailed(state.connectionError);
             break;
         case 'maintenance':
             appContainer.innerHTML = templates.maintenance();
