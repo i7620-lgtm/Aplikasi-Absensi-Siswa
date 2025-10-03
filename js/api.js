@@ -31,16 +31,24 @@ async function _fetch(action, payload = {}) {
             
             console.log('Server Error Response:', errorData);
 
-            // Deteksi yang lebih tangguh: periksa kode error kita ATAU teks mentah untuk tanda-tanda crash Vercel.
-            const isDbConnectionError = (isJson && errorData.errorCode === 'DB_CONNECTION_FAILED') || 
-                                      (!isJson && /FUNCTION_INVOCATION_FAILED|database connection|timeout/i.test(errorText));
+            // --- LOGIKA PENANGANAN ERROR DEFINITIF ---
+            // 1. Periksa kode error spesifik yang kita kirim dari server.
+            const isKnownDbError = isJson && errorData.errorCode === 'DB_CONNECTION_FAILED';
+            
+            // 2. Periksa tanda-tanda umum crash fungsi serverless (misalnya, timeout).
+            const isServerlessCrash = !isJson && /FUNCTION_INVOCATION_FAILED|database connection|timeout/i.test(errorText);
+            
+            // 3. (PALING PENTING) Tangani kasus di mana server crash dengan respons kosong.
+            //    Kita mengasumsikan 500 pada panggilan API pertama adalah masalah koneksi DB.
+            const isGenericStartupFailure = response.status === 500 && action === 'getMaintenanceStatus' && !isJson && errorText.trim() === '';
 
-            if (isDbConnectionError) {
+            if (isKnownDbError || isServerlessCrash || isGenericStartupFailure) {
                 const details = isJson 
                     ? errorData.details 
-                    : 'Fungsi server gagal dieksekusi, kemungkinan besar karena timeout koneksi database.';
+                    : 'Fungsi server gagal dieksekusi, kemungkinan besar karena timeout koneksi database atau sedang dalam proses aktifasi.';
                 throw new Error(`CRITICAL: ${details}`);
             }
+            // --- AKHIR LOGIKA PENANGANAN ERROR DEFINITIF ---
 
             let errorMessage;
             if (response.status >= 500) {
