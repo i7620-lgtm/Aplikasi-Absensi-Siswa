@@ -11,7 +11,6 @@ export const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5
 export let state = {
     userProfile: null, // will contain { name, email, picture, role, school_id }
     currentScreen: 'setup',
-    serverStatus: 'unknown', // 'unknown', 'online', 'error'
     selectedClass: '',
     selectedDate: new Date().toISOString().split('T')[0],
     students: [], 
@@ -68,6 +67,7 @@ export let state = {
         isActive: false,
         statusChecked: false,
     },
+    connectionError: null,
     adminAllLogsView: null,
     adminActingAsSchool: null, // Stores {id, name} for SUPER_ADMIN context
     schoolDataContext: null, // Stores aggregated { studentsByClass, savedLogs } for admin school-wide views
@@ -686,126 +686,68 @@ async function loadInitialData() {
         state.savedLogs = userData.saved_logs || [];
         
         console.log('Data dipulihkan dari penyimpanan offline untuk:', userProfile.name);
+        
+        if (userProfile.role === 'SUPER_ADMIN') {
+            state.currentScreen = 'adminHome';
+        } else if (userProfile.role === 'KEPALA_SEKOLAH') {
+            state.currentScreen = 'dashboard';
+        } else {
+            state.currentScreen = 'setup';
+        }
     }
 }
 
-let hasInitialized = false;
+// Global scope for the listener to be added only once
+let rootListenerAttached = false;
 
-function setupGlobalEventListeners() {
-    if (hasInitialized) return;
+async function initApp() {
+    // Clear previous connection error state on new attempt
+    if(state.connectionError) {
+        await setState({ connectionError: null });
+    }
+    
+    try {
+        showLoader('Memeriksa status server...');
+        const { isMaintenance } = await apiService.getMaintenanceStatus();
+        state.maintenanceMode.isActive = isMaintenance;
+    } catch (e) {
+        console.error("Tidak dapat memeriksa status perbaikan:", e);
+        hideLoader(); // Hide the loader before showing the error screen
+        await setState({ connectionError: e.message });
+        navigateTo('connectionFailed');
+        return; // Stop execution
+    } finally {
+        state.maintenanceMode.statusChecked = true;
+    }
+
+    await loadInitialData();
+    
+    if (state.maintenanceMode.isActive && state.userProfile?.role !== 'SUPER_ADMIN') {
+        navigateTo('maintenance');
+    } else {
+        initializeGsi();
+        render();
+    }
+
     window.addEventListener('online', () => {
         updateOnlineStatus(true);
         showNotification('Koneksi internet kembali pulih.', 'success');
         syncData();
     });
     window.addEventListener('offline', () => updateOnlineStatus(false));
-    hasInitialized = true;
-}
-
-async function attemptConnection(attempt = 1) {
-    try {
-        const { isMaintenance } = await apiService.getMaintenanceStatus();
-        return { success: true, isMaintenance };
-    } catch (error) {
-        console.error(`Upaya koneksi ${attempt} gagal:`, error.message);
-        const isDbConnectionError = error.message.startsWith('CRITICAL:');
-
-        // Jika ini adalah upaya pertama DAN merupakan error koneksi DB, coba lagi.
-        if (isDbConnectionError && attempt < 2) {
-            const loaderText = document.querySelector('#loader-wrapper .loader-text');
-            if (loaderText) {
-                loaderText.textContent = 'Koneksi database dijeda, mencoba mengaktifkan kembali...';
-            }
-            // Tunggu 8 detik agar database sempat "bangun".
-            await new Promise(resolve => setTimeout(resolve, 8000));
-            return attemptConnection(attempt + 1);
-        }
-
-        // Jika bukan error koneksi DB atau upaya kedua gagal, kembalikan kegagalan.
-        return { success: false, error };
-    }
-}
-
-async function initApp() {
-    const notificationEl = document.getElementById('notification');
-    if (notificationEl) notificationEl.classList.remove('show');
-
-    await loadInitialData();
-    setupGlobalEventListeners();
-    updateOnlineStatus(navigator.onLine);
     
-    const connectionResult = await attemptConnection();
+    updateOnlineStatus(navigator.onLine);
 
-    if (connectionResult.success) {
-        // KONEKSI BERHASIL (ONLINE)
-        await setState({ 
-            serverStatus: 'online',
-            maintenanceMode: { 
-                isActive: connectionResult.isMaintenance, 
-                statusChecked: true 
-            } 
+    // Attach delegated event listener once
+    if (!rootListenerAttached) {
+        document.getElementById('root').addEventListener('click', (e) => {
+            if (e.target.id === 'retry-connection-btn') {
+                showLoader('Mencoba menghubungkan kembali...');
+                initApp();
+            }
         });
-
-        if (state.maintenanceMode.isActive && state.userProfile?.role !== 'SUPER_ADMIN') {
-            navigateTo('maintenance');
-        } else if (!state.userProfile) {
-            state.currentScreen = 'setup';
-            initializeGsi();
-            render();
-        } else {
-            if (state.userProfile.role === 'SUPER_ADMIN') {
-                state.currentScreen = 'adminHome';
-            } else if (state.userProfile.role === 'KEPALA_SEKOLAH') {
-                state.currentScreen = 'dashboard';
-            } else {
-                state.currentScreen = 'setup';
-            }
-            render(); 
-            if (navigator.onLine) {
-                syncData().catch(err => console.error("Initial sync failed:", err));
-            }
-        }
-    } else {
-        // KONEKSI GAGAL (OFFLINE/ERROR)
-        const e = connectionResult.error;
-        console.error("Tidak dapat memulai aplikasi (pemeriksaan server gagal total):", e.message);
-        
-        await setState({ 
-            serverStatus: 'error',
-            maintenanceMode: { ...state.maintenanceMode, statusChecked: true } 
-        });
-        
-        const appContainer = document.getElementById('app-container');
-        const isCriticalError = e.message.startsWith('CRITICAL:');
-
-        if (isCriticalError && !state.userProfile) {
-            const userFriendlyMessage = e.message.replace('CRITICAL: ', '');
-            appContainer.innerHTML = templates.criticalError(userFriendlyMessage);
-        } else {
-            showNotification(
-                'Gagal terhubung ke server. Aplikasi berjalan dalam mode offline.', 
-                'error', 
-                { isPermanent: true }
-            );
-            
-            if (!state.userProfile) {
-                 state.currentScreen = 'setup';
-                 initializeGsi();
-            } else {
-                if (state.userProfile.role === 'SUPER_ADMIN') {
-                    state.currentScreen = 'adminHome';
-                } else if (state.userProfile.role === 'KEPALA_SEKOLAH') {
-                    state.currentScreen = 'dashboard';
-                } else {
-                    state.currentScreen = 'setup';
-                }
-            }
-            render();
-        }
+        rootListenerAttached = true;
     }
-
-    // Selalu sembunyikan loader setelah selesai.
-    hideLoader();
 }
 
 initApp();
