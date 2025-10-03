@@ -201,10 +201,8 @@ export default async function handler(request, response) {
                 const { schoolId, filters, isClassSpecific, classFilter, isGlobalView } = payload;
                 const { studentName, status, startDate, endDate } = filters || {};
 
-                // Handle GURU case separately for clarity and correctness
                 if (user.role === 'GURU') {
                     let guruQuery;
-                    // If a specific class is requested, filter inside the DB for efficiency and accuracy.
                     if (isClassSpecific && classFilter) {
                         guruQuery = sql`
                             WITH unnested_logs AS (
@@ -216,7 +214,6 @@ export default async function handler(request, response) {
                             WHERE log_obj ->> 'class' = ${classFilter};
                         `;
                     } else {
-                        // Otherwise, get all logs for the teacher.
                         guruQuery = sql`
                             SELECT jsonb_array_elements(saved_logs) as log_obj
                             FROM absensi_data
@@ -227,7 +224,6 @@ export default async function handler(request, response) {
                     const { rows } = await guruQuery;
                     let allLogs = rows.map(row => ({ ...row.log_obj, teacherName: user.name }));
 
-                    // Apply remaining filters (date, student name, etc.)
                     if (startDate) allLogs = allLogs.filter(log => log.date >= startDate);
                     if (endDate) allLogs = allLogs.filter(log => log.date <= endDate);
                     const processedLogs = allLogs.map(log => {
@@ -240,7 +236,6 @@ export default async function handler(request, response) {
                     return response.status(200).json({ filteredLogs: processedLogs });
                 }
 
-                // Existing logic for other roles (Admins, KS)
                 let effectiveSchoolId = (user.role === 'KEPALA_SEKOLAH' || user.role === 'ADMIN_SEKOLAH') ? user.school_id : schoolId;
                 let query;
 
@@ -255,7 +250,6 @@ export default async function handler(request, response) {
                 const { rows } = await query;
                 let allLogs = rows.flatMap(row => (row.saved_logs || []).map(log => ({...log, teacherName: row.user_name || user.name })));
                 
-                // Admins can also filter by class, this needs to remain
                 if (classFilter) allLogs = allLogs.filter(log => log.class === classFilter);
                 if (startDate) allLogs = allLogs.filter(log => log.date >= startDate);
                 if (endDate) allLogs = allLogs.filter(log => log.date <= endDate);
@@ -568,7 +562,7 @@ export default async function handler(request, response) {
                     Bertindaklah sebagai Analis Data Sekolah. Fokus utama Anda di sini adalah mengidentifikasi **tren kelompok** di mana beberapa siswa absen secara bersamaan.
                     Prioritaskan untuk mencari pola berikut:
                     1.  **Klaster Absensi Signifikan (Prioritas Tertinggi):** Cari kelompok yang terdiri dari **3 atau lebih siswa** yang menunjukkan pola absensi signifikan yang serupa (misalnya sakit beruntun) dalam rentang waktu yang berdekatan. Ini adalah temuan paling penting Anda.
-                    2.  **Klaster Absensi Umum:** Beberapa siswa (dari kelas yang sama atau berbeda) absen karena 'Sakit' atau 'Izin' dalam rentang tanggal yang tumpang tindih, bahkan jika tidak beruntun.
+                    2.  **Klaster Absensi Umum:** Beberapa siswa (dari kelas yang sama atau berbeda) absen karena 'Sakit' atau 'Izin' dalam rentang tanggal yang tumpang tumpangi, bahkan jika tidak beruntun.
                     3.  **Anomali Kelas:** Satu kelas tertentu menunjukkan tingkat absensi yang jauh lebih tinggi dibandingkan kelas lainnya.
 
                     Gunakan format berikut:
