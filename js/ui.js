@@ -469,11 +469,86 @@ function createCustomDatePicker(wrapper, initialDateStr, mode) {
     document.addEventListener('click', (e) => { if (!wrapper.contains(e.target)) popup.classList.add('hidden'); });
 }
 
+function calculatePercentageData(logs, viewMode, classFilter, schoolInfo, selectedDate) {
+    if (!logs || !schoolInfo) return { finalCounts: { H: 0, S: 0, I: 0, A: 0 }, totalAttendanceOpportunities: 0 };
+    
+    const d = new Date(selectedDate + 'T00:00:00');
+    let startDate, endDate;
+
+    switch (viewMode) {
+        case 'daily':
+            startDate = endDate = d;
+            break;
+        case 'weekly': {
+            const dayOfWeek = d.getDay();
+            const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+            startDate = new Date(d.setDate(diff));
+            endDate = new Date(new Date(startDate).setDate(startDate.getDate() + 6));
+            break;
+        }
+        case 'monthly': {
+            startDate = new Date(d.getFullYear(), d.getMonth(), 1);
+            endDate = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+            break;
+        }
+        case 'semester1':
+            startDate = new Date(d.getFullYear(), 6, 1); // July 1
+            endDate = new Date(d.getFullYear(), 11, 31); // Dec 31
+            break;
+        case 'semester2':
+            startDate = new Date(d.getFullYear(), 0, 1); // Jan 1
+            endDate = new Date(d.getFullYear(), 5, 30); // June 30
+            break;
+        case 'yearly': {
+            startDate = new Date(d.getFullYear(), 0, 1);
+            endDate = new Date(d.getFullYear(), 11, 31);
+            break;
+        }
+        default:
+             startDate = endDate = d;
+    }
+    startDate.setHours(0,0,0,0);
+    endDate.setHours(0,0,0,0);
+
+    const relevantLogs = logs.filter(log => {
+        const logDate = new Date(log.date + 'T00:00:00');
+        const isInDateRange = logDate >= startDate && logDate <= endDate;
+        const isInClassFilter = classFilter === 'all' || log.class === classFilter;
+        return isInDateRange && isInClassFilter;
+    });
+
+    const periodAbsenceCounts = { S: 0, I: 0, A: 0 };
+    relevantLogs.forEach(log => {
+        Object.values(log.attendance).forEach(status => {
+            if (periodAbsenceCounts[status] !== undefined) {
+                periodAbsenceCounts[status]++;
+            }
+        });
+    });
+    
+    const uniqueSchoolDays = new Set(relevantLogs.map(log => log.date)).size;
+    
+    let numStudentsInScope = 0;
+    if (classFilter === 'all') {
+        numStudentsInScope = schoolInfo.totalStudents || 0;
+    } else {
+        numStudentsInScope = schoolInfo.studentsPerClass[classFilter] || 0;
+    }
+
+    const totalAttendanceOpportunities = uniqueSchoolDays * numStudentsInScope;
+    const periodTotalAbsent = periodAbsenceCounts.S + periodAbsenceCounts.I + periodAbsenceCounts.A;
+    const periodTotalPresent = Math.max(0, totalAttendanceOpportunities - periodTotalAbsent);
+
+    return {
+        finalCounts: { H: periodTotalPresent, ...periodAbsenceCounts },
+        totalAttendanceOpportunities
+    };
+}
 
 async function renderDashboardScreen() {
     appContainer.innerHTML = templates.dashboard();
 
-    const { isLoading, data, selectedDate, activeView, aiRecommendation } = state.dashboard;
+    const { isLoading, data, selectedDate, activeView, aiRecommendation, chartViewMode, chartClassFilter } = state.dashboard;
     
     const reportContent = document.getElementById('dashboard-content-report');
     const percentageContent = document.getElementById('dashboard-content-percentage');
@@ -525,8 +600,10 @@ async function renderDashboardScreen() {
         }
 
         // Render Percentage View
-        if (activeView === 'percentage' && data.percentageData) {
-            const { finalCounts, totalAttendanceOpportunities, allClasses } = data.percentageData;
+        if (activeView === 'percentage' && data.allLogsForYear && data.schoolInfo) {
+            const { allLogsForYear, schoolInfo } = data;
+            const { finalCounts, totalAttendanceOpportunities } = calculatePercentageData(allLogsForYear, chartViewMode, chartClassFilter, schoolInfo, selectedDate);
+            const allClasses = schoolInfo.allClasses;
             
             const timeFilters = [
                 { id: 'daily', text: 'Harian' }, { id: 'weekly', text: 'Mingguan' },
@@ -544,8 +621,8 @@ async function renderDashboardScreen() {
                     <div id="custom-legend-container" class="w-full md:w-1/2 max-w-xs"></div>
                 </div>`;
 
-            document.querySelectorAll('.chart-time-btn').forEach(btn => btn.onclick = async (e) => { await setState({ dashboard: { ...state.dashboard, chartViewMode: e.currentTarget.dataset.mode, isLoading: true } }); renderScreen('dashboard'); });
-            document.getElementById('chart-class-filter').onchange = async (e) => { await setState({ dashboard: { ...state.dashboard, chartClassFilter: e.target.value, isLoading: true } }); renderScreen('dashboard'); };
+            document.querySelectorAll('.chart-time-btn').forEach(btn => btn.onclick = async (e) => { await setState({ dashboard: { ...state.dashboard, chartViewMode: e.currentTarget.dataset.mode } }); renderScreen('dashboard'); });
+            document.getElementById('chart-class-filter').onchange = async (e) => { await setState({ dashboard: { ...state.dashboard, chartClassFilter: e.target.value } }); renderScreen('dashboard'); };
             
             const chartData = [
                 { label: 'Hadir', value: finalCounts.H, color: '#22c55e' },
@@ -622,8 +699,6 @@ async function dashboardPoller() {
         const dashboardData = await apiService.getDashboardData({
             schoolId,
             selectedDate: state.dashboard.selectedDate,
-            chartViewMode: state.dashboard.chartViewMode,
-            chartClassFilter: state.dashboard.chartClassFilter,
         });
         
         if (JSON.stringify(dashboardData) !== JSON.stringify(state.dashboard.data)) {
@@ -635,7 +710,8 @@ async function dashboardPoller() {
         }
     } catch (error) {
         console.error("Dashboard poll failed:", error);
-        await setState({ dashboard: { ...state.dashboard, isLoading: false, data: null } });
+        showNotification('Gagal memperbarui data dasbor: ' + error.message, 'error');
+        await setState({ dashboard: { ...state.dashboard, isLoading: false, data: state.dashboard.data || null } });
         renderScreen('dashboard');
     }
     
