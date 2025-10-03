@@ -18,7 +18,6 @@ export default async function handleAiRecommendation({ payload, user, sql, respo
             return response.status(400).json({ error: 'User is not assigned to a school.' });
         }
 
-        // --- START: Server-side data processing with dynamic date ranges ---
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         let startDate = new Date(today);
@@ -46,38 +45,45 @@ export default async function handleAiRecommendation({ payload, user, sql, respo
                 dateRangeContext = `Tahun Ajaran ${startDate.getFullYear()}/${startDate.getFullYear() + 1}`;
                 break;
         }
-        startDate.setHours(0, 0, 0, 0);
-
-        const { rows } = await sql`
-            SELECT saved_logs FROM absensi_data WHERE school_id = ${schoolId};
+        const startDateString = startDate.toISOString().split('T')[0];
+        
+        const { rows: topStudentsData } = await sql`
+            WITH unnested_logs AS (
+              SELECT
+                log_obj ->> 'class' as class,
+                log_obj ->> 'date' as date,
+                log_obj -> 'attendance' as attendance
+              FROM absensi_data ad
+              CROSS JOIN jsonb_array_elements(ad.saved_logs) as log_obj
+              WHERE ad.school_id = ${schoolId}
+            ),
+            absences_in_range AS (
+              SELECT
+                class,
+                date,
+                att.key as name,
+                att.value as status
+              FROM unnested_logs
+              CROSS JOIN jsonb_each_text(attendance) as att
+              WHERE att.value <> 'H' AND date >= ${startDateString}
+            ),
+            student_summary AS (
+                SELECT
+                    name,
+                    MAX(class) as class,
+                    COUNT(*) FILTER (WHERE status = 'S') as "S",
+                    COUNT(*) FILTER (WHERE status = 'I') as "I",
+                    COUNT(*) FILTER (WHERE status = 'A') as "A",
+                    COUNT(*) as total,
+                    jsonb_agg(jsonb_build_object('date', date, 'status', status) ORDER BY date) as absences
+                FROM absences_in_range
+                GROUP BY name
+            )
+            SELECT * FROM student_summary
+            ORDER BY total DESC
+            LIMIT 25;
         `;
-        
-        const allLogs = rows.flatMap(row => row.saved_logs || []);
 
-        const studentSummary = {};
-
-        allLogs.forEach(log => {
-            const logDate = new Date(log.date + 'T00:00:00');
-            if (logDate >= startDate) {
-                Object.entries(log.attendance).forEach(([studentName, status]) => {
-                    if (status !== 'H') {
-                        if (!studentSummary[studentName]) {
-                            studentSummary[studentName] = { name: studentName, class: log.class, S: 0, I: 0, A: 0, total: 0, absences: [] };
-                        }
-                        if (studentSummary[studentName][status] !== undefined) {
-                            studentSummary[studentName][status]++;
-                            studentSummary[studentName].total++;
-                            studentSummary[studentName].absences.push({ date: log.date, status: status });
-                        }
-                    }
-                });
-            }
-        });
-        
-        const topStudentsData = Object.values(studentSummary)
-            .sort((a, b) => b.total - a.total)
-            .slice(0, 25) // Increased limit for better analysis
-            .map(({ name, class: className, S, I, A, total, absences }) => ({ name, class: className, S, I, A, total, absences }));
 
         if (topStudentsData.length === 0) {
             return response.status(200).json({ success: true, recommendation: `Tidak ada data absensi (sakit, izin, alpa) dalam periode **${dateRangeContext}** untuk dianalisis.` });
