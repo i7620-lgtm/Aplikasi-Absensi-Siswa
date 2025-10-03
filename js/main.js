@@ -11,6 +11,7 @@ export const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5
 export let state = {
     userProfile: null, // will contain { name, email, picture, role, school_id }
     currentScreen: 'setup',
+    serverStatus: 'unknown', // 'unknown', 'online', 'error'
     selectedClass: '',
     selectedDate: new Date().toISOString().split('T')[0],
     students: [], 
@@ -732,6 +733,7 @@ async function initApp() {
     try {
         const { isMaintenance } = await apiService.getMaintenanceStatus();
         await setState({ 
+            serverStatus: 'online',
             maintenanceMode: { 
                 isActive: isMaintenance, 
                 statusChecked: true 
@@ -763,6 +765,14 @@ async function initApp() {
         console.error("Tidak dapat memulai aplikasi (server check failed):", e.message);
         hideLoader(); // Hide initial loader regardless of error.
         
+        await setState({ 
+            serverStatus: 'error',
+            maintenanceMode: { 
+                ...state.maintenanceMode, 
+                statusChecked: true // Mark as checked even on failure
+            } 
+        });
+        
         const appContainer = document.getElementById('app-container');
         const isCriticalError = e.message.startsWith('CRITICAL:');
 
@@ -775,9 +785,9 @@ async function initApp() {
             // Otherwise, the user has offline data and can continue.
             // Show a non-blocking, permanent notification about the connection issue.
             showNotification(
-                'Gagal terhubung ke server. Aplikasi dalam mode offline.', 
+                'Gagal terhubung ke server. Aplikasi berjalan dalam mode offline.', 
                 'error', 
-                { isPermanent: true, onRetry: initApp }
+                { isPermanent: true } // No retry button for persistent errors
             );
             
             // If there's no user profile, render the setup/login screen
