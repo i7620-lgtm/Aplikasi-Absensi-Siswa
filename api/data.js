@@ -78,7 +78,7 @@ export default async function handler(request, response) {
         // Kesalahan yang terjadi selama `setupTables` sangat mungkin merupakan masalah konfigurasi yang persisten.
         // Kita perlakukan semua error dari Vercel Postgres dengan `code` sebagai error koneksi.
         // Properti `code` adalah non-standar tetapi umum di pustaka driver DB.
-        const isConnectionError = /connect|database|env var|does not exist|credentials|timeout/i.test(error.message) || (error.code && typeof error.code === 'string');
+        const isConnectionError = /connect|database|env var|does not exist|credentials|timeout|suspended|authentication/i.test(error.message) || (error.code && typeof error.code === 'string');
         
         if (isConnectionError) {
             // Log pesan yang lebih detail di sisi server untuk debugging
