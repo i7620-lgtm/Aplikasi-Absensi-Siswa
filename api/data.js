@@ -75,6 +75,14 @@ export default async function handler(request, response) {
 
     } catch (error) {
         console.error('API Error:', error);
-        return response.status(500).json({ error: 'An internal server error occurred', details: error.message });
+        // Periksa error koneksi database yang umum untuk memberikan pesan yang lebih jelas.
+        const isConnectionError = /connect|database|env var|does not exist|credentials|timeout/i.test(error.message);
+        if (isConnectionError) {
+            return response.status(500).json({ 
+                error: 'Kesalahan Koneksi Database', 
+                details: 'Server tidak dapat terhubung ke database. Silakan periksa konfigurasi lingkungan Vercel atau status database.' 
+            });
+        }
+        return response.status(500).json({ error: 'Terjadi kesalahan internal pada server.', details: error.message });
     }
 }
