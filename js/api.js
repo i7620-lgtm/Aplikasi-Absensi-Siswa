@@ -78,6 +78,10 @@ export const apiService = {
         return await _fetch('updateUserConfiguration', { targetEmail, newRole, newSchoolId, newClasses });
     },
 
+    async updateUsersBulkConfiguration({ targetEmails, newRole, newSchoolId }) {
+        return await _fetch('updateUsersBulk', { targetEmails, newRole, newSchoolId });
+    },
+
     async getMaintenanceStatus() {
         // Tidak memerlukan payload atau userEmail
         return await _fetch('getMaintenanceStatus');
@@ -87,7 +91,7 @@ export const apiService = {
         return await _fetch('setMaintenanceStatus', { enabled });
     },
 
-    async generateAiRecommendation(preprocessedData) {
-        return await _fetch('generateAiRecommendation', { preprocessedData });
+    async generateAiRecommendation(preprocessedData, dateRangeContext) {
+        return await _fetch('generateAiRecommendation', { preprocessedData, dateRangeContext });
     }
 };
