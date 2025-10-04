@@ -10,7 +10,6 @@ export default async function handleGetRecapData({ payload, user, sql, response 
     }
 
     if (user.role === 'GURU') {
-        // For teachers, data is simple, no need for complex queries
         const { rows } = await sql`SELECT students_by_class, saved_logs FROM absensi_data WHERE user_email = ${user.email}`;
         const studentsByClassToUse = rows[0]?.students_by_class || {};
         const logsToUse = rows[0]?.saved_logs || [];
@@ -54,7 +53,6 @@ export default async function handleGetRecapData({ payload, user, sql, response 
         return response.status(200).json({ recapArray });
 
     } else if (effectiveSchoolId) {
-        // For Admins/KS, use the optimized SQL query
         const { rows: recapArray } = await sql`
             WITH all_students_by_class AS (
                 SELECT jsonb_object_agg(key, value) as data
@@ -113,6 +111,5 @@ export default async function handleGetRecapData({ payload, user, sql, response 
         return response.status(200).json({ recapArray });
     }
     
-    // Default case: no school ID and not a teacher
     return response.status(200).json({ recapArray: [] });
 }
