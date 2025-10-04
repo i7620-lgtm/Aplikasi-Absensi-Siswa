@@ -1,5 +1,7 @@
 
 
+
+
 import { state, CLASSES } from './main.js';
 import { getGsiReadyState } from './auth.js';
 
@@ -9,6 +11,8 @@ function getRoleDisplayName(role) {
         case 'KEPALA_SEKOLAH': return 'Kepala Sekolah';
         case 'SUPER_ADMIN': return 'Super Admin';
         case 'ADMIN_SEKOLAH': return 'Admin Sekolah';
+        case 'DINAS_PENDIDIKAN': return 'Analis Dinas Pendidikan';
+        case 'ADMIN_DINAS_PENDIDIKAN': return 'Manajer Dinas Pendidikan';
         default: return role;
     }
 }
@@ -129,7 +133,7 @@ export const templates = {
                          <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Lihat Riwayat Kelas Ini</button>
                          <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Rekap Absensi Siswa</button>
                          <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Tambah/Kurangi Data Siswa</button>
-                         <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Unduh Rekap Absensi (Excel)</button>
+                         <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Unduh Rekap Kelas (Excel)</button>
                     </div>
                 `}
                 <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.userProfile ? 'Data disimpan secara otomatis di cloud.' : 'Silakan login untuk memulai.'}</p>
@@ -159,8 +163,12 @@ export const templates = {
                 <div class="space-y-3 pt-4 border-t border-slate-200">
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center">Menu Admin</h2>
                     <button id="go-to-attendance-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lakukan Absensi</button>
-                    <button id="view-dashboard-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Dasbor Kepala Sekolah</button>
+                    <button id="view-dashboard-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Dasbor Sekolah</button>
                     <button id="view-admin-panel-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Panel Manajemen Pengguna</button>
+                    ${state.userProfile?.role === 'SUPER_ADMIN' ? `
+                    <button id="view-jurisdiction-panel-btn" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Panel Manajemen Yurisdiksi</button>
+                    ` : ''}
+                    <button id="download-school-report-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Unduh Laporan Sekolah (Excel)</button>
                 </div>
 
                 ${state.userProfile?.role === 'SUPER_ADMIN' ? `
@@ -211,18 +219,22 @@ export const templates = {
             displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         }
         
-        const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
-        const backTarget = isAdmin ? 'adminHome' : 'setup';
-
-        const getButtonClass = (viewName) => {
-            return activeView === viewName
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-100';
-        };
+        const isSuperAdmin = state.userProfile?.role === 'SUPER_ADMIN';
+        const isSchoolAdmin = state.userProfile?.role === 'ADMIN_SEKOLAH';
+        const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.role);
         
-        const title = state.userProfile?.role === 'SUPER_ADMIN' && state.adminActingAsSchool 
-            ? `Dasbor (Konteks: ${state.adminActingAsSchool.name})`
-            : "Dasbor Kepala Sekolah";
+        let backButtonHtml = '';
+        if (isSuperAdmin || isSchoolAdmin) {
+            backButtonHtml = `<button id="dashboard-back-btn" data-target="adminHome" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>`;
+        }
+
+
+        let title = "Dasbor";
+        if (state.userProfile.role === 'KEPALA_SEKOLAH') title = "Dasbor Kepala Sekolah";
+        if (isDinas) title = "Dasbor Regional Dinas Pendidikan";
+        if (isSuperAdmin && state.adminActingAsSchool) title = `Dasbor (Konteks: ${state.adminActingAsSchool.name})`;
+        if ((isSuperAdmin || isDinas) && state.adminActingAsJurisdiction) title = `Dasbor (Konteks: ${state.adminActingAsJurisdiction.name})`;
+
 
         return `
         <div class="screen active p-4 md:p-8 max-w-7xl mx-auto">
@@ -243,7 +255,7 @@ export const templates = {
                         </div>
                         ` : ''}
                         <div class="flex items-center gap-2">
-                           ${isAdmin ? `<button id="dashboard-back-btn" data-target="${backTarget}" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>` : ''}
+                           ${backButtonHtml}
                            <button id="logoutBtn-ks" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full flex items-center gap-2 text-sm font-semibold">
                                <span>Logout</span>
                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
@@ -254,9 +266,9 @@ export const templates = {
 
                 <!-- Dashboard Navigation Tabs -->
                 <div class="mb-6 p-1 bg-slate-100 rounded-lg flex flex-col sm:flex-row gap-1">
-                    <button id="db-view-report" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${getButtonClass('report')}">Laporan Siswa Tidak Hadir</button>
-                    <button id="db-view-percentage" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${getButtonClass('percentage')}">Persentase Kehadiran</button>
-                    <button id="db-view-ai" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${getButtonClass('ai')}">Rekomendasi AI</button>
+                    <button id="db-view-report" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${activeView === 'report' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}">Laporan Siswa Tidak Hadir</button>
+                    <button id="db-view-percentage" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${activeView === 'percentage' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}">Persentase Kehadiran</button>
+                    <button id="db-view-ai" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${activeView === 'ai' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}">Rekomendasi AI</button>
                 </div>
 
                 <!-- Content Area -->
@@ -367,7 +379,12 @@ export const templates = {
                 </div>
             </div>
         </div>`,
-    success: () => `
+    success: () => {
+        const { lastSaveContext } = state;
+        const message = lastSaveContext
+            ? `Absensi Kelas <strong>${lastSaveContext.className}</strong> telah berhasil disimpan atas nama <strong>${lastSaveContext.teacherName}</strong>.`
+            : `Data absensi telah berhasil disimpan di database cloud Anda.`;
+        return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
             <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
                 <div class="checkmark-wrapper mx-auto mb-6">
@@ -377,13 +394,14 @@ export const templates = {
                     </svg>
                 </div>
                 <h1 class="text-3xl md:text-4xl font-bold text-slate-800 mb-3">Absensi Tersimpan!</h1>
-                <p class="text-slate-500 mb-10">Data absensi telah berhasil disimpan di database cloud Anda.</p>
+                <p class="text-slate-500 mb-10">${message}</p>
                 <div class="space-y-4">
                      <button id="success-back-to-start-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Kembali ke Halaman Awal</button>
                      <button id="success-view-data-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Semua Riwayat</button>
                 </div>
             </div>
-        </div>`,
+        </div>`;
+    },
     data: () => `
          <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
              <div class="bg-white p-8 rounded-2xl shadow-lg">
@@ -409,10 +427,8 @@ export const templates = {
                     <div class="lg:col-span-2">
                         <p class="block text-sm font-medium text-slate-700 mb-1">Rentang Tanggal</p>
                         <div class="flex items-center gap-2">
-                            <label for="filter-start-date" class="sr-only">Tanggal Mulai</label>
                             <input type="date" id="filter-start-date" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
                             <span class="text-slate-500">-</span>
-                            <label for="filter-end-date" class="sr-only">Tanggal Selesai</label>
                             <input type="date" id="filter-end-date" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
                         </div>
                     </div>
@@ -432,7 +448,7 @@ export const templates = {
                     <button id="recap-back-to-start-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
                 </div>
                 <div class="mb-4 flex items-center gap-2">
-                    <label class="text-sm font-medium text-slate-600">Urutkan:</label>
+                    <span class="text-sm font-medium text-slate-600">Urutkan:</span>
                     <button id="sort-by-total-btn" class="${state.recapSortOrder === 'total' ? 'bg-blue-500 text-white' : 'bg-white text-blue-700 border border-blue-500 hover:bg-blue-50'} font-semibold py-1 px-3 rounded-lg text-sm transition">Total Terbanyak</button>
                     <button id="sort-by-absen-btn" class="${state.recapSortOrder === 'absen' ? 'bg-blue-500 text-white' : 'bg-white text-blue-700 border border-blue-500 hover:bg-blue-50'} font-semibold py-1 px-3 rounded-lg text-sm transition">No. Absen</button>
                 </div>
@@ -490,20 +506,33 @@ export const templates = {
             </div>
         </div>
     `,
-    manageUserModal: (user, schools) => {
+    manageUserModal: (user, schools, jurisdictions) => {
         const assignedClasses = user.assigned_classes || [];
         const currentUserRole = state.userProfile.role;
         const isSuperAdmin = currentUserRole === 'SUPER_ADMIN';
         const isTargetSuperAdmin = user.role === 'SUPER_ADMIN';
 
-        const availableRoles = [
+        let availableRoles = [
             { value: 'GURU', text: 'Guru' },
             { value: 'KEPALA_SEKOLAH', text: 'Kepala Sekolah' },
+            { value: 'ADMIN_SEKOLAH', text: 'Admin Sekolah' },
         ];
         if (isSuperAdmin) {
-            availableRoles.push({ value: 'ADMIN_SEKOLAH', text: 'Admin Sekolah' });
+            availableRoles.push({ value: 'DINAS_PENDIDIKAN', text: 'Analis Dinas Pendidikan' });
+            availableRoles.push({ value: 'ADMIN_DINAS_PENDIDIKAN', text: 'Manajer Dinas Pendidikan' });
             availableRoles.push({ value: 'SUPER_ADMIN', text: 'Super Admin' });
         }
+        
+        const renderJurisdictionOptions = (items, prefix = '') => {
+            let options = '';
+            items.forEach(item => {
+                options += `<option value="${item.id}" ${user.jurisdiction_id === item.id ? 'selected' : ''}>${prefix}${item.name}</option>`;
+                if (item.children && item.children.length > 0) {
+                    options += renderJurisdictionOptions(item.children, prefix + '-- ');
+                }
+            });
+            return options;
+        };
 
         return `
         <div id="manage-user-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
@@ -515,21 +544,29 @@ export const templates = {
                     <div>
                         <label for="role-select-modal" class="block text-sm font-medium text-slate-700 mb-1">Peran Pengguna</label>
                         <select id="role-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                           ${availableRoles.map(role => `<option value="${role.value}" ${user.role === role.value ? 'selected' : ''}>${role.text}</option>`).join('')}
+                           ${availableRoles.map(role => `<option value="${role.value}" ${user.role === role.value ? 'selected' : ''}>${getRoleDisplayName(role.value)}</option>`).join('')}
                         </select>
                     </div>
-                    ${isSuperAdmin ? `
-                    <div>
+                    
+                    <div id="school-assignment-container" class="hidden">
                         <label for="school-select-modal" class="block text-sm font-medium text-slate-700 mb-1">Tugaskan ke Sekolah</label>
                         <select id="school-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${isTargetSuperAdmin ? 'bg-slate-100 cursor-not-allowed' : ''}" ${isTargetSuperAdmin ? 'disabled' : ''}>
                             <option value="">-- Tidak Ditugaskan --</option>
                             ${schools.map(school => `<option value="${school.id}" ${user.school_id === school.id ? 'selected' : ''}>${school.name}</option>`).join('')}
                         </select>
-                        ${isTargetSuperAdmin ? '<p class="text-xs text-slate-500 mt-1">Super Admin adalah peran global dan tidak dapat ditugaskan ke sekolah tertentu.</p>' : ''}
-                    </div>` : ''}
+                        ${isTargetSuperAdmin ? '<p class="text-xs text-slate-500 mt-1">Super Admin adalah peran global.</p>' : ''}
+                    </div>
+
+                    <div id="jurisdiction-assignment-container" class="hidden">
+                         <label for="jurisdiction-select-modal" class="block text-sm font-medium text-slate-700 mb-1">Tugaskan ke Yurisdiksi</label>
+                         <select id="jurisdiction-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="">-- Tidak Ditugaskan --</option>
+                            ${jurisdictions ? renderJurisdictionOptions(jurisdictions) : ''}
+                         </select>
+                    </div>
                 </div>
 
-                <div id="manage-classes-container" class="mt-6 pt-4 border-t border-slate-200 ${user.role !== 'GURU' ? 'hidden' : ''}">
+                <div id="manage-classes-container" class="mt-6 pt-4 border-t border-slate-200 hidden">
                      <p class="block text-sm font-medium text-slate-700 mb-2">Tugaskan Kelas (untuk Guru)</p>
                      <div id="class-checkbox-container" class="grid grid-cols-3 sm:grid-cols-4 gap-4 max-h-48 overflow-y-auto border p-4 rounded-lg">
                         ${CLASSES.map(c => `
@@ -564,5 +601,119 @@ export const templates = {
                 </div>
             </div>
         </div>
-    `
+    `,
+    jurisdictionSelectorModal: (jurisdictions, title) => {
+        const renderOptions = (items, prefix = '') => {
+            let html = '';
+            items.forEach(item => {
+                html += `<button class="jurisdiction-select-btn w-full text-left p-3 rounded-lg hover:bg-slate-100 transition" data-jurisdiction-id="${item.id}" data-jurisdiction-name="${item.name}">${prefix}${item.name}</button>`;
+                if (item.children && item.children.length > 0) {
+                    html += renderOptions(item.children, prefix + '&nbsp;&nbsp;&nbsp;&nbsp;');
+                }
+            });
+            return html;
+        };
+        return `
+        <div id="jurisdiction-selector-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
+             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
+                <h2 class="text-xl font-bold text-slate-800 mb-4">${title}</h2>
+                <p class="text-slate-600 mb-6">Pilih salah satu yurisdiksi di bawah ini untuk melanjutkan.</p>
+                <div id="jurisdiction-list-container" class="space-y-1 max-h-60 overflow-y-auto mb-6 border-t border-b py-4">
+                    ${jurisdictions.length > 0 
+                        ? renderOptions(jurisdictions)
+                        : '<p class="text-slate-500 text-center">Belum ada yurisdiksi yang dibuat.</p>'
+                    }
+                </div>
+                <div class="flex justify-end">
+                    <button id="jurisdiction-selector-cancel-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Batal</button>
+                </div>
+            </div>
+        </div>`;
+    },
+    jurisdictionPanel: () => `
+        <div class="screen active p-4 md:p-8 max-w-7xl mx-auto">
+             <div class="bg-white p-6 md:p-8 rounded-2xl shadow-lg">
+                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 pb-4 border-b border-slate-200 gap-4">
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-800">Manajemen Yurisdiksi</h1>
+                        <p class="text-slate-500">Kelola hierarki wilayah dan penugasan sekolah.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="add-jurisdiction-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition text-sm">Tambah Yurisdiksi Baru</button>
+                        <button id="jurisdiction-panel-back-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+                    <div id="jurisdiction-tree-container" class="md:col-span-5 lg:col-span-4 border rounded-lg p-4 bg-slate-50 min-h-[300px]">
+                        <p class="text-center text-slate-500 py-8">Memuat struktur yurisdiksi...</p>
+                    </div>
+                    <div id="jurisdiction-details-container" class="md:col-span-7 lg:col-span-8">
+                        <div class="h-full flex items-center justify-center text-center p-4 border-2 border-dashed rounded-lg">
+                             <p class="text-slate-500">Pilih yurisdiksi dari daftar di sebelah kiri untuk melihat detail dan mengelola sekolah.</p>
+                        </div>
+                    </div>
+                </div>
+             </div>
+        </div>
+    `,
+    manageJurisdictionModal: (jurisdiction = null, jurisdictions = []) => {
+        const isEditing = !!jurisdiction;
+        const title = isEditing ? 'Ubah Yurisdiksi' : 'Tambah Yurisdiksi Baru';
+
+        const renderOptions = (items, prefix = '', currentParentId = null, selfId = null) => {
+            let options = '';
+            items.forEach(item => {
+                if (item.id === selfId) return; // Prevent self-parenting
+                options += `<option value="${item.id}" ${item.id === currentParentId ? 'selected' : ''}>${prefix}${item.name}</option>`;
+                if (item.children && item.children.length > 0) {
+                    options += renderOptions(item.children, prefix + '-- ', currentParentId, selfId);
+                }
+            });
+            return options;
+        };
+
+        return `
+        <div id="manage-jurisdiction-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
+             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
+                <h2 class="text-xl font-bold text-slate-800 mb-6">${title}</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="jur-name" class="block text-sm font-medium text-slate-700 mb-1">Nama Yurisdiksi</label>
+                        <input type="text" id="jur-name" class="w-full p-2 border border-slate-300 rounded-lg" value="${jurisdiction?.name || ''}">
+                    </div>
+                    <div>
+                        <label for="jur-type" class="block text-sm font-medium text-slate-700 mb-1">Tipe (cth: Provinsi, Kota)</label>
+                        <input type="text" id="jur-type" class="w-full p-2 border border-slate-300 rounded-lg" value="${jurisdiction?.type || ''}">
+                    </div>
+                    <div>
+                        <label for="jur-parent" class="block text-sm font-medium text-slate-700 mb-1">Induk Yurisdiksi</label>
+                        <select id="jur-parent" class="w-full p-2 border border-slate-300 rounded-lg bg-white">
+                            <option value="">-- Tidak Ada Induk (Level Atas) --</option>
+                            ${renderOptions(jurisdictions, '', jurisdiction?.parent_id, jurisdiction?.id)}
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button id="jur-modal-cancel-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Batal</button>
+                    <button id="jur-modal-save-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition">Simpan</button>
+                </div>
+            </div>
+        </div>`;
+    },
+    assignSchoolsModal: (jurisdictionName, assigned, unassigned) => `
+        <div id="assign-schools-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
+             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-4xl w-full animate-fade-in max-h-[90vh] flex flex-col">
+                <h2 class="text-xl font-bold text-slate-800 mb-2">Kelola Sekolah untuk ${jurisdictionName}</h2>
+                <p class="text-slate-500 mb-6">Pindahkan sekolah antara daftar yang tersedia dan yang ditugaskan.</p>
+                <div class="grid grid-cols-2 gap-6 flex-grow overflow-hidden">
+                    <div class="flex flex-col"><h3 class="font-semibold text-slate-700 mb-2">Sekolah Tersedia</h3><div id="unassigned-schools-list" class="border rounded-lg p-2 space-y-1 overflow-y-auto bg-slate-50 flex-grow">${unassigned.map(s => `<div class="p-2 flex items-center justify-between"><span>${s.name}</span><button data-school-id="${s.id}" class="assign-school-btn text-blue-500 hover:text-blue-700">&rarr;</button></div>`).join('') || '<p class="p-4 text-center text-slate-400">Tidak ada sekolah tersedia.</p>'}</div></div>
+                    <div class="flex flex-col"><h3 class="font-semibold text-slate-700 mb-2">Sekolah Ditugaskan</h3><div id="assigned-schools-list" class="border rounded-lg p-2 space-y-1 overflow-y-auto bg-green-50 flex-grow">${assigned.map(s => `<div class="p-2 flex items-center justify-between"><span>${s.name}</span><button data-school-id="${s.id}" class="unassign-school-btn text-red-500 hover:text-red-700">&larr;</button></div>`).join('') || '<p class="p-4 text-center text-slate-400">Belum ada sekolah ditugaskan.</p>'}</div></div>
+                </div>
+                <div class="flex justify-end mt-8">
+                    <button id="assign-schools-close-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Tutup</button>
+                </div>
+            </div>
+        </div>
+    `,
 };
+      
