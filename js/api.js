@@ -20,7 +20,7 @@ async function _fetch(action, payload = {}) {
             const errorData = await response.json().catch(() => ({}));
             let errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
             if (response.status >= 500) {
-                errorMessage = `Kesalahan Server (${response.status}): ${errorData.error || 'Gagal terhubung ke database. Periksa log Vercel.'}`;
+                errorMessage = `Kesalahan Server (${response.status}): ${errorData.error || 'Gagal terhubung ke database.'}`;
             }
             throw new Error(errorMessage);
         }
@@ -29,7 +29,7 @@ async function _fetch(action, payload = {}) {
     } catch (error) {
         console.error(`Panggilan API '${action}' gagal:`, error);
         
-        if (error.message.startsWith('Kesalahan Server')) {
+        if (error.message.startsWith('Kesalahan Server') || error.message.startsWith('Error')) {
             throw error;
         }
         throw new Error('Gagal terhubung ke server. Periksa koneksi internet Anda.');
@@ -81,8 +81,8 @@ export const apiService = {
         return await _fetch('createSchool', { schoolName });
     },
 
-    async updateUserConfiguration(targetEmail, newRole, newSchoolId, newClasses) {
-        return await _fetch('updateUserConfiguration', { targetEmail, newRole, newSchoolId, newClasses });
+    async updateUserConfiguration(targetEmail, newRole, newSchoolId, newClasses, newJurisdictionId) {
+        return await _fetch('updateUserConfiguration', { targetEmail, newRole, newSchoolId, newClasses, newJurisdictionId });
     },
 
     async updateUsersBulkConfiguration({ targetEmails, newRole, newSchoolId }) {
@@ -99,5 +99,25 @@ export const apiService = {
 
     async generateAiRecommendation(params) {
         return await _fetch('generateAiRecommendation', params);
+    },
+
+    // Jurisdiction APIs
+    async getJurisdictionTree() {
+        return await _fetch('getJurisdictionTree');
+    },
+    async createJurisdiction(name, type, parentId) {
+        return await _fetch('createJurisdiction', { name, type, parentId });
+    },
+    async updateJurisdiction(id, name, type) {
+        return await _fetch('updateJurisdiction', { id, name, type });
+    },
+    async deleteJurisdiction(id) {
+        return await _fetch('deleteJurisdiction', { id });
+    },
+    async getSchoolsForJurisdiction(jurisdictionId) {
+        return await _fetch('getSchoolsForJurisdiction', { jurisdictionId });
+    },
+    async assignSchoolToJurisdiction(schoolId, jurisdictionId) {
+        return await _fetch('assignSchoolToJurisdiction', { schoolId, jurisdictionId });
     }
 };
