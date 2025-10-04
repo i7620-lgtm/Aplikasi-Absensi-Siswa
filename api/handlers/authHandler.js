@@ -1,7 +1,7 @@
 async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
     const { email, name, picture } = profile;
     
-    const { rows } = await sql`SELECT email, name, picture, role, school_id, assigned_classes FROM users WHERE email = ${email}`;
+    const { rows } = await sql`SELECT email, name, picture, role, school_id, jurisdiction_id, assigned_classes FROM users WHERE email = ${email}`;
     let user = rows[0];
 
     if (user) {
@@ -13,7 +13,7 @@ async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
         const { rows: newRows } = await sql`
             INSERT INTO users (email, name, picture, role, last_login, assigned_classes)
             VALUES (${email}, ${name}, ${picture}, ${role}, NOW(), '{}')
-            RETURNING email, name, picture, role, school_id, assigned_classes;
+            RETURNING email, name, picture, role, school_id, jurisdiction_id, assigned_classes;
         `;
         user = newRows[0];
         user.assigned_classes = user.assigned_classes || [];
@@ -31,6 +31,8 @@ async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
 
 
 export default async function handleLoginOrRegister({ payload, sql, response, SUPER_ADMIN_EMAILS }) {
+    if (!payload || !payload.profile) return response.status(400).json({ error: 'Profile payload is required' });
+    
     const loginResult = await loginOrRegisterUser(payload.profile, sql, SUPER_ADMIN_EMAILS);
                     
     if (loginResult.maintenance) {
