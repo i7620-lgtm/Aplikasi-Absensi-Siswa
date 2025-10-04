@@ -164,14 +164,8 @@ async function syncDataToServer() {
         silent: true // Membuatnya tidak terlalu mengganggu
       };
 
-      self.registration.showNotification(title, options).then(() => {
-          // Setelah notifikasi ditampilkan, atur timer untuk menutupnya
-          setTimeout(() => {
-              self.registration.getNotifications({ tag: 'sync-notification' }).then(notifications => {
-                  notifications.forEach(notification => notification.close());
-              });
-          }, 5000); // Tutup setelah 5 detik
-      });
+      // Await the notification to ensure the service worker stays alive.
+      await self.registration.showNotification(title, options);
     }
 
   } catch (error) {
