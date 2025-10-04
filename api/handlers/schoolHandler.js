@@ -11,6 +11,9 @@ export async function handleCreateSchool({ payload, user, sql, response }) {
          return response.status(403).json({ error: 'Forbidden: Access denied' });
     }
     const { schoolName } = payload;
+    if (!schoolName || schoolName.trim().length === 0) {
+        return response.status(400).json({ error: 'School name is required.' });
+    }
     const { rows: newSchool } = await sql`INSERT INTO schools (name) VALUES (${schoolName}) RETURNING id, name;`;
     return response.status(201).json({ success: true, school: newSchool[0] });
 }
