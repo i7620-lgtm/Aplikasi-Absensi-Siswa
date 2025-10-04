@@ -98,7 +98,7 @@ async function handleTokenResponse(tokenResponse) {
         // Navigate based on role
         if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN_SEKOLAH') {
             navigateTo('adminHome');
-        } else if (user.role === 'KEPALA_SEKOLAH') {
+        } else if (user.role === 'KEPALA_SEKOLAH' || user.role === 'DINAS_PENDIDIKAN' || user.role === 'ADMIN_DINAS_PENDIDIKAN') {
             navigateTo('dashboard');
         } else {
             navigateTo('setup');
