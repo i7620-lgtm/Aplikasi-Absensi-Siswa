@@ -1,6 +1,9 @@
+
+
+
 import { initializeGsi, handleSignIn, handleSignOut } from './auth.js';
 import { templates } from './templates.js';
-import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus } from './ui.js';
+import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal } from './ui.js';
 import { apiService } from './api.js';
 import { idb } from './db.js';
 
@@ -18,6 +21,7 @@ export let state = {
     attendance: {},
     savedLogs: [], 
     historyClassFilter: null,
+    allHistoryLogs: [], // NEW: Store all logs for client-side filtering
     dataScreenFilters: {
         studentName: '',
         status: 'all',
@@ -39,7 +43,7 @@ export let state = {
         selectedUsers: [],
     },
     dashboard: {
-        data: null, // Will store pre-aggregated data from the server
+        data: null, // Will store comprehensive payload from the server
         isLoading: true,
         selectedDate: new Date().toISOString().split('T')[0],
         polling: {
@@ -68,6 +72,8 @@ export let state = {
     },
     connectionError: null,
     adminActingAsSchool: null, // Stores {id, name} for SUPER_ADMIN context
+    adminActingAsJurisdiction: null, // NEW: Stores {id, name} for SUPER_ADMIN/DINAS context
+    lastSaveContext: null, // Stores { teacherName, className } for admin success message
 };
 
 // Function to update state and persist it
@@ -99,10 +105,27 @@ export function render() {
 
 export function navigateTo(screen) {
     const schoolContextScreens = ['setup', 'dashboard', 'add-students', 'attendance', 'data', 'recap'];
+    const adminContextScreens = ['dashboard', 'jurisdictionPanel', 'adminPanel'];
+    
+    // Clear school context if leaving a school-focused flow
     if (schoolContextScreens.includes(state.currentScreen) && !schoolContextScreens.includes(screen)) {
         if (state.adminActingAsSchool) {
-            console.log("Leaving school context flow. Clearing Super Admin context.");
-            setState({ adminActingAsSchool: null });
+            console.log("Leaving school context. Clearing Super Admin school context.");
+            setState({ 
+                adminActingAsSchool: null,
+                dashboard: { ...state.dashboard, data: null, isLoading: true }
+            });
+        }
+    }
+    
+    // Clear jurisdiction context if leaving a context-sensitive flow
+    if (adminContextScreens.includes(state.currentScreen) && !adminContextScreens.includes(screen)) {
+        if (state.adminActingAsJurisdiction) {
+            console.log("Leaving jurisdiction context. Clearing context.");
+            setState({ 
+                adminActingAsJurisdiction: null,
+                dashboard: { ...state.dashboard, data: null, isLoading: true } 
+            });
         }
     }
     
@@ -283,11 +306,28 @@ export async function handleSaveAttendance() {
         updatedLogs.push(newLog); 
     }
 
-    await setState({ savedLogs: updatedLogs });
-    
-    hideLoader();
-    navigateTo('success');
+    try {
+        // Call API directly to get the response for visual feedback
+        const response = await apiService.saveData({ studentsByClass: state.studentsByClass, savedLogs: updatedLogs });
+
+        // On API success, update local state with the same data and the context from the response.
+        const newContext = response.savedAsTeacherName 
+            ? { teacherName: response.savedAsTeacherName, className: state.selectedClass } 
+            : null;
+        await setState({ savedLogs: updatedLogs, lastSaveContext: newContext });
+        
+        hideLoader();
+        navigateTo('success');
+    } catch (error) {
+        // If API fails, save locally for offline sync later.
+        console.error("Online save failed, saving locally:", error);
+        await setState({ savedLogs: updatedLogs, lastSaveContext: null }); // Save locally without context.
+        showNotification('Gagal menyimpan ke cloud. Data disimpan lokal & akan disinkronkan nanti.', 'info');
+        hideLoader();
+        navigateTo('success');
+    }
 }
+
 
 export async function handleViewHistory(isClassSpecific = false) {
     const isSuperAdmin = state.userProfile.role === 'SUPER_ADMIN';
@@ -310,18 +350,21 @@ export async function handleViewRecap() {
 
 export async function handleGenerateAiRecommendation() {
     const aiRange = state.dashboard.aiRecommendation.selectedRange;
-    const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+    await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: true, result: null, error: null } } });
+    render();
 
+    // Determine the correct schoolId for the current context.
+    const schoolId = state.userProfile.role === 'SUPER_ADMIN' 
+        ? state.adminActingAsSchool?.id 
+        : state.userProfile.school_id;
+    
     if (!schoolId) {
-        const errorMsg = 'Konteks sekolah tidak ditemukan. Tidak dapat membuat rekomendasi.';
-        await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: null, error: errorMsg } } });
+        const errorMessage = 'Konteks sekolah tidak dapat ditentukan. Pastikan sekolah telah dipilih.';
+        await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: null, error: errorMessage } } });
         render();
         return;
     }
 
-    await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: true, result: null, error: null } } });
-    render();
-    
     try {
         const { recommendation } = await apiService.generateAiRecommendation({ aiRange, schoolId });
         await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: recommendation, error: null } } });
@@ -404,34 +447,20 @@ export function handleExcelImport(event) {
     event.target.value = '';
 }
 
-export async function handleDownloadData() {
+async function downloadRecapData(classFilter, schoolId, fileName) {
     showLoader('Menyiapkan data untuk diunduh...');
-
     try {
-        const { recapArray } = await apiService.getRecapData({
-            schoolId: state.adminActingAsSchool?.id || state.userProfile.school_id,
-            classFilter: null,
-        });
+        const { recapArray } = await apiService.getRecapData({ schoolId, classFilter });
 
         if (!recapArray || recapArray.length === 0) {
             hideLoader();
-            showNotification('Tidak ada data rekap untuk diunduh.', 'error');
+            showNotification('Tidak ada data rekap untuk diunduh.', 'info');
             return;
         }
 
-        const dataForSheet = [
-            ['Nama Lengkap', 'Kelas', 'Sakit (S)', 'Izin (I)', 'Alpa (A)', 'Total Absen']
-        ];
-
-        recapArray.forEach((item) => {
-            dataForSheet.push([
-                item.name,
-                item.class,
-                item.S,
-                item.I,
-                item.A,
-                item.total
-            ]);
+        const dataForSheet = [['Nama Lengkap', 'Kelas', 'Sakit (S)', 'Izin (I)', 'Alpa (A)', 'Total Absen']];
+        recapArray.forEach(item => {
+            dataForSheet.push([item.name, item.class, item.S, item.I, item.A, item.total]);
         });
         
         const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
@@ -443,16 +472,48 @@ export async function handleDownloadData() {
         }));
         worksheet['!cols'] = columnWidths;
 
-        XLSX.writeFile(workbook, 'Rekap_Absensi_Siswa.xlsx');
+        XLSX.writeFile(workbook, fileName);
         
         hideLoader();
         showNotification('Data absensi berhasil diunduh.', 'success');
-
     } catch (error) {
         hideLoader();
         showNotification('Terjadi kesalahan saat membuat file Excel.', 'error');
         console.error("Failed to download data:", error);
     }
+}
+
+export async function handleDownloadData() {
+    state.selectedClass = document.getElementById('class-select').value;
+    const schoolId = state.adminActingAsSchool?.id || state.userProfile.school_id;
+    const fileName = `Rekap_Absensi_Kelas_${state.selectedClass}.xlsx`;
+    await downloadRecapData(state.selectedClass, schoolId, fileName);
+}
+
+export async function handleDownloadFullSchoolReport() {
+    const isSuperAdmin = state.userProfile.role === 'SUPER_ADMIN';
+    let schoolId = isSuperAdmin ? null : state.userProfile.school_id;
+    let schoolName = 'Sekolah';
+
+    if (isSuperAdmin) {
+        const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Laporan');
+        if (!selectedSchool) return; // User cancelled
+        schoolId = selectedSchool.id;
+        schoolName = selectedSchool.name.replace(/\s+/g, '_'); // Sanitize name for filename
+    } else {
+        // For Admin Sekolah, we need the school name but don't have it in the state.
+        // A better approach would be to have school info in userProfile. For now, we'll keep it generic.
+        const schoolInfo = state.adminPanel.schools.find(s => s.id === schoolId);
+        if (schoolInfo) schoolName = schoolInfo.name.replace(/\s+/g, '_');
+    }
+    
+    if (!schoolId) {
+        showNotification('Tidak dapat menentukan sekolah untuk diunduh.', 'error');
+        return;
+    }
+
+    const fileName = `Laporan_Absensi_${schoolName}.xlsx`;
+    await downloadRecapData(null, schoolId, fileName);
 }
 
 
@@ -530,3 +591,4 @@ async function initApp() {
 }
 
 initApp();
+      
