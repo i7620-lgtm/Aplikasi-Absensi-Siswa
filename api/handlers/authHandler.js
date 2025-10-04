@@ -1,3 +1,5 @@
+import { createClient } from '@vercel/edge-config';
+
 async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
     const { email, name, picture } = profile;
     
@@ -18,12 +20,20 @@ async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
         user = newRows[0];
         user.assigned_classes = user.assigned_classes || [];
     }
-
-    const { rows: configRows } = await sql`SELECT value FROM app_config WHERE key = 'maintenance_mode'`;
-    const isMaintenance = configRows[0]?.value === 'true';
-
-    if (isMaintenance && user.role !== 'SUPER_ADMIN') {
-        return { maintenance: true };
+    
+    // Cek maintenance mode dari Edge Config, bukan database
+    if (process.env.EDGE_CONFIG) {
+        try {
+            const edgeConfigClient = createClient(process.env.EDGE_CONFIG);
+            const isMaintenance = await edgeConfigClient.get('maintenance_mode');
+            if (isMaintenance && user.role !== 'SUPER_ADMIN') {
+                return { maintenance: true };
+            }
+        } catch (e) {
+            // Fail open: Jika Edge Config gagal dibaca, asumsikan tidak dalam maintenance
+            // agar tidak memblokir login pengguna secara tidak sengaja.
+            console.error("Auth handler failed to read Edge Config, proceeding without maintenance check:", e);
+        }
     }
     
     return { user };
