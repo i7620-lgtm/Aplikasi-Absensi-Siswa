@@ -44,7 +44,7 @@ async function setupTables() {
             await sql`CREATE TABLE IF NOT EXISTS absensi_data (user_email VARCHAR(255) PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE, school_id INTEGER, students_by_class JSONB, saved_logs JSONB, last_updated TIMESTAMPTZ DEFAULT NOW());`;
             try { await sql`ALTER TABLE absensi_data ADD COLUMN school_id INTEGER;`; } catch (e) { if (e.code !== '42701') throw e; }
             await sql`CREATE TABLE IF NOT EXISTS app_config (key VARCHAR(50) PRIMARY KEY, value TEXT);`;
-            await sql`INSERT INTO app_config (key, value) VALUES ('maintenance_mode', 'false') ON CONFLICT (key) DO NOTHING;`;
+            
             console.log("Setup skema database berhasil untuk instans ini.");
         } catch (error) {
             console.error("Gagal melakukan setup tabel:", error);
@@ -58,22 +58,28 @@ async function setupTables() {
 // --- LOGIKA UTAMA HANDLER ---
 export default async function handler(request, response) {
     try {
+        
+        const { action, payload, userEmail } = request.body;
+        if (!action) {
+            return response.status(400).json({ error: 'Action is required' });
+        }
+        
+        const context = { payload, sql, response, SUPER_ADMIN_EMAILS, GoogleGenAI };
+        
+        // Cek tindakan publik yang tidak memerlukan setup database penuh
+        if (action === 'getMaintenanceStatus') {
+            return await handleGetMaintenanceStatus(context);
+        }
+
         await setupTables();
 
         if (request.method !== 'POST') {
             return response.status(405).json({ error: 'Method Not Allowed' });
         }
 
-        const { action, payload, userEmail } = request.body;
-        if (!action) {
-            return response.status(400).json({ error: 'Action is required' });
-        }
 
-        const context = { payload, sql, response, SUPER_ADMIN_EMAILS, GoogleGenAI };
-        
         // --- Tindakan Publik (Tidak Memerlukan Otentikasi) ---
         const publicActions = {
-            'getMaintenanceStatus': () => handleGetMaintenanceStatus(context),
             'loginOrRegister': () => handleLoginOrRegister(context),
         };
 
