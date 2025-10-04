@@ -1,6 +1,8 @@
+
+
 export async function handleSaveData({ payload, user, sql, response }) {
-    if (user.role === 'KEPALA_SEKOLAH') {
-         return response.status(403).json({ error: 'Akun Kepala Sekolah bersifat hanya-baca.' });
+    if (['KEPALA_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(user.role)) {
+         return response.status(403).json({ error: 'Akun ini bersifat hanya-baca untuk data absensi.' });
     }
     const { studentsByClass, savedLogs, actingAsSchoolId } = payload;
     const studentsByClassJson = JSON.stringify(studentsByClass);
@@ -8,37 +10,26 @@ export async function handleSaveData({ payload, user, sql, response }) {
     
     let targetEmail = user.email;
     let finalSchoolId = user.school_id;
+    let savedAsTeacherName = null;
 
     if ((user.role === 'SUPER_ADMIN' && actingAsSchoolId) || user.role === 'ADMIN_SEKOLAH') {
-        if (user.role === 'ADMIN_SEKOLAH') {
-            if (!user.school_id) {
-                return response.status(403).json({ error: 'Admin Sekolah tidak ditugaskan ke sekolah manapun dan tidak dapat menyimpan data.' });
-            }
-            finalSchoolId = user.school_id;
-        } else {
-            finalSchoolId = actingAsSchoolId;
+        finalSchoolId = (user.role === 'ADMIN_SEKOLAH') ? user.school_id : actingAsSchoolId;
+        if (!finalSchoolId) {
+            return response.status(400).json({ error: 'Konteks sekolah diperlukan untuk admin.' });
         }
         
-        const classNames = Object.keys(studentsByClass);
-        if (classNames.length === 0) {
-            return response.status(400).json({ error: 'Tidak ada data kelas yang dikirim untuk disimpan.' });
-        }
-        const className = classNames[0];
-
-        const { rows: teacherRows } = await sql`
-            SELECT email FROM users 
-            WHERE school_id = ${finalSchoolId} AND ${className} = ANY(assigned_classes);
-        `;
-
-        if (teacherRows.length === 0) {
-            // Jika tidak ada guru yang ditugaskan, simpan data di bawah akun admin itu sendiri.
-            // Ini memungkinkan admin untuk mengelola kelas 'yatim'.
-            console.log(`No teacher found for class ${className}. Saving data under admin ${user.email}`);
-            targetEmail = user.email;
-        } else if (teacherRows.length > 1) {
-            return response.status(409).json({ error: `Konflik: Lebih dari satu guru ditugaskan untuk kelas ${className}. Harap perbaiki di panel admin.` });
-        } else {
-             targetEmail = teacherRows[0].email;
+        const className = Object.keys(studentsByClass)[0];
+        if (className) {
+            const { rows: teacherRows } = await sql`
+                SELECT email, name FROM users 
+                WHERE school_id = ${finalSchoolId} AND ${className} = ANY(assigned_classes);
+            `;
+            if (teacherRows.length > 1) {
+                return response.status(409).json({ error: `Konflik: Lebih dari satu guru ditugaskan untuk kelas ${className}.` });
+            } else if (teacherRows.length === 1) {
+                targetEmail = teacherRows[0].email;
+                savedAsTeacherName = teacherRows[0].name;
+            }
         }
     }
 
@@ -52,66 +43,64 @@ export async function handleSaveData({ payload, user, sql, response }) {
           saved_logs = EXCLUDED.saved_logs,
           last_updated = NOW();
     `;
-    return response.status(200).json({ success: true });
+    return response.status(200).json({ success: true, savedAsTeacherName });
 }
 
 export async function handleGetHistoryData({ payload, user, sql, response }) {
-    if (!['SUPER_ADMIN', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'GURU'].includes(user.role)) {
-        return response.status(403).json({ error: 'Forbidden: Access denied' });
-    }
-
-    const { schoolId, filters, isClassSpecific, classFilter, isGlobalView } = payload;
-    let effectiveSchoolId = schoolId;
-    if (user.role === 'KEPALA_SEKOLAH' || user.role === 'ADMIN_SEKOLAH') {
-        effectiveSchoolId = user.school_id;
-    }
+    const { schoolId, jurisdictionId, isClassSpecific, classFilter, isGlobalView } = payload;
 
     let query;
-    if (isGlobalView && user.role === 'SUPER_ADMIN') {
-        // Super Admin Global View: Fetch from all schools
-        query = sql`SELECT ad.saved_logs, u.name as user_name FROM absensi_data ad JOIN users u ON ad.user_email = u.email`;
-    } else if (effectiveSchoolId) {
-        // School-specific view for Admins/KS
-        query = sql`SELECT ad.saved_logs, u.name as user_name FROM absensi_data ad JOIN users u ON ad.user_email = u.email WHERE ad.school_id = ${effectiveSchoolId}`;
-    } else if (user.role === 'GURU' || (isClassSpecific && !effectiveSchoolId)) {
-        // Teacher's own data
-        query = sql`SELECT saved_logs FROM absensi_data WHERE user_email = ${user.email}`;
-    } else {
-        return response.status(200).json({ filteredLogs: [] });
+    let params = [];
+    let whereClauses = [];
+
+    // --- Determine Data Scope ---
+    if (user.role === 'GURU') {
+        whereClauses.push(`ad.user_email = $${params.push(user.email)}`);
+    } else if (isGlobalView && user.role === 'SUPER_ADMIN') {
+        // No extra school filter for global view
+    } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(user.role) || (user.role === 'SUPER_ADMIN' && jurisdictionId)) {
+        const effectiveJurisdictionId = jurisdictionId || user.jurisdiction_id;
+        if (!effectiveJurisdictionId) return response.status(200).json({ allLogs: [] });
+        
+        const { rows: schoolIdRows } = await sql`
+            WITH RECURSIVE jurisdiction_tree AS (
+                SELECT id FROM jurisdictions WHERE id = ${effectiveJurisdictionId}
+                UNION ALL
+                SELECT j.id FROM jurisdictions j
+                INNER JOIN jurisdiction_tree jt ON j.parent_id = jt.id
+            )
+            SELECT s.id FROM schools s WHERE s.jurisdiction_id IN (SELECT id FROM jurisdiction_tree);
+        `;
+        const schoolIds = schoolIdRows.map(r => r.id);
+        if (schoolIds.length === 0) return response.status(200).json({ allLogs: [] });
+
+        whereClauses.push(`ad.school_id = ANY($${params.push(schoolIds)})`);
+
+    } else { // KEPALA_SEKOLAH, ADMIN_SEKOLAH, or SUPER_ADMIN acting on a school
+        const effectiveSchoolId = (['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(user.role)) ? user.school_id : schoolId;
+        if (!effectiveSchoolId) return response.status(200).json({ allLogs: [] });
+        whereClauses.push(`ad.school_id = $${params.push(effectiveSchoolId)}`);
     }
 
-    const { rows } = await query;
+    query = `
+        SELECT
+            log_obj as log,
+            u.name as "teacherName"
+        FROM absensi_data ad
+        JOIN users u ON ad.user_email = u.email
+        CROSS JOIN jsonb_array_elements(ad.saved_logs) as log_obj
+        ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
+    `;
+    
+    const { rows } = await sql.query(query, params);
 
-    let allLogs = rows.flatMap(row => (row.saved_logs || []).map(log => ({
-        ...log,
-        teacherName: row.user_name || user.name
-    })));
+    // Initial server-side class filter if specified
+    const allLogs = rows.map(row => ({ ...row.log, teacherName: row.teacherName }));
+    const filteredLogs = isClassSpecific && classFilter
+        ? allLogs.filter(log => log.class === classFilter)
+        : allLogs;
 
-    // Apply filters on the server-side JS
-    const { studentName, status, startDate, endDate } = filters || {};
-
-    if (classFilter) {
-        allLogs = allLogs.filter(log => log.class === classFilter);
-    }
-    if (startDate) {
-        allLogs = allLogs.filter(log => log.date >= startDate);
-    }
-    if (endDate) {
-        allLogs = allLogs.filter(log => log.date <= endDate);
-    }
-
-    const processedLogs = allLogs.map(log => {
-        let absentStudents = Object.entries(log.attendance).filter(([_, s]) => s !== 'H');
-        if (studentName) {
-            absentStudents = absentStudents.filter(([name, _]) => name.toLowerCase().includes(studentName.toLowerCase()));
-        }
-        if (status && status !== 'all') {
-            absentStudents = absentStudents.filter(([_, s]) => s === status);
-        }
-        return absentStudents.length > 0 ? { ...log, filteredAbsences: absentStudents } : null;
-    }).filter(Boolean);
-
-    return response.status(200).json({ filteredLogs: processedLogs });
+    return response.status(200).json({ allLogs: filteredLogs });
 }
 
 export async function handleGetSchoolStudentData({ payload, user, sql, response }) {
@@ -135,7 +124,11 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
     const aggregatedStudentsByClass = {};
     rows.forEach(row => {
         if (row.students_by_class) {
-            Object.assign(aggregatedStudentsByClass, row.students_by_class);
+            for (const className in row.students_by_class) {
+                if (!aggregatedStudentsByClass[className]) {
+                    aggregatedStudentsByClass[className] = row.students_by_class[className];
+                }
+            }
         }
     });
 
