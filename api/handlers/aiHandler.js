@@ -1,21 +1,21 @@
 import { GoogleGenAI } from "@google/genai";
 
 export default async function handleAiRecommendation({ payload, user, sql, response }) {
-    if (user.role !== 'SUPER_ADMIN' && user.role !== 'KEPALA_SEKOLAH' && user.role !== 'ADMIN_SEKOLAH') {
+    if (!['SUPER_ADMIN', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(user.role)) {
         return response.status(403).json({ error: 'Forbidden: Access denied' });
     }
 
     try {
         if (!process.env.API_KEY) {
             console.error('SERVER_CONFIGURATION_ERROR: API_KEY is not set in environment variables.');
-            return response.status(500).json({ error: 'Gagal menghasilkan rekomendasi: Konfigurasi server tidak lengkap.', details: 'Kunci API untuk layanan AI tidak ditemukan di lingkungan server.' });
+            return response.status(500).json({ error: 'Gagal menghasilkan rekomendasi: Konfigurasi server tidak lengkap.' });
         }
         
-        const { aiRange } = payload;
-        const schoolId = user.school_id;
+        const { aiRange, schoolId: payloadSchoolId } = payload;
+        const schoolId = user.role === 'SUPER_ADMIN' ? payloadSchoolId : user.school_id;
 
         if (!schoolId) {
-            return response.status(400).json({ error: 'User is not assigned to a school.' });
+            return response.status(400).json({ error: 'User not assigned to a school.' });
         }
 
         const today = new Date();
@@ -84,9 +84,8 @@ export default async function handleAiRecommendation({ payload, user, sql, respo
             LIMIT 25;
         `;
 
-
         if (topStudentsData.length === 0) {
-            return response.status(200).json({ success: true, recommendation: `Tidak ada data absensi (sakit, izin, alpa) dalam periode **${dateRangeContext}** untuk dianalisis.` });
+            return response.status(200).json({ recommendation: `Tidak ada data absensi (sakit, izin, alpa) dalam periode **${dateRangeContext}** untuk dianalisis.` });
         }
         
         const prompt = `
@@ -138,8 +137,7 @@ export default async function handleAiRecommendation({ payload, user, sql, respo
             config: { thinkingConfig: { thinkingBudget: 0 } }
         });
 
-        const recommendation = geminiResponse.text;
-        return response.status(200).json({ success: true, recommendation });
+        return response.status(200).json({ recommendation: geminiResponse.text });
 
     } catch (error) {
         console.error('AI Recommendation processing failed:', error);
