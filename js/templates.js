@@ -207,7 +207,6 @@ export const templates = {
 
                     ${primaryRole === 'SUPER_ADMIN' ? `
                     <button id="view-jurisdiction-panel-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg><div><p class="font-bold">Panel Manajemen Yurisdiksi</p><p class="text-sm font-normal opacity-90">Kelola hierarki wilayah dan sekolah.</p></div></button>
-                    <button id="toggle-maintenance-btn" class="w-full bg-slate-600 hover:bg-slate-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><div id="maintenance-toggle-container" class="w-full flex items-center justify-between"><span class="flex items-center gap-4"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg><div><p class="font-bold">Mode Perbaikan</p><p class="text-sm font-normal opacity-90">Memuat status...</p></div></span></div></button>
                     ` : ''}
 
                 </div>
@@ -585,17 +584,6 @@ export const templates = {
                     <strong>Detail Error:</strong> ${encodeHTML(errorMessage) || 'Tidak ada detail error.'}
                 </div>
                 <button id="retry-connection-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Coba Lagi</button>
-            </div>
-        </div>`,
-    maintenance: () => `
-        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
-            <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
-                <svg class="mx-auto h-16 w-16 text-amber-500 mb-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.471-2.471a1.286 1.286 0 00-1.82-1.82L11.42 15.17zm0 0L5.57 21a2.652 2.652 0 01-3.75-3.75l5.877-5.877m0 0l2.471 2.471" />
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <h1 class="text-3xl font-bold text-slate-800 mb-3">Aplikasi dalam Perbaikan</h1>
-                <p class="text-slate-500">Kami sedang melakukan beberapa pembaruan untuk meningkatkan pengalaman Anda. Aplikasi akan segera kembali normal. Mohon coba lagi nanti.</p>
             </div>
         </div>`,
     confirmation: (message) => `
