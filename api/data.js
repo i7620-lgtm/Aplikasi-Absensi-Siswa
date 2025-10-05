@@ -11,6 +11,7 @@ import handleGetDashboardData from './handlers/dashboardHandler.js';
 import handleGetRecapData from './handlers/recapHandler.js';
 import handleAiRecommendation from './handlers/aiHandler.js';
 import handleGetParentData from './handlers/parentHandler.js';
+import handleMigrateLegacyData from './handlers/migrationHandler.js';
 import { 
     handleGetJurisdictionTree, 
     handleCreateJurisdiction, 
@@ -167,6 +168,7 @@ export default async function handler(request, response) {
             'generateAiRecommendation': () => handleAiRecommendation(context),
             'getSchoolStudentData': () => handleGetSchoolStudentData(context),
             'getParentData': () => handleGetParentData(context),
+            'migrateLegacyData': () => handleMigrateLegacyData(context),
             'getJurisdictionTree': () => handleGetJurisdictionTree(context),
             'createJurisdiction': () => handleCreateJurisdiction(context),
             'updateJurisdiction': () => handleUpdateJurisdiction(context),
