@@ -44,7 +44,10 @@ export async function handleSetMaintenanceStatus({ payload, user, response }) {
         return response.status(200).json({ success: true, newState: enabled });
     } catch (error) {
         console.error("Edge Config write error:", error);
-        return response.status(500).json({ error: 'Failed to update maintenance status.' });
+        return response.status(500).json({ 
+            error: 'Gagal memperbarui status. Pastikan Vercel project memiliki izin tulis ke Edge Config.',
+            details: error.message 
+        });
     }
 }
 
