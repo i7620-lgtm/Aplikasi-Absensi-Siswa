@@ -14,7 +14,14 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        @import url('https://rsms.me/inter/inter.css');
+        /* --- Self-hosted Inter font with font-display: swap for optimal performance --- */
+        @font-face {
+            font-family: 'Inter';
+            font-style:  normal;
+            font-weight: 100 900;
+            font-display: swap;
+            src: url("https://rsms.me/inter/font-files/Inter-roman.var.woff2?v=3.19") format("woff2");
+        }
         body { font-family: 'Inter', sans-serif; }
         .screen { display: none; }
         .screen.active { display: block; }
