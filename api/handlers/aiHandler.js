@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 
 export default async function handleAiRecommendation({ payload, user, sql, response }) {
@@ -48,24 +49,24 @@ export default async function handleAiRecommendation({ payload, user, sql, respo
         const startDateString = startDate.toISOString().split('T')[0];
         
         const { rows: topStudentsData } = await sql`
-            WITH unnested_logs AS (
-              SELECT
-                log_obj ->> 'class' as class,
-                log_obj ->> 'date' as date,
-                log_obj -> 'attendance' as attendance
-              FROM absensi_data ad
-              CROSS JOIN jsonb_array_elements(ad.saved_logs) as log_obj
-              WHERE ad.school_id = ${schoolId}
+            WITH
+            attendance_events_in_range AS (
+                SELECT
+                    payload
+                FROM change_log
+                WHERE school_id = ${schoolId}
+                  AND event_type = 'ATTENDANCE_UPDATED'
+                  AND (payload->>'date')::date >= ${startDateString}
             ),
             absences_in_range AS (
-              SELECT
-                class,
-                date,
-                att.key as name,
-                att.value as status
-              FROM unnested_logs
-              CROSS JOIN jsonb_each_text(attendance) as att
-              WHERE att.value <> 'H' AND date >= ${startDateString}
+                SELECT
+                    payload->>'class' as class,
+                    payload->>'date' as date,
+                    att.key as name,
+                    att.value as status
+                FROM attendance_events_in_range
+                CROSS JOIN jsonb_each_text(payload->'attendance') as att
+                WHERE att.value <> 'H'
             ),
             student_summary AS (
                 SELECT
