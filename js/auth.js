@@ -34,9 +34,18 @@ export function handleSignIn() {
 
     const oauth2Endpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
 
+    // Ensure a consistent redirect_uri by removing 'index.html' if it's at the end of the path.
+    // This prevents mismatches if the user accesses the site via '/some/path/' vs '/some/path/index.html'.
+    let path = window.location.pathname;
+    if (path.endsWith('/index.html')) {
+        // Removes 'index.html' but keeps the preceding '/'. e.g., /foo/index.html -> /foo/
+        path = path.slice(0, -10);
+    }
+    const redirectUri = window.location.origin + path;
+
     const params = {
         'client_id': googleClientId,
-        'redirect_uri': window.location.origin + window.location.pathname,
+        'redirect_uri': redirectUri,
         'response_type': 'token',
         'scope': 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
         'include_granted_scopes': 'true'
