@@ -69,10 +69,6 @@ async function _fetch(action, payload = {}) {
 }
 
 export const apiService = {
-    async getAuthConfig() {
-        return await _fetch('getAuthConfig');
-    },
-
     async loginOrRegisterUser(profile) {
         return await _fetch('loginOrRegister', { profile });
     },
