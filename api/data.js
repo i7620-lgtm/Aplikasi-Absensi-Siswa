@@ -11,7 +11,8 @@ import handleGetDashboardData from './handlers/dashboardHandler.js';
 import handleGetRecapData from './handlers/recapHandler.js';
 import handleAiRecommendation from './handlers/aiHandler.js';
 import handleGetParentData from './handlers/parentHandler.js';
-import handleRunBackgroundMigrations from './handlers/migrationHandler.js'; // Baru
+// BARU: Impor handler migrasi sisi klien
+import { handleCheckAndStartClientMigration, handleUploadMigratedData } from './handlers/migrationHandler.js'; 
 import { 
     handleGetJurisdictionTree, 
     handleCreateJurisdiction, 
@@ -42,7 +43,7 @@ async function setupEssentialTables() {
             // Tabel Data (dipindahkan ke sini untuk konsistensi)
             await sql`CREATE TABLE IF NOT EXISTS change_log (
                 id BIGSERIAL PRIMARY KEY,
-                school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+                school_id INTEGER NOT NULL,
                 user_email VARCHAR(255) NOT NULL,
                 event_type VARCHAR(50) NOT NULL,
                 payload JSONB NOT NULL,
@@ -51,11 +52,12 @@ async function setupEssentialTables() {
             // Tabel absensi lama, hanya ada untuk migrasi. Bisa dihapus setelah migrasi selesai.
             await sql`CREATE TABLE IF NOT EXISTS absensi_data (
                 id BIGSERIAL PRIMARY KEY,
-                school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-                student_name VARCHAR(255) NOT NULL,
-                class_name VARCHAR(50) NOT NULL,
-                date DATE NOT NULL,
-                status CHAR(1) NOT NULL,
+                school_id INTEGER,
+                student_name VARCHAR(255),
+                class VARCHAR(50),
+                class_name VARCHAR(50),
+                date DATE,
+                status CHAR(1),
                 teacher_email VARCHAR(255),
                 last_updated TIMESTAMPTZ DEFAULT NOW()
             );`;
@@ -87,9 +89,7 @@ async function setupExtendedTables() {
             
             // Indeks untuk mempercepat query
             await sql`CREATE INDEX IF NOT EXISTS idx_change_log_school_id_id ON change_log (school_id, id);`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_absensi_data_school_class_date ON absensi_data (school_id, class_name, date);`;
-            await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_absensi ON absensi_data (school_id, student_name, date);`;
-
+            
             console.log("Setup skema lanjutan (indeks) berhasil.");
         } catch (error) {
             console.error("Gagal melakukan setup tabel lanjutan (indeks):", error);
@@ -132,8 +132,8 @@ export default async function handler(request, response) {
         }
         
         // Dari titik ini, semua aksi memerlukan setup lanjutan (indeks)
-        // Kita tidak menunggu ini untuk aksi super admin tertentu seperti migrasi
-        if (action !== 'runBackgroundMigrations') {
+        const nonExtendedSetupActions = ['checkAndStartClientMigration', 'uploadMigratedData'];
+        if (!nonExtendedSetupActions.includes(action)) {
             await setupExtendedTables();
         }
 
@@ -165,7 +165,8 @@ export default async function handler(request, response) {
 
 
         const authenticatedActions = {
-            'runBackgroundMigrations': () => handleRunBackgroundMigrations(context), // Baru
+            'checkAndStartClientMigration': () => handleCheckAndStartClientMigration(context), // BARU
+            'uploadMigratedData': () => handleUploadMigratedData(context), // BARU
             'getUserProfile': () => response.status(200).json({ userProfile: context.user }),
             'getFullUserData': () => handleGetFullUserData(context),
             'getUpdateSignal': () => handleGetUpdateSignal(context),
