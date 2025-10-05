@@ -1,6 +1,3 @@
-
-
-
 import { initializeGsi, handleSignIn, handleSignOut } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal } from './ui.js';
@@ -12,7 +9,7 @@ export const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5
 
 // --- APPLICATION STATE ---
 export let state = {
-    userProfile: null, // will contain { name, email, picture, role, school_id }
+    userProfile: null, // will contain { name, email, picture, primaryRole, isParent, school_id, ... }
     currentScreen: 'setup',
     selectedClass: '',
     selectedDate: new Date().toISOString().split('T')[0],
@@ -20,15 +17,16 @@ export let state = {
     studentsByClass: {},
     attendance: {},
     savedLogs: [], 
+    localVersion: 0, // NEW: Tracks the latest change ID processed by the client
     historyClassFilter: null,
-    allHistoryLogs: [], // NEW: Store all logs for client-side filtering
+    allHistoryLogs: [],
     dataScreenFilters: {
         studentName: '',
         status: 'all',
         startDate: '',
         endDate: '',
     },
-    newStudents: [''],
+    newStudents: [{ name: '', parentEmail: '' }], // Changed to object
     recapSortOrder: 'total',
     adminPanel: {
         users: [],
@@ -60,6 +58,10 @@ export let state = {
             selectedRange: 'last30days', // 'last30days', 'semester', 'year'
         },
     },
+    parentDashboard: { // New state for parent view
+        isLoading: true,
+        data: null,
+    },
     setup: {
         polling: {
             timeoutId: null,
@@ -73,28 +75,30 @@ export let state = {
     connectionError: null,
     adminActingAsSchool: null, // Stores {id, name} for SUPER_ADMIN context
     adminActingAsJurisdiction: null, // NEW: Stores {id, name} for SUPER_ADMIN/DINAS context
-    lastSaveContext: null, // Stores { teacherName, className } for admin success message
+    lastSaveContext: null, // Stores { savedBy, className } for success message
 };
 
 // Function to update state and persist it
 export async function setState(newState) {
-    const oldState = { ...state };
+    // --- NEW: Centralized context clearing logic ---
+    // Ensures a Super Admin can only be in one context (school or jurisdiction) at a time.
+    if ('adminActingAsSchool' in newState && newState.adminActingAsSchool) {
+        newState.adminActingAsJurisdiction = null;
+    } else if ('adminActingAsJurisdiction' in newState && newState.adminActingAsJurisdiction) {
+        newState.adminActingAsSchool = null;
+    }
+    // --- END of new logic ---
+    
     state = { ...state, ...newState };
 
-    // Persist critical data for offline use
-    if (newState.userProfile || newState.studentsByClass || newState.savedLogs) {
+    if (newState.userProfile !== undefined || newState.studentsByClass !== undefined || newState.savedLogs !== undefined || newState.localVersion !== undefined) {
         await idb.set('userProfile', state.userProfile);
-        await idb.set('userData', {
-            students_by_class: state.studentsByClass,
-            saved_logs: state.savedLogs
-        });
         
-        const hasDataChanged = JSON.stringify(oldState.studentsByClass) !== JSON.stringify(state.studentsByClass) ||
-                               JSON.stringify(oldState.savedLogs) !== JSON.stringify(state.savedLogs);
-
-        if (hasDataChanged) {
-            syncData().catch(err => console.error("Sync process failed:", err));
-        }
+        await idb.set('userData', {
+            studentsByClass: state.studentsByClass,
+            savedLogs: state.savedLogs,
+            localVersion: state.localVersion
+        });
     }
 }
 
@@ -107,7 +111,6 @@ export function navigateTo(screen) {
     const schoolContextScreens = ['setup', 'dashboard', 'add-students', 'attendance', 'data', 'recap'];
     const adminContextScreens = ['dashboard', 'jurisdictionPanel', 'adminPanel'];
     
-    // Clear school context if leaving a school-focused flow
     if (schoolContextScreens.includes(state.currentScreen) && !schoolContextScreens.includes(screen)) {
         if (state.adminActingAsSchool) {
             console.log("Leaving school context. Clearing Super Admin school context.");
@@ -118,7 +121,6 @@ export function navigateTo(screen) {
         }
     }
     
-    // Clear jurisdiction context if leaving a context-sensitive flow
     if (adminContextScreens.includes(state.currentScreen) && !adminContextScreens.includes(screen)) {
         if (state.adminActingAsJurisdiction) {
             console.log("Leaving jurisdiction context. Clearing context.");
@@ -137,7 +139,6 @@ export function navigateTo(screen) {
         }
     }
 
-    // --- START: Real-time update cleanup ---
     if (state.dashboard.polling.timeoutId) {
         clearTimeout(state.dashboard.polling.timeoutId);
         setState({ dashboard: { ...state.dashboard, polling: { timeoutId: null, interval: 10000 } } });
@@ -153,45 +154,16 @@ export function navigateTo(screen) {
         setState({ setup: { ...state.setup, polling: { timeoutId: null, interval: 10000 } } });
         console.log('Setup Screen (Teacher/Admin) polling stopped.');
     }
-    // --- END: Real-time update cleanup ---
     
     state.currentScreen = screen;
     render();
 }
 
-async function syncData() {
-    if ('serviceWorker' in navigator && 'SyncManager' in window) {
-        try {
-            const registration = await navigator.serviceWorker.ready;
-            await registration.sync.register('sync-data');
-            console.log('Background sync registration successful.');
-        } catch (e) {
-            console.error('Background sync registration failed:', e);
-        }
-    }
-
-    if (navigator.onLine && state.userProfile) {
-        console.log('Online, attempting immediate sync...');
-        showNotification('Menyinkronkan data ke cloud...', 'info');
-        try {
-            await apiService.saveData({ studentsByClass: state.studentsByClass, savedLogs: state.savedLogs });
-            console.log('Immediate sync successful.');
-            showNotification('Data berhasil disinkronkan!', 'success');
-        } catch (error) {
-            console.error('Immediate sync failed, relying on background sync.', error);
-            showNotification('Gagal sinkronisasi, akan dicoba lagi di latar belakang.', 'error');
-        }
-    } else if (!navigator.onLine) {
-        showNotification('Anda offline. Data disimpan lokal dan akan disinkronkan nanti.');
-    }
-}
-
-
 async function findAndLoadClassDataForAdmin(className) {
-    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
+    const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole);
     if (!isAdmin) return false;
 
-    const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+    const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
     if (!schoolId) {
         showNotification('Konteks sekolah tidak dipilih.', 'error');
         return false;
@@ -202,12 +174,12 @@ async function findAndLoadClassDataForAdmin(className) {
         const { aggregatedStudentsByClass } = await apiService.getSchoolStudentData(schoolId);
         const classData = aggregatedStudentsByClass[className];
         
-        if (classData && classData.students && classData.students.length > 0) {
+        if (classData && classData.length > 0) {
             state.studentsByClass[className] = {
                 ...(state.studentsByClass[className] || {}),
-                students: classData.students
+                students: classData
             };
-            state.students = classData.students;
+            state.students = classData;
             return true;
         }
     } catch (error) {
@@ -226,7 +198,7 @@ export async function handleStartAttendance() {
     state.selectedDate = document.getElementById('date-input').value;
     
     let students = (state.studentsByClass[state.selectedClass] || {}).students || [];
-    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
+    const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole);
 
     if (students.length === 0 && isAdmin) {
         const found = await findAndLoadClassDataForAdmin(state.selectedClass);
@@ -243,12 +215,12 @@ export async function handleStartAttendance() {
     }
 
     if (state.students.length === 0) {
-        state.newStudents = [''];
+        state.newStudents = [{ name: '', parentEmail: '' }];
         navigateTo('add-students');
     } else {
         state.attendance = existingLog ? { ...existingLog.attendance } : {};
         if (!existingLog) {
-            state.students.forEach(s => state.attendance[s] = 'H');
+            state.students.forEach(s => state.attendance[s.name] = 'H');
         }
         navigateTo('attendance');
     }
@@ -257,32 +229,57 @@ export async function handleStartAttendance() {
 export async function handleManageStudents() {
     state.selectedClass = document.getElementById('class-select').value;
     let students = (state.studentsByClass[state.selectedClass] || {}).students || [];
-    const isAdmin = state.userProfile.role === 'SUPER_ADMIN' || state.userProfile.role === 'ADMIN_SEKOLAH';
+    const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole);
     if (students.length === 0 && isAdmin) {
         const found = await findAndLoadClassDataForAdmin(state.selectedClass);
         if (found) students = state.students;
     }
     state.students = students;
-    state.newStudents = state.students.length > 0 ? [...state.students] : [''];
+    state.newStudents = state.students.length > 0 ? [...state.students] : [{ name: '', parentEmail: '' }];
     navigateTo('add-students');
 }
 
 export async function handleSaveNewStudents() {
-    const finalStudentList = state.newStudents.map(s => s.trim()).filter(s => s);
+    const finalStudentList = state.newStudents
+        .map(s => ({ name: s.name.trim(), parentEmail: (s.parentEmail || '').trim() }))
+        .filter(s => s.name);
+
     showLoader('Menyimpan data siswa...');
     
-    const updatedStudentsByClass = {
-        ...state.studentsByClass,
-        [state.selectedClass]: {
-            students: finalStudentList,
-            lastModified: new Date().toISOString()
+    const newStudentLog = {
+        type: 'STUDENT_LIST_UPDATED',
+        payload: {
+            class: state.selectedClass,
+            students: finalStudentList
         }
     };
-    
-    await setState({ studentsByClass: updatedStudentsByClass });
-    
-    hideLoader();
-    navigateTo('setup');
+
+    try {
+        const response = await apiService.saveData(newStudentLog);
+        
+        // Optimistic update for both online and offline
+        const updatedStudentsByClass = { ...state.studentsByClass };
+        updatedStudentsByClass[state.selectedClass] = { students: finalStudentList };
+
+        if (response.queued) {
+            // Offline case: Only update local state, NOT localVersion
+            await setState({ studentsByClass: updatedStudentsByClass });
+            hideLoader();
+            showNotification('Anda sedang offline. Daftar siswa disimpan lokal dan akan disinkronkan nanti.', 'info');
+        } else {
+            // Online case: Update state AND localVersion from server
+            await setState({ 
+                studentsByClass: updatedStudentsByClass,
+                localVersion: response.newVersion
+            });
+            hideLoader();
+        }
+        
+        navigateTo('setup');
+    } catch (error) {
+        hideLoader();
+        showNotification('Gagal menyimpan daftar siswa: ' + error.message, 'error');
+    }
 }
 
 export async function handleSaveAttendance() {
@@ -291,46 +288,63 @@ export async function handleSaveAttendance() {
 
     showLoader('Menyimpan absensi...');
 
-    const existingLogIndex = state.savedLogs.findIndex(log => log.class === state.selectedClass && log.date === state.selectedDate);
-    const newLog = { 
+    const newLogPayload = { 
         date: state.selectedDate, 
         class: state.selectedClass, 
         attendance: { ...state.attendance },
-        lastModified: new Date().toISOString()
+    };
+    
+    const newLogEvent = {
+        type: 'ATTENDANCE_UPDATED',
+        payload: newLogPayload
     };
 
-    const updatedLogs = [...state.savedLogs];
-    if (existingLogIndex > -1) { 
-        updatedLogs[existingLogIndex] = newLog; 
-    } else { 
-        updatedLogs.push(newLog); 
-    }
-
     try {
-        // Call API directly to get the response for visual feedback
-        const response = await apiService.saveData({ studentsByClass: state.studentsByClass, savedLogs: updatedLogs });
+        const response = await apiService.saveData(newLogEvent);
 
-        // On API success, update local state with the same data and the context from the response.
-        const newContext = response.savedAsTeacherName 
-            ? { teacherName: response.savedAsTeacherName, className: state.selectedClass } 
-            : null;
-        await setState({ savedLogs: updatedLogs, lastSaveContext: newContext });
+        // Optimistically update local state on success (for both online and offline)
+        const existingLogIndex = state.savedLogs.findIndex(log => log.class === state.selectedClass && log.date === state.selectedDate);
+        const updatedLogs = [...state.savedLogs];
+        if (existingLogIndex > -1) { 
+            updatedLogs[existingLogIndex] = newLogPayload; 
+        } else { 
+            updatedLogs.push(newLogPayload); 
+        }
+
+        const newContext = { 
+            savedBy: response.savedBy, 
+            className: state.selectedClass 
+        };
         
-        hideLoader();
+        if (response.queued) {
+             // Offline Case: Update local data, but NOT the version number
+            await setState({ 
+                savedLogs: updatedLogs, 
+                lastSaveContext: newContext,
+            });
+            hideLoader();
+            showNotification('Anda sedang offline. Absensi disimpan lokal dan akan disinkronkan nanti.', 'info');
+        } else {
+            // Online Case: Update local data AND the version number
+            await setState({ 
+                savedLogs: updatedLogs, 
+                lastSaveContext: newContext,
+                localVersion: response.newVersion
+            });
+            hideLoader();
+        }
+        
         navigateTo('success');
     } catch (error) {
-        // If API fails, save locally for offline sync later.
-        console.error("Online save failed, saving locally:", error);
-        await setState({ savedLogs: updatedLogs, lastSaveContext: null }); // Save locally without context.
-        showNotification('Gagal menyimpan ke cloud. Data disimpan lokal & akan disinkronkan nanti.', 'info');
+        console.error("Save failed:", error);
+        showNotification('Gagal menyimpan: ' + error.message, 'error');
         hideLoader();
-        navigateTo('success');
     }
 }
 
 
 export async function handleViewHistory(isClassSpecific = false) {
-    const isSuperAdmin = state.userProfile.role === 'SUPER_ADMIN';
+    const isSuperAdmin = state.userProfile.primaryRole === 'SUPER_ADMIN';
     const isGlobalView = isSuperAdmin && !isClassSpecific && !state.adminActingAsSchool;
 
     await setState({ 
@@ -354,7 +368,7 @@ export async function handleGenerateAiRecommendation() {
     render();
 
     // Determine the correct schoolId for the current context.
-    const schoolId = state.userProfile.role === 'SUPER_ADMIN' 
+    const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' 
         ? state.adminActingAsSchool?.id 
         : state.userProfile.school_id;
     
@@ -396,7 +410,10 @@ export async function handleCreateSchool() {
 
 
 export function handleDownloadTemplate() {
-    const csvContent = "data:text/csv;charset=utf-8," + "Nama Siswa\nContoh Siswa 1\nContoh Siswa 2";
+    const csvContent = "data:text/csv;charset=utf-8," 
+        + "Nama Siswa,Email Orang Tua\n"
+        + "Contoh Siswa 1,orangtua1@example.com\n"
+        + "Contoh Siswa 2,orangtua2@example.com";
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -424,12 +441,16 @@ export function handleExcelImport(event) {
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
             const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-            const studentNames = json.slice(1).map(row => String(row[0] || '').trim()).filter(Boolean);
+            
+            const newStudents = json.slice(1).map(row => ({
+                name: String(row[0] || '').trim(),
+                parentEmail: String(row[1] || '').trim()
+            })).filter(s => s.name);
 
-            if (studentNames.length > 0) {
-                state.newStudents = studentNames;
+            if (newStudents.length > 0) {
+                state.newStudents = newStudents;
                 renderScreen('add-students');
-                showNotification(`${studentNames.length} siswa berhasil diimpor & akan menggantikan daftar saat ini.`);
+                showNotification(`${newStudents.length} siswa berhasil diimpor & akan menggantikan daftar saat ini.`);
             } else {
                 showNotification('Tidak ada nama siswa yang ditemukan di file.', 'error');
             }
@@ -491,7 +512,7 @@ export async function handleDownloadData() {
 }
 
 export async function handleDownloadFullSchoolReport() {
-    const isSuperAdmin = state.userProfile.role === 'SUPER_ADMIN';
+    const isSuperAdmin = state.userProfile.primaryRole === 'SUPER_ADMIN';
     let schoolId = isSuperAdmin ? null : state.userProfile.school_id;
     let schoolName = 'Sekolah';
 
@@ -501,8 +522,6 @@ export async function handleDownloadFullSchoolReport() {
         schoolId = selectedSchool.id;
         schoolName = selectedSchool.name.replace(/\s+/g, '_'); // Sanitize name for filename
     } else {
-        // For Admin Sekolah, we need the school name but don't have it in the state.
-        // A better approach would be to have school info in userProfile. For now, we'll keep it generic.
         const schoolInfo = state.adminPanel.schools.find(s => s.id === schoolId);
         if (schoolInfo) schoolName = schoolInfo.name.replace(/\s+/g, '_');
     }
@@ -517,6 +536,76 @@ export async function handleDownloadFullSchoolReport() {
 }
 
 
+// --- DATA SYNC LOGIC ---
+function applyChanges(changes) {
+    if (!changes || changes.length === 0) return false;
+
+    let dataChanged = false;
+    const newStudentsByClass = { ...state.studentsByClass };
+    const newSavedLogs = [...state.savedLogs];
+
+    changes.forEach(change => {
+        const { event_type, payload } = change;
+        if (event_type === 'ATTENDANCE_UPDATED') {
+            const existingLogIndex = newSavedLogs.findIndex(log => log.class === payload.class && log.date === payload.date);
+            if (existingLogIndex > -1) {
+                newSavedLogs[existingLogIndex] = payload;
+            } else {
+                newSavedLogs.push(payload);
+            }
+            dataChanged = true;
+        } else if (event_type === 'STUDENT_LIST_UPDATED') {
+            newStudentsByClass[payload.class] = { students: payload.students };
+            dataChanged = true;
+        }
+    });
+
+    if (dataChanged) {
+        setState({
+            studentsByClass: newStudentsByClass,
+            savedLogs: newSavedLogs,
+            localVersion: changes[changes.length - 1].id // Update to the latest version ID from the batch
+        });
+    } else {
+        // Even if no data changed, update version to not re-fetch same empty changes
+        setState({ localVersion: changes[changes.length - 1].id });
+    }
+    
+    return dataChanged;
+}
+
+async function syncWithServer() {
+    if (!navigator.onLine || !state.userProfile || !state.userProfile.school_id) {
+        console.log("Skipping sync: Offline, no user, or no school context.");
+        return;
+    }
+
+    try {
+        const { latestVersion } = await apiService.getUpdateSignal({ schoolId: state.userProfile.school_id });
+
+        if (latestVersion && latestVersion > state.localVersion) {
+            console.log(`Server version (${latestVersion}) > Local version (${state.localVersion}). Fetching changes.`);
+            showNotification('Memperbarui data terbaru dari server...', 'info');
+
+            const { changes } = await apiService.getChangesSince({ schoolId: state.userProfile.school_id, lastVersion: state.localVersion });
+            
+            const dataWasUpdated = applyChanges(changes);
+            
+            if (dataWasUpdated) {
+                showNotification('Data berhasil diperbarui!', 'success');
+                render(); // Re-render the current screen with the fresh data
+            } else {
+                console.log("Sync completed, no render needed as only version number was updated.");
+            }
+        } else {
+            console.log("Local data is up-to-date.");
+        }
+    } catch (error) {
+        console.error("Failed to sync with server:", error);
+    }
+}
+
+
 // --- INITIALIZATION ---
 async function loadInitialData() {
     const userProfile = await idb.get('userProfile');
@@ -524,18 +613,15 @@ async function loadInitialData() {
 
     if (userProfile && userData) {
         state.userProfile = userProfile;
-        state.studentsByClass = userData.students_by_class || {};
-        state.savedLogs = userData.saved_logs || [];
+        state.studentsByClass = userData.studentsByClass || {};
+        state.savedLogs = userData.savedLogs || [];
+        state.localVersion = userData.localVersion || 0;
         
-        console.log('Data dipulihkan dari penyimpanan offline untuk:', userProfile.name);
+        console.log(`Data dipulihkan dari penyimpanan offline. Versi lokal: ${state.localVersion}`);
         
-        if (userProfile.role === 'SUPER_ADMIN') {
-            state.currentScreen = 'adminHome';
-        } else if (userProfile.role === 'KEPALA_SEKOLAH') {
-            state.currentScreen = 'dashboard';
-        } else {
-            state.currentScreen = 'setup';
-        }
+        // With the new multi-role home, always go there if logged in.
+        state.currentScreen = 'multiRoleHome';
+
     }
 }
 
@@ -563,17 +649,25 @@ async function initApp() {
 
     await loadInitialData();
     
-    if (state.maintenanceMode.isActive && state.userProfile?.role !== 'SUPER_ADMIN') {
+    if (state.maintenanceMode.isActive && state.userProfile?.primaryRole !== 'SUPER_ADMIN') {
         navigateTo('maintenance');
     } else {
         initializeGsi();
         render();
+        if (state.userProfile) {
+            syncWithServer(); // Initial sync on load
+        }
     }
 
-    window.addEventListener('online', () => {
+    window.addEventListener('online', async () => {
         updateOnlineStatus(true);
-        showNotification('Koneksi internet kembali pulih.', 'success');
-        syncData();
+        const queue = await idb.getQueue();
+        if (queue.length > 0) {
+            showNotification(`Koneksi pulih. Menyinkronkan ${queue.length} perubahan...`, 'info');
+        } else {
+            showNotification('Koneksi internet kembali pulih.', 'success');
+        }
+        if (state.userProfile) syncWithServer();
     });
     window.addEventListener('offline', () => updateOnlineStatus(false));
     
@@ -591,4 +685,3 @@ async function initApp() {
 }
 
 initApp();
-      
