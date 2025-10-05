@@ -1,11 +1,16 @@
-
-
-
-
 import { state, CLASSES } from './main.js';
 import { getGsiReadyState } from './auth.js';
 
-function getRoleDisplayName(role) {
+export function encodeHTML(str) {
+    if (typeof str !== 'string' || !str) return str === 0 ? '0' : (str || '');
+    return str.replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#039;');
+}
+
+export function getRoleDisplayName(role) {
     switch(role) {
         case 'GURU': return 'Guru';
         case 'KEPALA_SEKOLAH': return 'Kepala Sekolah';
@@ -13,6 +18,7 @@ function getRoleDisplayName(role) {
         case 'ADMIN_SEKOLAH': return 'Admin Sekolah';
         case 'DINAS_PENDIDIKAN': return 'Analis Dinas Pendidikan';
         case 'ADMIN_DINAS_PENDIDIKAN': return 'Manajer Dinas Pendidikan';
+        case 'ORANG_TUA': return 'Orang Tua';
         default: return role;
     }
 }
@@ -34,12 +40,12 @@ function getWeekRange(date) {
 
 export const templates = {
     setup: () => {
-        const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
-        const isTeacher = state.userProfile?.role === 'GURU';
+        const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile?.primaryRole);
+        const isTeacher = state.userProfile?.primaryRole === 'GURU';
         const assignedClasses = state.userProfile?.assigned_classes || [];
         const needsAssignment = isTeacher && assignedClasses.length === 0;
         const availableClasses = isAdmin ? CLASSES : assignedClasses;
-        const isSuperAdminInContext = state.userProfile?.role === 'SUPER_ADMIN' && state.adminActingAsSchool;
+        const isSuperAdminInContext = state.userProfile?.primaryRole === 'SUPER_ADMIN' && state.adminActingAsSchool;
         const title = isSuperAdminInContext 
             ? `Absensi Sekolah`
             : "Absensi Online Siswa";
@@ -51,9 +57,9 @@ export const templates = {
                     state.userProfile
                     ? `
                         <div class="flex items-center justify-between mb-6">
-                            <h1 class="text-xl font-bold text-slate-800">${title}</h1>
+                            <h1 class="text-xl font-bold text-slate-800">${encodeHTML(title)}</h1>
                             <div>
-                                ${isAdmin ? `<button id="back-to-admin-home-btn" class="text-slate-500 hover:text-blue-500 transition duration-300 p-2 rounded-full -mr-2" title="Kembali ke Dasbor Admin"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg></button>` : ''}
+                                <button id="back-to-main-home-btn" class="text-slate-500 hover:text-blue-500 transition duration-300 p-2 rounded-full -mr-2" title="Kembali ke Beranda"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg></button>
                                 <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                                 </button>
@@ -61,15 +67,15 @@ export const templates = {
                         </div>
                         ${isSuperAdminInContext ? `
                         <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6 text-sm text-indigo-800" role="alert">
-                            <p><span class="font-bold">Mode Konteks:</span> Anda bertindak sebagai admin untuk sekolah <strong class="font-semibold">${state.adminActingAsSchool.name}</strong>.</p>
+                            <p><span class="font-bold">Mode Konteks:</span> Anda bertindak sebagai admin untuk sekolah <strong class="font-semibold">${encodeHTML(state.adminActingAsSchool.name)}</strong>.</p>
                         </div>
                         ` : ''}
                         <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
-                            <img src="${state.userProfile.picture}" alt="User" class="w-12 h-12 rounded-full"/>
+                            <img src="${encodeHTML(state.userProfile.picture)}" alt="User" class="w-12 h-12 rounded-full"/>
                             <div>
-                                <p class="font-semibold text-slate-800">${state.userProfile.name}</p>
-                                <p class="text-sm text-slate-500">${state.userProfile.email}</p>
-                                <span class="px-2 py-0.5 mt-1 inline-block rounded-full text-xs font-semibold ${isAdmin ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}">${getRoleDisplayName(state.userProfile.role)}</span>
+                                <p class="font-semibold text-slate-800">${encodeHTML(state.userProfile.name)}</p>
+                                <p class="text-sm text-slate-500">${encodeHTML(state.userProfile.email)}</p>
+                                <span class="px-2 py-0.5 mt-1 inline-block rounded-full text-xs font-semibold ${isAdmin ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}">${getRoleDisplayName(state.userProfile.primaryRole)}</span>
                             </div>
                         </div>
                     `
@@ -140,47 +146,75 @@ export const templates = {
             </div>
         </div>`;
     },
-    adminHome: () => {
-        const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
-        const title = state.userProfile?.role === 'SUPER_ADMIN' ? 'Dasbor Super Admin' : 'Dasbor Admin Sekolah';
+    multiRoleHome: () => {
+        if (!state.userProfile) return ``; // Should not happen, but a safeguard.
+        const { name, email, picture, primaryRole, isParent } = state.userProfile;
+        
+        const roleMapping = {
+            'SUPER_ADMIN': { color: 'bg-red-100 text-red-800', title: 'Super Admin' },
+            'ADMIN_SEKOLAH': { color: 'bg-indigo-100 text-indigo-800', title: 'Admin Sekolah' },
+            'KEPALA_SEKOLAH': { color: 'bg-purple-100 text-purple-800', title: 'Kepala Sekolah' },
+            'GURU': { color: 'bg-green-100 text-green-800', title: 'Guru' },
+            'ADMIN_DINAS_PENDIDIKAN': { color: 'bg-sky-100 text-sky-800', title: 'Manajer Dinas Pendidikan' },
+            'DINAS_PENDIDIKAN': { color: 'bg-cyan-100 text-cyan-800', title: 'Analis Dinas Pendidikan' },
+            'ORANG_TUA': { color: 'bg-teal-100 text-teal-800', title: 'Orang Tua' },
+        };
+        
+        const primaryRoleInfo = roleMapping[primaryRole] || { color: 'bg-slate-100 text-slate-800', title: primaryRole };
+
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
-            <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
+            <div class="bg-white p-8 rounded-2xl shadow-lg max-w-2xl w-full">
                 <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-xl font-bold text-slate-800">${title}</h1>
+                    <h1 class="text-2xl font-bold text-slate-800">Beranda Aplikasi</h1>
                     <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                     </button>
                 </div>
-                <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
-                    <img src="${state.userProfile.picture}" alt="User" class="w-12 h-12 rounded-full"/>
-                    <div>
-                        <p class="font-semibold text-slate-800">${state.userProfile.name}</p>
-                        <p class="text-sm text-slate-500">${state.userProfile.email}</p>
-                        <span class="px-2 py-0.5 mt-1 inline-block rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">${getRoleDisplayName(state.userProfile.role)}</span>
+                <div class="flex flex-col sm:flex-row items-center gap-4 mb-8 p-4 bg-slate-50 rounded-lg">
+                    <img src="${encodeHTML(picture)}" alt="User" class="w-16 h-16 rounded-full"/>
+                    <div class="text-center sm:text-left">
+                        <p class="text-lg font-semibold text-slate-800">${encodeHTML(name)}</p>
+                        <p class="text-sm text-slate-500">${encodeHTML(email)}</p>
+                        <div class="mt-2 flex flex-wrap justify-center sm:justify-start gap-2">
+                            <span class="px-2 py-0.5 inline-block rounded-full text-xs font-semibold ${primaryRoleInfo.color}">${primaryRoleInfo.title}</span>
+                            ${isParent && primaryRole !== 'ORANG_TUA' ? `<span class="px-2 py-0.5 inline-block rounded-full text-xs font-semibold ${roleMapping['ORANG_TUA'].color}">${roleMapping['ORANG_TUA'].title}</span>` : ''}
+                        </div>
                     </div>
-                </div>
-                <div class="space-y-3 pt-4 border-t border-slate-200">
-                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center">Menu Admin</h2>
-                    <button id="go-to-attendance-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lakukan Absensi</button>
-                    <button id="view-dashboard-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Lihat Dasbor Sekolah</button>
-                    <button id="view-admin-panel-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Panel Manajemen Pengguna</button>
-                    ${state.userProfile?.role === 'SUPER_ADMIN' ? `
-                    <button id="view-jurisdiction-panel-btn" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Panel Manajemen Yurisdiksi</button>
-                    ` : ''}
-                    <button id="download-school-report-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300">Unduh Laporan Sekolah (Excel)</button>
                 </div>
 
-                ${state.userProfile?.role === 'SUPER_ADMIN' ? `
-                <div class="pt-4 mt-3 border-t border-slate-200">
-                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center mb-3">Mode Perbaikan</h2>
-                    <div id="maintenance-toggle-container" class="flex items-center justify-center p-3 bg-slate-50 rounded-lg">
-                        <p class="text-sm text-slate-500">Memuat status...</p>
-                    </div>
+                <div class="space-y-4">
+                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center">Pilih Aksi</h2>
+                    
+                    <!-- Teacher & School Admin Actions -->
+                    ${['GURU', 'ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN'].includes(primaryRole) ? `
+                    <button id="go-to-attendance-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><div><p class="font-bold">Lakukan & Kelola Absensi</p><p class="text-sm font-normal opacity-90">Catat kehadiran, kelola siswa, dan lihat rekap.</p></div></button>
+                    ` : ''}
+
+                    <!-- Dashboard Actions -->
+                     ${['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN', 'SUPER_ADMIN'].includes(primaryRole) ? `
+                    <button id="view-dashboard-btn" class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg><div><p class="font-bold">Lihat Dasbor Analitik</p><p class="text-sm font-normal opacity-90">Analisis data kehadiran, persentase, dan dapatkan rekomendasi AI.</p></div></button>
+                    ` : ''}
+
+                    <!-- Parent Action -->
+                    ${isParent ? `
+                    <button id="view-parent-dashboard-btn" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg><div><p class="font-bold">Dasbor Orang Tua</p><p class="text-sm font-normal opacity-90">Lihat riwayat kehadiran anak Anda.</p></div></button>
+                    ` : ''}
+
+                    <!-- Super Admin / Dinas Admin Actions -->
+                    ${['SUPER_ADMIN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
+                    <button id="view-admin-panel-btn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21v-1.5a2.5 2.5 0 00-5 0V21M3 21v-1.5a2.5 2.5 0 015 0V21"></path></svg><div><p class="font-bold">Panel Manajemen Pengguna</p><p class="text-sm font-normal opacity-90">Kelola pengguna dan penetapan peran.</p></div></button>
+                    ` : ''}
+
+                    ${primaryRole === 'SUPER_ADMIN' ? `
+                    <button id="view-jurisdiction-panel-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg><div><p class="font-bold">Panel Manajemen Yurisdiksi</p><p class="text-sm font-normal opacity-90">Kelola hierarki wilayah dan sekolah.</p></div></button>
+                    <button id="toggle-maintenance-btn" class="w-full bg-slate-600 hover:bg-slate-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><div id="maintenance-toggle-container" class="w-full flex items-center justify-between"><span class="flex items-center gap-4"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg><div><p class="font-bold">Mode Perbaikan</p><p class="text-sm font-normal opacity-90">Memuat status...</p></div></span></div></button>
+                    ` : ''}
+
                 </div>
-                ` : ''}
             </div>
-        </div>`;
+        </div>
+        `;
     },
     dashboard: () => {
         const { activeView, chartViewMode, selectedDate } = state.dashboard;
@@ -219,21 +253,17 @@ export const templates = {
             displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         }
         
-        const isSuperAdmin = state.userProfile?.role === 'SUPER_ADMIN';
-        const isSchoolAdmin = state.userProfile?.role === 'ADMIN_SEKOLAH';
-        const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.role);
+        const isSuperAdmin = state.userProfile?.primaryRole === 'SUPER_ADMIN';
+        const isSchoolAdmin = state.userProfile?.primaryRole === 'ADMIN_SEKOLAH';
+        const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.primaryRole);
         
-        let backButtonHtml = '';
-        if (isSuperAdmin || isSchoolAdmin) {
-            backButtonHtml = `<button id="dashboard-back-btn" data-target="adminHome" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>`;
-        }
-
+        let backButtonHtml = `<button id="dashboard-back-btn" data-target="multiRoleHome" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>`;
 
         let title = "Dasbor";
-        if (state.userProfile.role === 'KEPALA_SEKOLAH') title = "Dasbor Kepala Sekolah";
+        if (state.userProfile.primaryRole === 'KEPALA_SEKOLAH') title = "Dasbor Kepala Sekolah";
         if (isDinas) title = "Dasbor Regional Dinas Pendidikan";
-        if (isSuperAdmin && state.adminActingAsSchool) title = `Dasbor (Konteks: ${state.adminActingAsSchool.name})`;
-        if ((isSuperAdmin || isDinas) && state.adminActingAsJurisdiction) title = `Dasbor (Konteks: ${state.adminActingAsJurisdiction.name})`;
+        if (isSuperAdmin && state.adminActingAsSchool) title = `Dasbor (Konteks: ${encodeHTML(state.adminActingAsSchool.name)})`;
+        if ((isSuperAdmin || isDinas) && state.adminActingAsJurisdiction) title = `Dasbor (Konteks: ${encodeHTML(state.adminActingAsJurisdiction.name)})`;
 
 
         return `
@@ -278,8 +308,91 @@ export const templates = {
              </div>
         </div>`;
     },
+    parentDashboard: () => {
+        const { isLoading, data } = state.parentDashboard;
+        const profile = state.userProfile;
+
+        if (isLoading) {
+            return `<div class="screen active min-h-screen flex items-center justify-center"><div class="text-center"><div class="loader mx-auto"></div><p class="loader-text">Memuat data kehadiran anak Anda...</p></div></div>`;
+        }
+
+        if (!data || data.length === 0) {
+            return `
+            <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
+                <div class="bg-white p-8 rounded-2xl shadow-lg">
+                    <div class="flex items-center justify-between mb-6 pb-4 border-b">
+                        <h1 class="text-2xl font-bold text-slate-800">Dasbor Orang Tua</h1>
+                        <button id="parent-dashboard-back-btn" class="text-slate-500 hover:text-blue-500 transition duration-300 p-2 rounded-full -mr-2" title="Kembali ke Beranda">
+                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                        </button>
+                    </div>
+                    <div class="text-center bg-slate-50 p-8 rounded-lg">
+                        <h2 class="text-xl font-semibold text-slate-700">Tidak Ada Data Ditemukan</h2>
+                        <p class="text-slate-500 mt-2">Email Anda (<span class="font-medium">${encodeHTML(profile.email)}</span>) tidak tertaut dengan data siswa mana pun, atau anak Anda belum memiliki catatan ketidakhadiran.</p>
+                        <p class="text-slate-500 mt-1">Silakan hubungi pihak sekolah untuk memastikan email Anda telah didaftarkan dengan benar.</p>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        return `
+        <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
+             <div class="bg-white p-8 rounded-2xl shadow-lg">
+                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 pb-4 border-b border-slate-200 gap-4">
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-800">Dasbor Orang Tua</h1>
+                        <p class="text-slate-500">Selamat datang, ${encodeHTML(profile.name)}</p>
+                    </div>
+                   <button id="parent-dashboard-back-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm self-start sm:self-center">Kembali</button>
+                </div>
+                <div class="space-y-6">
+                ${data.map(child => `
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-6">
+                        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4">
+                             <div>
+                                 <h2 class="text-xl font-bold text-slate-800">${encodeHTML(child.student_name)}</h2>
+                                 <p class="text-sm text-slate-500 font-medium">${encodeHTML(child.school_name)} - Kelas ${encodeHTML(child.class_name)}</p>
+                             </div>
+                             <p class="text-sm text-slate-600 mt-2 sm:mt-0">Total Absen: <span class="font-bold text-lg">${child.attendance_history.length}</span></p>
+                        </div>
+                        ${child.attendance_history.length > 0 ? `
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="text-left text-slate-500 border-b">
+                                        <th class="py-2 pr-4 font-semibold">Tanggal</th>
+                                        <th class="py-2 px-2 font-semibold">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                ${child.attendance_history.map(att => `
+                                    <tr class="border-t border-slate-200">
+                                        <td class="py-2 pr-4 text-slate-700">${new Date(att.date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</td>
+                                        <td class="py-2 px-2">
+                                            <span class="px-2 py-1 rounded-full text-xs font-semibold ${att.status === 'S' ? 'bg-yellow-100 text-yellow-800' : att.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">
+                                                ${att.status === 'S' ? 'Sakit' : att.status === 'I' ? 'Izin' : 'Alpa'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        ` : `
+                        <div class="text-center p-6 bg-white rounded-lg border border-dashed">
+                            <p class="text-green-600 font-semibold">Ananda selalu hadir!</p>
+                            <p class="text-slate-500 text-sm mt-1">Tidak ada catatan ketidakhadiran yang ditemukan.</p>
+                        </div>
+                        `}
+                    </div>
+                `).join('')}
+                </div>
+             </div>
+        </div>
+        `;
+    },
     adminPanel: () => {
-        const isSuperAdmin = state.userProfile?.role === 'SUPER_ADMIN';
+        const isSuperAdmin = state.userProfile?.primaryRole === 'SUPER_ADMIN';
         return `
         <div class="screen active p-4 md:p-8 max-w-5xl mx-auto">
              <div class="bg-white p-8 rounded-2xl shadow-lg">
@@ -319,8 +432,8 @@ export const templates = {
     addStudents: (className) => {
         const isEditing = (state.students && state.students.length > 0);
         const message = isEditing
-            ? `Ubah daftar siswa untuk kelas <span class="font-semibold text-blue-600">${className}</span>. Hapus nama atau baris untuk mengurangi siswa.`
-            : `Data siswa untuk <span class="font-semibold text-blue-600">${className}</span> belum ada. Silakan tambahkan di bawah ini.`;
+            ? `Ubah daftar siswa untuk kelas <span class="font-semibold text-blue-600">${encodeHTML(className)}</span>. Hapus nama atau baris untuk mengurangi siswa.`
+            : `Data siswa untuk <span class="font-semibold text-blue-600">${encodeHTML(className)}</span> belum ada. Silakan tambahkan di bawah ini.`;
         return `
         <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
              <div class="bg-white p-8 rounded-2xl shadow-lg">
@@ -329,17 +442,23 @@ export const templates = {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <!-- Manual Input -->
                     <div class="border-r-0 md:border-r md:pr-8 border-slate-200">
-                         <h2 class="text-lg font-semibold text-slate-700 mb-4">Daftar Siswa</h2>
+                         <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-lg font-semibold text-slate-700">Daftar Siswa</h2>
+                            <div class="flex text-sm">
+                                <span class="w-1/2 text-slate-500 text-center">Nama Siswa</span>
+                                <span class="w-1/2 text-slate-500 text-center">Email Orang Tua</span>
+                            </div>
+                         </div>
                          <div id="manual-input-container" class="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2"></div>
                          <button id="add-student-row-btn" class="w-full text-sm bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold py-2 px-4 rounded-lg transition">+ Tambah Baris</button>
                     </div>
                     <!-- Excel Import -->
                     <div>
                         <h2 class="text-lg font-semibold text-slate-700 mb-4">Impor dari File</h2>
-                        <p class="text-sm text-slate-500 mb-4">Unggah file .xlsx untuk <span class="font-bold">menimpa</span> daftar saat ini.</p>
+                        <p class="text-sm text-slate-500 mb-4">Unggah file .xlsx atau .csv untuk <span class="font-bold">menimpa</span> daftar saat ini. Pastikan file memiliki 2 kolom: Nama Siswa dan Email Orang Tua.</p>
                         <button id="download-template-btn" class="w-full mb-3 text-sm bg-green-100 hover:bg-green-200 text-green-700 font-semibold py-2 px-4 rounded-lg transition">Unduh Template (.csv)</button>
                         <input type="file" id="excel-upload" class="hidden" accept=".xlsx, .xls, .csv"/>
-                        <button id="import-excel-btn" class="w-full text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg transition">Pilih File Excel untuk Diimpor</button>
+                        <button id="import-excel-btn" class="w-full text-sm bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold py-2 px-4 rounded-lg transition">Pilih File untuk Diimpor</button>
                     </div>
                 </div>
                 <div class="mt-8 pt-6 border-t border-slate-200 flex justify-end gap-4">
@@ -354,7 +473,7 @@ export const templates = {
              <div class="bg-white p-8 rounded-2xl shadow-lg">
                 <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
                     <div>
-                        <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${className}</h1>
+                        <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${encodeHTML(className)}</h1>
                         <p class="text-slate-500">Tanggal: ${new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                     </div>
                      <button id="back-to-setup-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
@@ -382,7 +501,7 @@ export const templates = {
     success: () => {
         const { lastSaveContext } = state;
         const message = lastSaveContext
-            ? `Absensi Kelas <strong>${lastSaveContext.className}</strong> telah berhasil disimpan atas nama <strong>${lastSaveContext.teacherName}</strong>.`
+            ? `Absensi Kelas <strong>${encodeHTML(lastSaveContext.className)}</strong> telah berhasil disimpan oleh <strong>${encodeHTML(lastSaveContext.savedBy)}</strong>.`
             : `Data absensi telah berhasil disimpan di database cloud Anda.`;
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
@@ -464,7 +583,7 @@ export const templates = {
                 <h1 class="text-3xl font-bold text-slate-800 mb-3">Gagal Terhubung</h1>
                 <p class="text-slate-500 mb-6">Aplikasi tidak dapat terhubung ke server. Ini mungkin terjadi jika server atau database sedang dalam proses aktivasi setelah periode tidak aktif.</p>
                 <div class="text-xs text-slate-500 bg-slate-100 p-3 rounded-lg mb-8 text-left font-mono">
-                    <strong>Detail Error:</strong> ${errorMessage || 'Tidak ada detail error.'}
+                    <strong>Detail Error:</strong> ${encodeHTML(errorMessage) || 'Tidak ada detail error.'}
                 </div>
                 <button id="retry-connection-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Coba Lagi</button>
             </div>
@@ -508,7 +627,7 @@ export const templates = {
     `,
     manageUserModal: (user, schools, jurisdictions) => {
         const assignedClasses = user.assigned_classes || [];
-        const currentUserRole = state.userProfile.role;
+        const currentUserRole = state.userProfile.primaryRole;
         const isSuperAdmin = currentUserRole === 'SUPER_ADMIN';
         const isTargetSuperAdmin = user.role === 'SUPER_ADMIN';
 
@@ -526,7 +645,7 @@ export const templates = {
         const renderJurisdictionOptions = (items, prefix = '') => {
             let options = '';
             items.forEach(item => {
-                options += `<option value="${item.id}" ${user.jurisdiction_id === item.id ? 'selected' : ''}>${prefix}${item.name}</option>`;
+                options += `<option value="${item.id}" ${user.jurisdiction_id === item.id ? 'selected' : ''}>${prefix}${encodeHTML(item.name)}</option>`;
                 if (item.children && item.children.length > 0) {
                     options += renderJurisdictionOptions(item.children, prefix + '-- ');
                 }
@@ -538,7 +657,7 @@ export const templates = {
         <div id="manage-user-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
              <div class="bg-white p-8 rounded-2xl shadow-lg max-w-lg w-full animate-fade-in">
                 <h2 class="text-xl font-bold text-slate-800 mb-2">Kelola Pengguna</h2>
-                <p class="text-slate-600 mb-6 font-semibold">${user.name}</p>
+                <p class="text-slate-600 mb-6 font-semibold">${encodeHTML(user.name)}</p>
                 
                 <div class="space-y-4">
                     <div>
@@ -552,7 +671,7 @@ export const templates = {
                         <label for="school-select-modal" class="block text-sm font-medium text-slate-700 mb-1">Tugaskan ke Sekolah</label>
                         <select id="school-select-modal" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 ${isTargetSuperAdmin ? 'bg-slate-100 cursor-not-allowed' : ''}" ${isTargetSuperAdmin ? 'disabled' : ''}>
                             <option value="">-- Tidak Ditugaskan --</option>
-                            ${schools.map(school => `<option value="${school.id}" ${user.school_id === school.id ? 'selected' : ''}>${school.name}</option>`).join('')}
+                            ${schools.map(school => `<option value="${school.id}" ${user.school_id === school.id ? 'selected' : ''}>${encodeHTML(school.name)}</option>`).join('')}
                         </select>
                         ${isTargetSuperAdmin ? '<p class="text-xs text-slate-500 mt-1">Super Admin adalah peran global.</p>' : ''}
                     </div>
@@ -588,11 +707,11 @@ export const templates = {
     schoolSelectorModal: (schools, title) => `
         <div id="school-selector-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
              <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
-                <h2 class="text-xl font-bold text-slate-800 mb-4">${title}</h2>
+                <h2 class="text-xl font-bold text-slate-800 mb-4">${encodeHTML(title)}</h2>
                 <p class="text-slate-600 mb-6">Pilih salah satu sekolah di bawah ini untuk melanjutkan.</p>
                 <div id="school-list-container" class="space-y-2 max-h-60 overflow-y-auto mb-6 border-t border-b py-4">
                     ${schools.length > 0 
-                        ? schools.map(school => `<button class="school-select-btn w-full text-left p-3 rounded-lg hover:bg-slate-100 transition" data-school-id="${school.id}" data-school-name="${school.name}">${school.name}</button>`).join('')
+                        ? schools.map(school => `<button class="school-select-btn w-full text-left p-3 rounded-lg hover:bg-slate-100 transition" data-school-id="${school.id}" data-school-name="${encodeHTML(school.name)}">${encodeHTML(school.name)}</button>`).join('')
                         : '<p class="text-slate-500 text-center">Belum ada sekolah yang ditambahkan.</p>'
                     }
                 </div>
@@ -606,7 +725,7 @@ export const templates = {
         const renderOptions = (items, prefix = '') => {
             let html = '';
             items.forEach(item => {
-                html += `<button class="jurisdiction-select-btn w-full text-left p-3 rounded-lg hover:bg-slate-100 transition" data-jurisdiction-id="${item.id}" data-jurisdiction-name="${item.name}">${prefix}${item.name}</button>`;
+                html += `<button class="jurisdiction-select-btn w-full text-left p-3 rounded-lg hover:bg-slate-100 transition" data-jurisdiction-id="${item.id}" data-jurisdiction-name="${encodeHTML(item.name)}">${prefix}${encodeHTML(item.name)}</button>`;
                 if (item.children && item.children.length > 0) {
                     html += renderOptions(item.children, prefix + '&nbsp;&nbsp;&nbsp;&nbsp;');
                 }
@@ -616,7 +735,7 @@ export const templates = {
         return `
         <div id="jurisdiction-selector-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
              <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
-                <h2 class="text-xl font-bold text-slate-800 mb-4">${title}</h2>
+                <h2 class="text-xl font-bold text-slate-800 mb-4">${encodeHTML(title)}</h2>
                 <p class="text-slate-600 mb-6">Pilih salah satu yurisdiksi di bawah ini untuk melanjutkan.</p>
                 <div id="jurisdiction-list-container" class="space-y-1 max-h-60 overflow-y-auto mb-6 border-t border-b py-4">
                     ${jurisdictions.length > 0 
@@ -664,7 +783,7 @@ export const templates = {
             let options = '';
             items.forEach(item => {
                 if (item.id === selfId) return; // Prevent self-parenting
-                options += `<option value="${item.id}" ${item.id === currentParentId ? 'selected' : ''}>${prefix}${item.name}</option>`;
+                options += `<option value="${item.id}" ${item.id === currentParentId ? 'selected' : ''}>${prefix}${encodeHTML(item.name)}</option>`;
                 if (item.children && item.children.length > 0) {
                     options += renderOptions(item.children, prefix + '-- ', currentParentId, selfId);
                 }
@@ -679,11 +798,16 @@ export const templates = {
                 <div class="space-y-4">
                     <div>
                         <label for="jur-name" class="block text-sm font-medium text-slate-700 mb-1">Nama Yurisdiksi</label>
-                        <input type="text" id="jur-name" class="w-full p-2 border border-slate-300 rounded-lg" value="${jurisdiction?.name || ''}">
+                        <input type="text" id="jur-name" class="w-full p-2 border border-slate-300 rounded-lg" value="${encodeHTML(jurisdiction?.name || '')}">
                     </div>
                     <div>
-                        <label for="jur-type" class="block text-sm font-medium text-slate-700 mb-1">Tipe (cth: Provinsi, Kota)</label>
-                        <input type="text" id="jur-type" class="w-full p-2 border border-slate-300 rounded-lg" value="${jurisdiction?.type || ''}">
+                        <label for="jur-type" class="block text-sm font-medium text-slate-700 mb-1">Tingkat Yurisdiksi</label>
+                        <select id="jur-type" class="w-full p-2 border border-slate-300 rounded-lg bg-white">
+                            <option value="">-- Pilih Tingkat --</option>
+                            ${['Provinsi', 'Kota', 'Kabupaten', 'Kecamatan', 'Gugus'].map(level => `
+                                <option value="${level}" ${jurisdiction?.type === level ? 'selected' : ''}>${level}</option>
+                            `).join('')}
+                        </select>
                     </div>
                     <div>
                         <label for="jur-parent" class="block text-sm font-medium text-slate-700 mb-1">Induk Yurisdiksi</label>
@@ -703,11 +827,11 @@ export const templates = {
     assignSchoolsModal: (jurisdictionName, assigned, unassigned) => `
         <div id="assign-schools-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
              <div class="bg-white p-8 rounded-2xl shadow-lg max-w-4xl w-full animate-fade-in max-h-[90vh] flex flex-col">
-                <h2 class="text-xl font-bold text-slate-800 mb-2">Kelola Sekolah untuk ${jurisdictionName}</h2>
+                <h2 class="text-xl font-bold text-slate-800 mb-2">Kelola Sekolah untuk ${encodeHTML(jurisdictionName)}</h2>
                 <p class="text-slate-500 mb-6">Pindahkan sekolah antara daftar yang tersedia dan yang ditugaskan.</p>
                 <div class="grid grid-cols-2 gap-6 flex-grow overflow-hidden">
-                    <div class="flex flex-col"><h3 class="font-semibold text-slate-700 mb-2">Sekolah Tersedia</h3><div id="unassigned-schools-list" class="border rounded-lg p-2 space-y-1 overflow-y-auto bg-slate-50 flex-grow">${unassigned.map(s => `<div class="p-2 flex items-center justify-between"><span>${s.name}</span><button data-school-id="${s.id}" class="assign-school-btn text-blue-500 hover:text-blue-700">&rarr;</button></div>`).join('') || '<p class="p-4 text-center text-slate-400">Tidak ada sekolah tersedia.</p>'}</div></div>
-                    <div class="flex flex-col"><h3 class="font-semibold text-slate-700 mb-2">Sekolah Ditugaskan</h3><div id="assigned-schools-list" class="border rounded-lg p-2 space-y-1 overflow-y-auto bg-green-50 flex-grow">${assigned.map(s => `<div class="p-2 flex items-center justify-between"><span>${s.name}</span><button data-school-id="${s.id}" class="unassign-school-btn text-red-500 hover:text-red-700">&larr;</button></div>`).join('') || '<p class="p-4 text-center text-slate-400">Belum ada sekolah ditugaskan.</p>'}</div></div>
+                    <div class="flex flex-col"><h3 class="font-semibold text-slate-700 mb-2">Sekolah Tersedia</h3><div id="unassigned-schools-list" class="border rounded-lg p-2 space-y-1 overflow-y-auto bg-slate-50 flex-grow">${unassigned.map(s => `<div class="p-2 flex items-center justify-between"><span>${encodeHTML(s.name)}</span><button data-school-id="${s.id}" class="assign-school-btn text-blue-500 hover:text-blue-700">&rarr;</button></div>`).join('') || '<p class="p-4 text-center text-slate-400">Tidak ada sekolah tersedia.</p>'}</div></div>
+                    <div class="flex flex-col"><h3 class="font-semibold text-slate-700 mb-2">Sekolah Ditugaskan</h3><div id="assigned-schools-list" class="border rounded-lg p-2 space-y-1 overflow-y-auto bg-green-50 flex-grow">${assigned.map(s => `<div class="p-2 flex items-center justify-between"><span>${encodeHTML(s.name)}</span><button data-school-id="${s.id}" class="unassign-school-btn text-red-500 hover:text-red-700">&larr;</button></div>`).join('') || '<p class="p-4 text-center text-slate-400">Belum ada sekolah ditugaskan.</p>'}</div></div>
                 </div>
                 <div class="flex justify-end mt-8">
                     <button id="assign-schools-close-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Tutup</button>
@@ -716,4 +840,3 @@ export const templates = {
         </div>
     `,
 };
-      
