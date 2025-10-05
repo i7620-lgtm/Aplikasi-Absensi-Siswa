@@ -1,3 +1,4 @@
+import { sql } from '@vercel/postgres';
 
 export default async function handleGetDashboardData({ payload, user, sql, response }) {
     const authorizedRoles = ['SUPER_ADMIN', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'];
@@ -8,6 +9,17 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
     const { schoolId, jurisdictionId, selectedDate } = payload;
     let schoolIdList = [];
     
+    // --- NEW LOGIC: Handle unassigned school-level admins ---
+    if (['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(user.role) && !user.school_id) {
+         return response.status(200).json({
+            isUnassigned: true, // Flag for the frontend
+            reportData: { summaryStats: { totalStudents: 0, totalPresent: 0, S: 0, I: 0, A: 0 }, absentStudentsByClass: {} },
+            schoolInfo: { totalStudents: 0, allClasses: [], studentsPerClass: {} },
+            allLogsForYear: [],
+        });
+    }
+    // --- END NEW LOGIC ---
+
     // Determine the list of school IDs to query based on user role and context
     if (user.role === 'SUPER_ADMIN' && jurisdictionId) {
         const { rows } = await sql`
@@ -20,7 +32,14 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
         schoolIdList = rows.map(r => r.id);
     } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(user.role)) {
         const effectiveJurisdictionId = jurisdictionId || user.jurisdiction_id;
-        if (!effectiveJurisdictionId) return response.status(200).json({ allLogs: [] });
+        if (!effectiveJurisdictionId) {
+            return response.status(200).json({
+                isUnassigned: true, // Flag for the frontend
+                reportData: { summaryStats: { totalStudents: 0, totalPresent: 0, S: 0, I: 0, A: 0 }, absentStudentsByClass: {} },
+                schoolInfo: { totalStudents: 0, allClasses: [], studentsPerClass: {} },
+                allLogsForYear: [],
+            });
+        }
         
         const { rows } = await sql`
             WITH RECURSIVE subs AS (
@@ -48,33 +67,41 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
     
     const schoolIds = schoolIdList.map(id => Number(id));
 
-    // --- QUERY 1: Gabungkan info sekolah dan absensi harian menjadi satu ---
     const { rows } = await sql`
-        WITH SchoolInfo AS (
-             SELECT
+        WITH LatestStudentLists AS (
+            SELECT DISTINCT ON (school_id, payload->>'class')
+                school_id,
+                payload->>'class' as class_name,
+                jsonb_array_length(payload->'students') as student_count
+            FROM change_log
+            WHERE school_id = ANY(${schoolIds}) AND event_type = 'STUDENT_LIST_UPDATED'
+            ORDER BY school_id, payload->>'class', id DESC
+        ),
+        SchoolInfo AS (
+            SELECT
                 COALESCE(SUM(student_count), 0)::int as "totalStudents",
                 COALESCE(jsonb_agg(DISTINCT class_name ORDER BY class_name), '[]'::jsonb) as "allClasses",
                 COALESCE(jsonb_object_agg(class_name, student_count), '{}'::jsonb) as "studentsPerClass"
-            FROM (
-                 SELECT
-                    d.key as class_name,
-                    jsonb_array_length(d.value -> 'students') as student_count
-                FROM absensi_data ad, jsonb_each(ad.students_by_class) d
-                WHERE ad.school_id = ANY(${schoolIds})
-                GROUP BY d.key, d.value
-            ) as unique_classes
+            FROM LatestStudentLists
+        ),
+        DailyAttendanceEvents AS (
+            SELECT
+                cl.payload,
+                u.name as "teacherName"
+            FROM change_log cl
+            JOIN users u ON cl.user_email = u.email
+            WHERE cl.school_id = ANY(${schoolIds})
+            AND cl.event_type = 'ATTENDANCE_UPDATED'
+            AND cl.payload->>'date' = ${selectedDate}
         ),
         DailyAbsences AS (
             SELECT
-                log_obj ->> 'class' as class,
-                u.name as "teacherName",
+                payload->>'class' as class,
+                "teacherName",
                 att.key as student_name,
                 att.value as status
-            FROM absensi_data ad
-            CROSS JOIN jsonb_array_elements(ad.saved_logs) as log_obj
-            JOIN users u on u.email = ad.user_email
-            WHERE ad.school_id = ANY(${schoolIds}) AND log_obj ->> 'date' = ${selectedDate}
-            CROSS JOIN jsonb_each_text(log_obj -> 'attendance') as att
+            FROM DailyAttendanceEvents
+            CROSS JOIN jsonb_each_text(payload->'attendance') as att
             WHERE att.value <> 'H'
         )
         SELECT
@@ -93,10 +120,9 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
             ) as "dailyAbsentRows";
     `;
 
-    const { schoolInfo, dailyAbsentRows } = rows[0] || { schoolInfo: {}, dailyAbsentRows: [] };
+    const { schoolInfo, dailyAbsentRows } = rows[0] || { schoolInfo: { totalStudents: 0, allClasses: [], studentsPerClass: {} }, dailyAbsentRows: [] };
     const { totalStudents = 0, allClasses = [], studentsPerClass = {} } = schoolInfo;
 
-    // --- Proses data laporan harian ---
     const absenceCounts = { S: 0, I: 0, A: 0 };
     const absentStudentsByClass = {};
     dailyAbsentRows.forEach(row => {
@@ -110,19 +136,19 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
     const totalAbsent = absenceCounts.S + absenceCounts.I + absenceCounts.A;
     const totalPresent = Math.max(0, totalStudents - totalAbsent);
     
-    // Ambil semua log untuk tahun ajaran saat ini untuk perhitungan persentase
     const todayForYear = new Date(selectedDate + 'T00:00:00');
     let yearStart = new Date(todayForYear.getFullYear(), 6, 1); // 1 Juli
     if (todayForYear.getMonth() < 6) { yearStart.setFullYear(todayForYear.getFullYear() - 1); }
     const yearEnd = new Date(yearStart.getFullYear() + 1, 5, 30); // 30 Juni tahun berikutnya
 
     const { rows: allLogsRows } = await sql`
-        SELECT log_obj as log
-        FROM absensi_data, jsonb_array_elements(saved_logs) as log_obj
-        WHERE school_id = ANY(${schoolIds}) AND (log_obj->>'date')::date BETWEEN ${yearStart.toISOString().split('T')[0]} AND ${yearEnd.toISOString().split('T')[0]};
+        SELECT payload as log
+        FROM change_log
+        WHERE school_id = ANY(${schoolIds})
+        AND event_type = 'ATTENDANCE_UPDATED'
+        AND (payload->>'date')::date BETWEEN ${yearStart.toISOString().split('T')[0]} AND ${yearEnd.toISOString().split('T')[0]};
     `;
     const allLogsForYear = allLogsRows.map(r => r.log);
-
 
     return response.status(200).json({
         reportData: {
@@ -130,7 +156,6 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
             absentStudentsByClass
         },
         schoolInfo: { totalStudents, allClasses, studentsPerClass },
-        allLogsForYear, // Kirim semua log mentah ke klien
+        allLogsForYear,
     });
 }
-      
