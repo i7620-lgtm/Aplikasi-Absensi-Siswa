@@ -77,14 +77,6 @@ export const apiService = {
         return await _fetch('loginOrRegister', { profile });
     },
 
-    async checkAndStartClientMigration() {
-        return await _fetch('checkAndStartClientMigration');
-    },
-
-    async uploadMigratedData(migratedData) {
-        return await _fetch('uploadMigratedData', { migratedData });
-    },
-
     async getUserProfile() {
         return await _fetch('getUserProfile');
     },
