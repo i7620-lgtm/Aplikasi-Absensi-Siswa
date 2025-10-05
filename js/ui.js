@@ -1,4 +1,4 @@
-import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap, handleDownloadFullSchoolReport } from './main.js';
+import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData } from './main.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
 import { apiService } from './api.js';
@@ -363,6 +363,7 @@ async function renderMultiRoleHomeScreen() {
     document.getElementById('view-jurisdiction-panel-btn')?.addEventListener('click', () => navigateTo('jurisdictionPanel'));
 
     if (isSuperAdmin) {
+        document.getElementById('go-to-migration-tool-btn')?.addEventListener('click', () => navigateTo('migrationTool'));
         const maintenanceContainer = document.getElementById('maintenance-toggle-container');
         if (maintenanceContainer) {
             try {
@@ -1439,6 +1440,12 @@ async function renderParentDashboardScreen() {
     }
 }
 
+function renderMigrationToolScreen() {
+    appContainer.innerHTML = templates.migrationTool();
+    document.getElementById('migration-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
+    document.getElementById('migrate-data-btn').addEventListener('click', handleMigrateLegacyData);
+}
+
 
 export function renderScreen(screen) {
     appContainer.innerHTML = '';
@@ -1450,6 +1457,7 @@ export function renderScreen(screen) {
         'parentDashboard': renderParentDashboardScreen,
         'adminPanel': renderAdminPanelScreen,
         'jurisdictionPanel': renderJurisdictionPanelScreen,
+        'migrationTool': renderMigrationToolScreen,
         'add-students': renderAddStudentsScreen,
         'attendance': renderAttendanceScreen,
         'success': () => {
