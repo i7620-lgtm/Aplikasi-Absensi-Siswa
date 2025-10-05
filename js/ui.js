@@ -1,8 +1,5 @@
-
-
-
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap, handleDownloadFullSchoolReport } from './main.js';
-import { templates } from './templates.js';
+import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
 import { apiService } from './api.js';
 
@@ -166,7 +163,7 @@ function showJurisdictionSelectorModal(title) {
 
 function showRoleSelectorModal() {
     return new Promise((resolve) => {
-        const currentUserRole = state.userProfile.role;
+        const currentUserRole = state.userProfile.primaryRole;
         const isSuperAdmin = currentUserRole === 'SUPER_ADMIN';
 
         const availableRoles = [
@@ -208,22 +205,20 @@ export function displayAuthError(message, error = null) {
     if (!errorContainer) return;
     errorContainer.classList.remove('hidden');
     let details = error ? (error.message || (typeof error === 'string' ? error : JSON.stringify(error))) : '';
-    details = details.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${message}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
+    details = encodeHTML(details); // Sanitize error details
+    errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${encodeHTML(message)}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
 }
 
 function renderSetupScreen() {
     appContainer.innerHTML = templates.setup();
-    const isAdmin = state.userProfile?.role === 'SUPER_ADMIN' || state.userProfile?.role === 'ADMIN_SEKOLAH';
-    const isTeacher = state.userProfile?.role === 'GURU';
+    const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile?.primaryRole);
+    const isTeacher = state.userProfile?.primaryRole === 'GURU';
     const needsAssignment = isTeacher && (!state.userProfile.assigned_classes || state.userProfile.assigned_classes.length === 0);
 
     if (state.userProfile) {
         document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
-        if (isAdmin) {
-            document.getElementById('back-to-admin-home-btn').addEventListener('click', () => navigateTo('adminHome'));
-        }
-
+        document.getElementById('back-to-main-home-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
+        
         const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
         if (enableNotificationsBtn) {
             enableNotificationsBtn.addEventListener('click', () => {
@@ -286,19 +281,20 @@ function renderSetupScreen() {
 function renderMaintenanceToggle(container, isMaintenance) {
     const statusText = isMaintenance ? 'Aktif' : 'Tidak Aktif';
     const statusColor = isMaintenance ? 'text-red-600' : 'text-green-600';
-    const buttonText = isMaintenance ? 'Nonaktifkan' : 'Aktifkan';
-    const buttonColor = isMaintenance ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-500';
+    const buttonText = isMaintenance ? 'Nonaktifkan Mode Perbaikan' : 'Aktifkan Mode Perbaikan';
+    
+    container.querySelector('p:last-child').innerHTML = `Status: <span class="font-bold ${statusColor}">${statusText}</span>`;
+    
+    const button = document.createElement('button');
+    button.id = 'maintenance-action-btn';
+    button.className = `ml-auto text-sm font-semibold py-2 px-3 rounded-lg transition ${isMaintenance ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}`;
+    button.textContent = isMaintenance ? 'Nonaktifkan' : 'Aktifkan';
 
-    container.innerHTML = `
-        <div class="flex items-center justify-between w-full">
-            <p class="text-sm text-slate-700">Status: <span class="font-bold ${statusColor}">${statusText}</span></p>
-            <button id="maintenance-action-btn" class="${buttonColor} text-white font-bold py-2 px-4 rounded-lg text-sm transition">
-                ${buttonText}
-            </button>
-        </div>
-    `;
+    const existingBtn = container.querySelector('#maintenance-action-btn');
+    if(existingBtn) existingBtn.remove();
+    container.appendChild(button);
 
-    document.getElementById('maintenance-action-btn').addEventListener('click', async () => {
+    button.addEventListener('click', async () => {
         const enable = !isMaintenance;
         const actionVerb = enable ? "mengaktifkan" : "menonaktifkan";
         const confirmed = await showConfirmation(`Anda yakin ingin ${actionVerb} mode perbaikan? Pengguna lain tidak akan bisa mengakses aplikasi.`);
@@ -319,19 +315,15 @@ function renderMaintenanceToggle(container, isMaintenance) {
 }
 
 
-async function renderAdminHomeScreen() {
-    appContainer.innerHTML = templates.adminHome();
+async function renderMultiRoleHomeScreen() {
+    appContainer.innerHTML = templates.multiRoleHome();
     document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
-    document.getElementById('view-admin-panel-btn').addEventListener('click', () => navigateTo('adminPanel'));
-    document.getElementById('download-school-report-btn').addEventListener('click', handleDownloadFullSchoolReport);
-    
-    const isSuperAdmin = state.userProfile.role === 'SUPER_ADMIN';
 
-    if (isSuperAdmin) {
-        document.getElementById('view-jurisdiction-panel-btn').addEventListener('click', () => navigateTo('jurisdictionPanel'));
-    }
+    const { primaryRole, isParent } = state.userProfile;
+    const isSuperAdmin = primaryRole === 'SUPER_ADMIN';
 
-    document.getElementById('go-to-attendance-btn').addEventListener('click', async () => {
+    // Event listeners are added only if the button exists in the template
+    document.getElementById('go-to-attendance-btn')?.addEventListener('click', async () => {
         if (isSuperAdmin) {
             const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Absensi');
             if (selectedSchool) {
@@ -343,37 +335,42 @@ async function renderAdminHomeScreen() {
         }
     });
 
-    document.getElementById('view-dashboard-btn').addEventListener('click', async () => {
+    document.getElementById('view-dashboard-btn')?.addEventListener('click', async () => {
         if (isSuperAdmin) {
             const viewBy = await showConfirmation('Lihat dasbor berdasarkan Sekolah (Ya) atau Yurisdiksi (Tidak)?');
-            
-            if (viewBy === null) return; // User cancelled the dialog by clicking outside
+            if (viewBy === null) return; 
 
-            if (viewBy) { // View by School
+            if (viewBy) { 
                  const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Dasbor');
                  if (selectedSchool) {
                     await setState({ adminActingAsSchool: selectedSchool, adminActingAsJurisdiction: null, dashboard: { ...state.dashboard, data: null, isLoading: true } });
                     navigateTo('dashboard');
                  }
-            } else { // View by Jurisdiction
+            } else {
                 const selectedJurisdiction = await showJurisdictionSelectorModal('Pilih Yurisdiksi untuk Dasbor');
                 if (selectedJurisdiction) {
                     await setState({ adminActingAsJurisdiction: selectedJurisdiction, adminActingAsSchool: null, dashboard: { ...state.dashboard, data: null, isLoading: true } });
                     navigateTo('dashboard');
                 }
             }
-        } else { // Admin Sekolah langsung ke dasbor sekolahnya
+        } else {
             navigateTo('dashboard');
         }
     });
 
+    document.getElementById('view-parent-dashboard-btn')?.addEventListener('click', () => navigateTo('parentDashboard'));
+    document.getElementById('view-admin-panel-btn')?.addEventListener('click', () => navigateTo('adminPanel'));
+    document.getElementById('view-jurisdiction-panel-btn')?.addEventListener('click', () => navigateTo('jurisdictionPanel'));
+
     if (isSuperAdmin) {
         const maintenanceContainer = document.getElementById('maintenance-toggle-container');
-        try {
-            const { isMaintenance } = await apiService.getMaintenanceStatus();
-            renderMaintenanceToggle(maintenanceContainer, isMaintenance);
-        } catch (e) {
-            maintenanceContainer.innerHTML = `<p class="text-sm text-red-500">Gagal memuat status mode perbaikan.</p>`;
+        if (maintenanceContainer) {
+            try {
+                const { isMaintenance } = await apiService.getMaintenanceStatus();
+                renderMaintenanceToggle(maintenanceContainer.parentElement, isMaintenance);
+            } catch (e) {
+                maintenanceContainer.innerHTML = `<p class="text-sm text-red-500">Gagal memuat status.</p>`;
+            }
         }
     }
 }
@@ -408,7 +405,7 @@ function renderStructuredAiResponse(markdownText) {
             <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm transition hover:shadow-md">
                 <h3 class="flex items-center gap-3 font-bold text-slate-800 text-base mb-3">
                     ${icon}
-                    <span>${section.title}</span>
+                    <span>${encodeHTML(section.title)}</span>
                 </h3>
                 <div class="pl-9 card-content">${section.content}</div>
             </div>
@@ -622,105 +619,132 @@ async function renderDashboardScreen() {
         percentageContent.innerHTML = loaderHtml;
         aiContent.innerHTML = loaderHtml;
     } else if (data) {
-        // Render Report View
-        if (activeView === 'report' && data.reportData) {
-            const { summaryStats, absentStudentsByClass } = data.reportData;
-            const summaryStatsHtml = `
-                <div id="dashboard-summary-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-                    ${Object.entries({
-                        'Total Siswa': { count: summaryStats.totalStudents, color: 'slate' },
-                        'Hadir': { count: summaryStats.totalPresent, color: 'green' },
-                        'Sakit': { count: summaryStats.S, color: 'yellow' },
-                        'Izin': { count: summaryStats.I, color: 'blue' },
-                        'Alpa': { count: summaryStats.A, color: 'red' }
-                    }).map(([label, { count, color }]) => `
-                        <div class="bg-${color}-100 p-4 rounded-xl text-center">
-                            <p class="text-sm font-semibold text-${color}-700">${label}</p>
-                            <p class="text-3xl font-bold text-${color}-800">${count}</p>
+        if (data.isUnassigned) {
+            const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.primaryRole);
+            const isSchoolAdmin = ['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole);
+            
+            const title = isDinas ? "Menunggu Penugasan Yurisdiksi" : "Menunggu Penugasan Sekolah";
+            const message1 = isDinas 
+                ? "Akun Anda aktif tetapi belum ditugaskan ke wilayah yurisdiksi mana pun." 
+                : "Akun Anda aktif tetapi belum ditugaskan ke sekolah mana pun.";
+            const message2 = "Silakan hubungi Super Admin untuk mendapatkan akses ke data.";
+            
+            const unassignedMessage = `
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded-r-lg">
+                    <div class="flex">
+                        <div class="py-1"><svg class="w-8 h-8 text-yellow-500 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+                        <div>
+                            <p class="font-bold text-yellow-800 text-lg">${title}</p>
+                            <p class="text-sm text-yellow-700 mt-2">${message1} Data dasbor tidak dapat ditampilkan.</p>
+                            <p class="text-sm text-yellow-700 mt-1">${message2}</p>
                         </div>
-                    `).join('')}
-                </div>`;
-
-            const classNames = Object.keys(absentStudentsByClass).sort();
-            let detailedReportHtml = '';
-            if (classNames.length === 0) {
-                detailedReportHtml = `<div class="p-4 bg-slate-50 rounded-lg"><p class="text-center text-slate-500 py-4">Tidak ada siswa yang tercatat absen pada tanggal yang dipilih.</p></div>`;
-            } else {
-                const reportList = classNames.map(className => {
-                    const classData = absentStudentsByClass[className];
-                    return `<div class="bg-slate-50 p-4 rounded-lg">
-                        <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${className}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${classData.teacherName}</p></div>
-                        <div class="overflow-x-auto"><table class="w-full text-sm">
-                            <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
-                            <tbody>${classData.students.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${s.name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
-                        </table></div></div>`;
-                }).join('');
-                detailedReportHtml = `<h2 class="text-lg font-bold text-slate-700 mb-4">Detail Siswa Tidak Hadir</h2><div class="space-y-4">${reportList}</div>`;
-            }
-            reportContent.innerHTML = summaryStatsHtml + detailedReportHtml;
-        }
-
-        // Render Percentage View
-        if (activeView === 'percentage' && data.allLogsForYear && data.schoolInfo) {
-            const { finalCounts, totalAttendanceOpportunities } = calculatePercentageData(data.allLogsForYear, chartViewMode, chartClassFilter, data.schoolInfo, selectedDate);
-            const { allClasses } = data.schoolInfo;
-            
-            const timeFilters = [
-                { id: 'daily', text: 'Harian' }, { id: 'weekly', text: 'Mingguan' },
-                { id: 'monthly', text: 'Bulanan' }, { id: 'semester1', text: 'Semester I' },
-                { id: 'semester2', text: 'Semester II' }, { id: 'yearly', text: 'Tahun Ajaran' },
-            ];
-
-            percentageContent.innerHTML = `
-                <div class="flex flex-col md:flex-row gap-4 mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200">
-                    <div class="flex-1"><p class="block text-sm font-medium text-slate-700 mb-2">Periode Waktu</p><div id="chart-time-filter" class="flex flex-wrap gap-2">${timeFilters.map(f => `<button data-mode="${f.id}" class="chart-time-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${state.dashboard.chartViewMode === f.id ? 'bg-blue-600 text-white' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'}">${f.text}</button>`).join('')}</div></div>
-                    <div class="flex-1 md:max-w-xs"><label for="chart-class-filter" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Kelas</label><select id="chart-class-filter" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"><option value="all">Seluruh Sekolah</option>${allClasses.map(c => `<option value="${c}" ${state.dashboard.chartClassFilter === c ? 'selected' : ''}>Kelas ${c}</option>`).join('')}</select></div>
+                    </div>
                 </div>
-                <div class="flex flex-col md:flex-row items-center justify-center gap-8 p-4">
-                    <div id="chart-container" class="relative w-full md:w-1/2" style="max-width: 400px; max-height: 400px;"><canvas id="dashboard-pie-chart"></canvas><div id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center"><p class="text-slate-500 bg-white p-4 rounded-lg">Tidak ada data absensi untuk filter yang dipilih.</p></div></div>
-                    <div id="custom-legend-container" class="w-full md:w-1/2 max-w-xs"></div>
-                </div>`;
+            `;
+            reportContent.innerHTML = unassignedMessage;
+            percentageContent.innerHTML = unassignedMessage;
+            aiContent.innerHTML = unassignedMessage;
+        } else {
+            // Render Report View
+            if (activeView === 'report' && data.reportData) {
+                const { summaryStats, absentStudentsByClass } = data.reportData;
+                const summaryStatsHtml = `
+                    <div id="dashboard-summary-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+                        ${Object.entries({
+                            'Total Siswa': { count: summaryStats.totalStudents, color: 'slate' },
+                            'Hadir': { count: summaryStats.totalPresent, color: 'green' },
+                            'Sakit': { count: summaryStats.S, color: 'yellow' },
+                            'Izin': { count: summaryStats.I, color: 'blue' },
+                            'Alpa': { count: summaryStats.A, color: 'red' }
+                        }).map(([label, { count, color }]) => `
+                            <div class="bg-${color}-100 p-4 rounded-xl text-center">
+                                <p class="text-sm font-semibold text-${color}-700">${label}</p>
+                                <p class="text-3xl font-bold text-${color}-800">${count}</p>
+                            </div>
+                        `).join('')}
+                    </div>`;
 
-            document.querySelectorAll('.chart-time-btn').forEach(btn => btn.onclick = async (e) => { await setState({ dashboard: { ...state.dashboard, chartViewMode: e.currentTarget.dataset.mode } }); renderScreen('dashboard'); });
-            document.getElementById('chart-class-filter').onchange = async (e) => { await setState({ dashboard: { ...state.dashboard, chartClassFilter: e.target.value } }); renderScreen('dashboard'); };
-            
-            const chartData = [
-                { label: 'Hadir', value: finalCounts.H, color: '#22c55e' },
-                { label: 'Sakit', value: finalCounts.S, color: '#fbbf24' },
-                { label: 'Izin', value: finalCounts.I, color: '#3b82f6' },
-                { label: 'Alpa', value: finalCounts.A, color: '#ef4444' }
-            ];
-
-            const chartCanvas = document.getElementById('dashboard-pie-chart');
-            if (window.dashboardPieChart instanceof Chart) window.dashboardPieChart.destroy();
-            
-            if (totalAttendanceOpportunities > 0 && chartCanvas) {
-                document.getElementById('custom-legend-container').innerHTML = chartData.map(item => `<div class="flex items-center justify-between p-3 rounded-lg"><div class="flex items-center gap-3"><span class="w-4 h-4 rounded-full" style="background-color: ${item.color};"></span><span class="font-semibold text-slate-700">${item.label}</span></div><div class="text-right"><span class="font-bold text-slate-800">${item.value}</span><span class="text-sm text-slate-500 ml-2">(${(totalAttendanceOpportunities > 0 ? ((item.value / totalAttendanceOpportunities) * 100).toFixed(2) : 0)}%)</span></div></div>`).join('');
-                window.dashboardPieChart = new Chart(chartCanvas.getContext('2d'), { type: 'pie', data: { labels: chartData.map(d => d.label), datasets: [{ data: chartData.map(d => d.value), backgroundColor: chartData.map(d => d.color), borderColor: '#ffffff', borderWidth: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
-            } else {
-                chartCanvas.style.display = 'none';
-                document.getElementById('chart-no-data').classList.remove('hidden');
-                document.getElementById('custom-legend-container').innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada data untuk legenda.</p>`;
+                const classNames = Object.keys(absentStudentsByClass).sort();
+                let detailedReportHtml = '';
+                if (classNames.length === 0) {
+                    detailedReportHtml = `<div class="p-4 bg-slate-50 rounded-lg"><p class="text-center text-slate-500 py-4">Tidak ada siswa yang tercatat absen pada tanggal yang dipilih.</p></div>`;
+                } else {
+                    const reportList = classNames.map(className => {
+                        const classData = absentStudentsByClass[className];
+                        return `<div class="bg-slate-50 p-4 rounded-lg">
+                            <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${encodeHTML(className)}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(classData.teacherName)}</p></div>
+                            <div class="overflow-x-auto"><table class="w-full text-sm">
+                                <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
+                                <tbody>${classData.students.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${encodeHTML(s.name)}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
+                            </table></div></div>`;
+                    }).join('');
+                    detailedReportHtml = `<h2 class="text-lg font-bold text-slate-700 mb-4">Detail Siswa Tidak Hadir</h2><div class="space-y-4">${reportList}</div>`;
+                }
+                reportContent.innerHTML = summaryStatsHtml + detailedReportHtml;
             }
-        }
 
-        // Render AI View
-        if (activeView === 'ai') {
-            const { isLoading: isAiLoading, result, error, selectedRange } = aiRecommendation;
-            const aiRanges = [{ id: 'last30days', text: '30 Hari Terakhir' }, { id: 'semester', text: 'Semester Ini' }, { id: 'year', text: 'Tahun Ajaran Ini' }];
-            const getAiBtnClass = (rangeId) => selectedRange === rangeId ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-300';
-            
-            let contentHtml = `<div class="mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200"><p class="block text-sm font-medium text-slate-700 mb-2">Pilih Periode Analisis</p><div id="ai-range-filter" class="flex flex-wrap gap-2">${aiRanges.map(r => `<button data-range="${r.id}" class="ai-range-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${getAiBtnClass(r.id)}">${r.text}</button>`).join('')}</div></div>`;
+            // Render Percentage View
+            if (activeView === 'percentage' && data.allLogsForYear && data.schoolInfo) {
+                const { finalCounts, totalAttendanceOpportunities } = calculatePercentageData(data.allLogsForYear, chartViewMode, chartClassFilter, data.schoolInfo, selectedDate);
+                const { allClasses } = data.schoolInfo;
+                
+                const timeFilters = [
+                    { id: 'daily', text: 'Harian' }, { id: 'weekly', text: 'Mingguan' },
+                    { id: 'monthly', text: 'Bulanan' }, { id: 'semester1', text: 'Semester I' },
+                    { id: 'semester2', text: 'Semester II' }, { id: 'yearly', text: 'Tahun Ajaran' },
+                ];
 
-            if (isAiLoading) contentHtml += `<div class="text-center py-8"><div class="loader mx-auto"></div><p class="loader-text">Menganalisis data absensi...</p></div>`;
-            else if (error) contentHtml += `<div class="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200"><p class="font-bold">Terjadi Kesalahan</p><p>${error}</p><button id="retry-ai-btn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Coba Lagi</button></div>`;
-            else if (result) contentHtml += renderStructuredAiResponse(result);
-            else contentHtml += `<div class="text-center p-8 bg-slate-50 rounded-lg"><h3 class="text-lg font-bold text-slate-800">Dapatkan Wawasan dengan AI</h3><p class="text-slate-500 my-4">Pilih periode di atas, lalu klik tombol di bawah untuk meminta Gemini menganalisis data absensi.</p><button id="generate-ai-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition">Buat Rekomendasi Sekarang</button></div>`;
-            
-            aiContent.innerHTML = contentHtml;
-            document.querySelectorAll('.ai-range-btn').forEach(btn => btn.addEventListener('click', async (e) => { await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, selectedRange: e.currentTarget.dataset.range, result: null, error: null } } }); renderScreen('dashboard'); }));
-            document.getElementById('generate-ai-btn')?.addEventListener('click', handleGenerateAiRecommendation);
-            document.getElementById('retry-ai-btn')?.addEventListener('click', handleGenerateAiRecommendation);
+                percentageContent.innerHTML = `
+                    <div class="flex flex-col md:flex-row gap-4 mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200">
+                        <div class="flex-1"><p class="block text-sm font-medium text-slate-700 mb-2">Periode Waktu</p><div id="chart-time-filter" class="flex flex-wrap gap-2">${timeFilters.map(f => `<button data-mode="${f.id}" class="chart-time-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${state.dashboard.chartViewMode === f.id ? 'bg-blue-600 text-white' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'}">${f.text}</button>`).join('')}</div></div>
+                        <div class="flex-1 md:max-w-xs"><label for="chart-class-filter" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Kelas</label><select id="chart-class-filter" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"><option value="all">Seluruh Sekolah</option>${allClasses.map(c => `<option value="${c}" ${state.dashboard.chartClassFilter === c ? 'selected' : ''}>Kelas ${c}</option>`).join('')}</select></div>
+                    </div>
+                    <div class="flex flex-col md:flex-row items-center justify-center gap-8 p-4">
+                        <div id="chart-container" class="relative w-full md:w-1/2" style="max-width: 400px; max-height: 400px;"><canvas id="dashboard-pie-chart"></canvas><div id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center"><p class="text-slate-500 bg-white p-4 rounded-lg">Tidak ada data absensi untuk filter yang dipilih.</p></div></div>
+                        <div id="custom-legend-container" class="w-full md:w-1/2 max-w-xs"></div>
+                    </div>`;
+
+                document.querySelectorAll('.chart-time-btn').forEach(btn => btn.onclick = async (e) => { await setState({ dashboard: { ...state.dashboard, chartViewMode: e.currentTarget.dataset.mode } }); renderScreen('dashboard'); });
+                document.getElementById('chart-class-filter').onchange = async (e) => { await setState({ dashboard: { ...state.dashboard, chartClassFilter: e.target.value } }); renderScreen('dashboard'); };
+                
+                const chartData = [
+                    { label: 'Hadir', value: finalCounts.H, color: '#22c55e' },
+                    { label: 'Sakit', value: finalCounts.S, color: '#fbbf24' },
+                    { label: 'Izin', value: finalCounts.I, color: '#3b82f6' },
+                    { label: 'Alpa', value: finalCounts.A, color: '#ef4444' }
+                ];
+
+                const chartCanvas = document.getElementById('dashboard-pie-chart');
+                if (window.dashboardPieChart instanceof Chart) window.dashboardPieChart.destroy();
+                
+                if (totalAttendanceOpportunities > 0 && chartCanvas) {
+                    document.getElementById('custom-legend-container').innerHTML = chartData.map(item => `<div class="flex items-center justify-between p-3 rounded-lg"><div class="flex items-center gap-3"><span class="w-4 h-4 rounded-full" style="background-color: ${item.color};"></span><span class="font-semibold text-slate-700">${item.label}</span></div><div class="text-right"><span class="font-bold text-slate-800">${item.value}</span><span class="text-sm text-slate-500 ml-2">(${(totalAttendanceOpportunities > 0 ? ((item.value / totalAttendanceOpportunities) * 100).toFixed(2) : 0)}%)</span></div></div>`).join('');
+                    window.dashboardPieChart = new Chart(chartCanvas.getContext('2d'), { type: 'pie', data: { labels: chartData.map(d => d.label), datasets: [{ data: chartData.map(d => d.value), backgroundColor: chartData.map(d => d.color), borderColor: '#ffffff', borderWidth: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+                } else {
+                    chartCanvas.style.display = 'none';
+                    document.getElementById('chart-no-data').classList.remove('hidden');
+                    document.getElementById('custom-legend-container').innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada data untuk legenda.</p>`;
+                }
+            }
+
+            // Render AI View
+            if (activeView === 'ai') {
+                const { isLoading: isAiLoading, result, error, selectedRange } = aiRecommendation;
+                const aiRanges = [{ id: 'last30days', text: '30 Hari Terakhir' }, { id: 'semester', text: 'Semester Ini' }, { id: 'year', text: 'Tahun Ajaran Ini' }];
+                const getAiBtnClass = (rangeId) => selectedRange === rangeId ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-300';
+                
+                let contentHtml = `<div class="mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200"><p class="block text-sm font-medium text-slate-700 mb-2">Pilih Periode Analisis</p><div id="ai-range-filter" class="flex flex-wrap gap-2">${aiRanges.map(r => `<button data-range="${r.id}" class="ai-range-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${getAiBtnClass(r.id)}">${r.text}</button>`).join('')}</div></div>`;
+
+                if (isAiLoading) contentHtml += `<div class="text-center py-8"><div class="loader mx-auto"></div><p class="loader-text">Menganalisis data absensi...</p></div>`;
+                else if (error) contentHtml += `<div class="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200"><p class="font-bold">Terjadi Kesalahan</p><p>${encodeHTML(error)}</p><button id="retry-ai-btn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Coba Lagi</button></div>`;
+                else if (result) contentHtml += renderStructuredAiResponse(result);
+                else contentHtml += `<div class="text-center p-8 bg-slate-50 rounded-lg"><h3 class="text-lg font-bold text-slate-800">Dapatkan Wawasan dengan AI</h3><p class="text-slate-500 my-4">Pilih periode di atas, lalu klik tombol di bawah untuk meminta Gemini menganalisis data absensi.</p><button id="generate-ai-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition">Buat Rekomendasi Sekarang</button></div>`;
+                
+                aiContent.innerHTML = contentHtml;
+                document.querySelectorAll('.ai-range-btn').forEach(btn => btn.addEventListener('click', async (e) => { await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, selectedRange: e.currentTarget.dataset.range, result: null, error: null } } }); renderScreen('dashboard'); }));
+                document.getElementById('generate-ai-btn')?.addEventListener('click', handleGenerateAiRecommendation);
+                document.getElementById('retry-ai-btn')?.addEventListener('click', handleGenerateAiRecommendation);
+            }
         }
     } else {
         const errorHtml = `<p class="text-center text-red-500 py-8">Gagal memuat data dasbor.</p>`;
@@ -751,19 +775,21 @@ async function dashboardPoller() {
         let schoolId = null;
         let jurisdictionId = null;
 
-        if (state.userProfile.role === 'SUPER_ADMIN') {
+        if (state.userProfile.primaryRole === 'SUPER_ADMIN') {
             schoolId = state.adminActingAsSchool?.id;
             jurisdictionId = state.adminActingAsJurisdiction?.id;
-        } else if (['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(state.userProfile.role)) {
+        } else if (['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole)) {
             schoolId = state.userProfile.school_id;
-        } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.role)) {
+        } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.primaryRole)) {
             jurisdictionId = state.userProfile.jurisdiction_id;
         }
         
         // Don't fetch if context is missing for roles that need it.
-        const requiresContext = ['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.role);
-        if (requiresContext && !schoolId && !jurisdictionId) {
-             await setState({ dashboard: { ...state.dashboard, isLoading: false, data: null } });
+        const requiresSchoolContext = ['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole) && !schoolId;
+        const requiresDinasContext = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.primaryRole) && !jurisdictionId;
+        
+        if (requiresSchoolContext || requiresDinasContext) {
+             await setState({ dashboard: { ...state.dashboard, isLoading: false, data: { isUnassigned: true } } });
              renderScreen('dashboard');
              return;
         }
@@ -840,7 +866,7 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
     const { currentPage, groupBySchool, selectedUsers } = state.adminPanel;
     let usersToRender = [...allUsers];
 
-    if (groupBySchool && state.userProfile.role === 'SUPER_ADMIN') {
+    if (groupBySchool && state.userProfile.primaryRole === 'SUPER_ADMIN') {
         usersToRender.sort((a, b) => (a.school_name || 'zzz').localeCompare(b.school_name || 'zzz') || a.name.localeCompare(b.name));
     } else {
         usersToRender.sort((a, b) => a.name.localeCompare(b.name));
@@ -851,19 +877,20 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
     const paginatedUsers = usersToRender.slice((validCurrentPage - 1) * USERS_PER_PAGE, validCurrentPage * USERS_PER_PAGE);
     const allVisibleSelected = paginatedUsers.length > 0 && paginatedUsers.every(u => selectedUsers.includes(u.email));
 
-    let tableHtml = `<table class="w-full text-left"><thead><tr class="border-b bg-slate-50"><th class="p-3 w-12 text-center"><input type="checkbox" id="select-all-users-checkbox" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${allVisibleSelected ? 'checked' : ''} /></th><th class="p-3 text-sm font-semibold text-slate-600">Pengguna</th><th class="p-3 text-sm font-semibold text-slate-600">Peran</th><th class="p-3 text-sm font-semibold text-slate-600">Sekolah</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Tindakan</th></tr></thead><tbody>`;
+    let tableHtml = `<table class="w-full text-left"><thead><tr class="border-b bg-slate-50"><th class="p-3 w-12 text-center"><input type="checkbox" id="select-all-users-checkbox" class="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" ${allVisibleSelected ? 'checked' : ''} /></th><th class="p-3 text-sm font-semibold text-slate-600">Pengguna</th><th class="p-3 text-sm font-semibold text-slate-600">Peran</th><th class="p-3 text-sm font-semibold text-slate-600">Sekolah/Yurisdiksi</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Tindakan</th></tr></thead><tbody>`;
     
     if (paginatedUsers.length === 0) {
         tableHtml += `<tr><td colspan="5" class="text-center text-slate-500 py-8">Tidak ada pengguna yang cocok.</td></tr>`;
     } else {
         let currentSchoolName = null;
         paginatedUsers.forEach(user => {
-            if (groupBySchool && state.userProfile.role === 'SUPER_ADMIN' && user.school_name !== currentSchoolName) {
+            if (groupBySchool && state.userProfile.primaryRole === 'SUPER_ADMIN' && user.school_name !== currentSchoolName) {
                 currentSchoolName = user.school_name;
-                tableHtml += `<tr class="bg-slate-100 sticky top-0"><td colspan="5" class="p-2 font-bold text-slate-600">${currentSchoolName || 'Belum Ditugaskan'}</td></tr>`;
+                tableHtml += `<tr class="bg-slate-100 sticky top-0"><td colspan="5" class="p-2 font-bold text-slate-600">${encodeHTML(currentSchoolName) || 'Belum Ditugaskan'}</td></tr>`;
             }
             const newBadge = user.is_unmanaged ? `<span class="ml-2 px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full">BARU</span>` : '';
-            tableHtml += `<tr class="border-b hover:bg-slate-50 transition"><td class="p-3 text-center"><input type="checkbox" class="user-select-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="${user.email}" ${selectedUsers.includes(user.email) ? 'checked' : ''} /></td><td class="p-3"><div class="flex items-center gap-3"><img src="${user.picture}" alt="${user.name}" class="w-10 h-10 rounded-full"/><div><p class="font-medium text-slate-800">${user.name}${newBadge}</p><p class="text-xs text-slate-500">${user.email}</p></div></div></td><td class="p-3 text-sm text-slate-600">${user.role}</td><td class="p-3 text-sm text-slate-600">${user.school_name || '<span class="italic text-slate-400">Belum Ditugaskan</span>'}</td><td class="p-3 text-center"><button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" data-user='${JSON.stringify(user)}'>Kelola</button></td></tr>`;
+            const assignment = encodeHTML(user.school_name || user.jurisdiction_name) || '<span class="italic text-slate-400">Belum Ditugaskan</span>';
+            tableHtml += `<tr class="border-b hover:bg-slate-50 transition"><td class="p-3 text-center"><input type="checkbox" class="user-select-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="${user.email}" ${selectedUsers.includes(user.email) ? 'checked' : ''} /></td><td class="p-3"><div class="flex items-center gap-3"><img src="${encodeHTML(user.picture)}" alt="${encodeHTML(user.name)}" class="w-10 h-10 rounded-full"/><div><p class="font-medium text-slate-800">${encodeHTML(user.name)}${newBadge}</p><p class="text-xs text-slate-500">${encodeHTML(user.email)}</p></div></div></td><td class="p-3 text-sm text-slate-600">${getRoleDisplayName(user.role)}</td><td class="p-3 text-sm text-slate-600">${assignment}</td><td class="p-3 text-center"><button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" data-user='${JSON.stringify(user)}'>Kelola</button></td></tr>`;
         });
     }
     tableHtml += `</tbody></table>`;
@@ -882,7 +909,7 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
 
 async function renderAdminPanelScreen() {
     appContainer.innerHTML = templates.adminPanel();
-    document.getElementById('admin-panel-back-btn').addEventListener('click', () => navigateTo('adminHome'));
+    document.getElementById('admin-panel-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
     document.getElementById('add-school-btn')?.addEventListener('click', handleCreateSchool);
     
     const groupBySchoolToggle = document.getElementById('group-by-school-toggle');
@@ -928,7 +955,7 @@ async function renderAdminPanelScreen() {
         try {
             const [usersRes, schoolsRes] = await Promise.all([
                 apiService.getAllUsers(),
-                state.userProfile.role === 'SUPER_ADMIN' ? apiService.getAllSchools() : Promise.resolve({ allSchools: state.adminPanel.schools })
+                state.userProfile.primaryRole === 'SUPER_ADMIN' ? apiService.getAllSchools() : Promise.resolve({ allSchools: state.adminPanel.schools })
             ]);
             
             const newData = { users: usersRes.allUsers, schools: schoolsRes.allSchools };
@@ -959,7 +986,7 @@ async function renderAdminPanelScreen() {
 async function showManageUserModal(user, schools) {
     document.getElementById('manage-user-modal')?.parentElement.remove();
     
-    const { tree: jurisdictions } = state.userProfile.role === 'SUPER_ADMIN' 
+    const { tree: jurisdictions } = state.userProfile.primaryRole === 'SUPER_ADMIN' 
         ? await apiService.getJurisdictionTree() 
         : { tree: [] };
 
@@ -1024,18 +1051,20 @@ function renderAddStudentsScreen() {
 function renderStudentInputRows() {
     const container = document.getElementById('manual-input-container');
     if (!container) return;
-    container.innerHTML = state.newStudents.map((name, index) => `
+    container.innerHTML = state.newStudents.map((student, index) => `
         <div class="flex items-center gap-2">
-            <input type="text" value="${name}" data-index="${index}" class="student-name-input w-full p-2 border border-slate-300 rounded-lg" placeholder="Nama Siswa ${index + 1}">
+            <input type="text" value="${encodeHTML(student.name)}" data-index="${index}" class="student-name-input w-1/2 p-2 border border-slate-300 rounded-lg" placeholder="Nama Siswa ${index + 1}">
+            <input type="email" value="${encodeHTML(student.parentEmail || '')}" data-index="${index}" class="parent-email-input w-1/2 p-2 border border-slate-300 rounded-lg" placeholder="Email Orang Tua">
             <button data-index="${index}" class="remove-student-row-btn text-slate-400 hover:text-red-500 p-1 text-2xl">&times;</button>
         </div>`).join('');
     
-    container.querySelectorAll('.student-name-input').forEach(input => input.addEventListener('input', (e) => state.newStudents[e.target.dataset.index] = e.target.value));
+    container.querySelectorAll('.student-name-input').forEach(input => input.addEventListener('input', (e) => state.newStudents[e.target.dataset.index].name = e.target.value));
+    container.querySelectorAll('.parent-email-input').forEach(input => input.addEventListener('input', (e) => state.newStudents[e.target.dataset.index].parentEmail = e.target.value));
     container.querySelectorAll('.remove-student-row-btn').forEach(button => button.addEventListener('click', (e) => removeStudentInputRow(e.target.dataset.index)));
 }
 
 function addStudentInputRow() {
-    state.newStudents.push('');
+    state.newStudents.push({ name: '', parentEmail: '' });
     renderStudentInputRows();
     const inputs = document.querySelectorAll('.student-name-input');
     inputs[inputs.length - 1].focus();
@@ -1043,7 +1072,7 @@ function addStudentInputRow() {
 
 function removeStudentInputRow(index) {
     state.newStudents.splice(index, 1);
-    if (state.newStudents.length === 0) state.newStudents.push('');
+    if (state.newStudents.length === 0) state.newStudents.push({ name: '', parentEmail: '' });
     renderStudentInputRows();
 }
 
@@ -1051,17 +1080,17 @@ function renderAttendanceScreen() {
     appContainer.innerHTML = templates.attendance(state.selectedClass, state.selectedDate);
     const tbody = document.getElementById('attendance-table-body');
     tbody.innerHTML = state.students.map((student, index) => {
-        const status = state.attendance[student] || 'H';
+        const status = state.attendance[student.name] || 'H';
         return `<tr class="border-b hover:bg-slate-50">
             <td class="p-3 text-sm text-slate-500">${index + 1}</td>
-            <td class="p-3 font-medium text-slate-800">${student}</td>
-            ${['H', 'S', 'I', 'A'].map(s => `<td class="p-3 text-center"><input type="radio" name="status-${index}" value="${s}" class="w-5 h-5 accent-blue-500" ${status === s ? 'checked' : ''} data-student="${student}"></td>`).join('')}
+            <td class="p-3 font-medium text-slate-800">${encodeHTML(student.name)}</td>
+            ${['H', 'S', 'I', 'A'].map(s => `<td class="p-3 text-center"><input type="radio" name="status-${index}" value="${s}" class="w-5 h-5 accent-blue-500" ${status === s ? 'checked' : ''} data-student-name="${student.name}"></td>`).join('')}
         </tr>`;
     }).join('');
 
     tbody.addEventListener('change', (e) => {
         if (e.target.type === 'radio') {
-            state.attendance[e.target.dataset.student] = e.target.value;
+            state.attendance[e.target.dataset.studentName] = e.target.value;
         }
     });
 
@@ -1118,8 +1147,8 @@ function filterAndRenderHistory(container) {
         const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         
         const logsHtml = logGroupsForDate.map(logGroup => {
-            const contentHtml = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead><tbody>${logGroup.filteredAbsences.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${s.name}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody></table></div>`;
-            return `<div class="bg-slate-50 p-4 rounded-lg"><div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${logGroup.class}</h3>${logGroup.teacherName ? `<p class="text-xs text-slate-400">Oleh: ${logGroup.teacherName}</p>` : ''}</div>${contentHtml}</div>`;
+            const contentHtml = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead><tbody>${logGroup.filteredAbsences.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${encodeHTML(s.name)}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody></table></div>`;
+            return `<div class="bg-slate-50 p-4 rounded-lg"><div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${encodeHTML(logGroup.class)}</h3>${logGroup.teacherName ? `<p class="text-xs text-slate-400">Oleh: ${encodeHTML(logGroup.teacherName)}</p>` : ''}</div>${contentHtml}</div>`;
         }).join('');
 
         return `<div><h2 class="text-lg font-semibold text-slate-700 mb-3">${displayDate}</h2><div class="space-y-4">${logsHtml}</div></div>`;
@@ -1146,7 +1175,7 @@ async function renderDataScreen() {
     const fetchDataAndRender = async () => {
         container.innerHTML = `<p class="text-center text-slate-500">Memuat riwayat data...</p>`;
         
-        const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+        const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
         
         try {
             const { allLogs } = await apiService.getHistoryData({
@@ -1188,9 +1217,9 @@ async function renderDataScreen() {
         await setState({ dataScreenFilters: { studentName: '', status: 'all', startDate: '', endDate: '' } }); 
         renderScreen('data'); 
     });
-    document.getElementById('data-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
+    document.getElementById('data-back-to-start-btn').addEventListener('click', () => navigateTo(state.historyClassFilter ? 'setup' : 'multiRoleHome'));
     
-    titleEl.textContent = state.adminAllLogsView ? `Semua Riwayat Absensi` : state.historyClassFilter ? `Riwayat Absensi Kelas ${state.historyClassFilter}` : `Semua Riwayat Absensi Sekolah`;
+    titleEl.textContent = state.adminAllLogsView ? `Semua Riwayat Absensi` : state.historyClassFilter ? `Riwayat Absensi Kelas ${encodeHTML(state.historyClassFilter)}` : `Semua Riwayat Absensi Sekolah`;
     
     fetchDataAndRender();
 }
@@ -1202,9 +1231,9 @@ async function renderRecapScreen() {
     container.innerHTML = `<p class="text-center text-slate-500">Memuat rekapitulasi...</p>`;
 
     try {
-        const schoolId = state.userProfile.role === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
-        const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile.role);
-        const classFilter = (state.userProfile.role === 'GURU' || isAdmin) ? state.selectedClass : null;
+        const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+        const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole);
+        const classFilter = (state.userProfile.primaryRole === 'GURU' || isAdmin) ? state.selectedClass : null;
         
         const { recapArray } = await apiService.getRecapData({ schoolId, classFilter });
 
@@ -1221,7 +1250,7 @@ async function renderRecapScreen() {
         container.innerHTML = `<table class="w-full text-left">
             <thead><tr class="border-b bg-slate-50"><th class="p-3 text-sm font-semibold text-slate-600">No.</th><th class="p-3 text-sm font-semibold text-slate-600">Nama Siswa</th><th class="p-3 text-sm font-semibold text-slate-600">Kelas</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Sakit</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Izin</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Alfa</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Total</th></tr></thead>
             <tbody>${recapArray.map((item, index) => `<tr class="border-b hover:bg-slate-50">
-                <td class="p-3 text-sm text-slate-500">${index + 1}</td><td class="p-3 font-medium text-slate-800">${item.name}</td><td class="p-3 text-sm text-slate-500">${item.class}</td><td class="p-3 text-sm text-center">${item.S}</td><td class="p-3 text-sm text-center">${item.I}</td><td class="p-3 text-sm text-center">${item.A}</td><td class="p-3 text-sm font-bold text-center">${item.total}</td>
+                <td class="p-3 text-sm text-slate-500">${index + 1}</td><td class="p-3 font-medium text-slate-800">${encodeHTML(item.name)}</td><td class="p-3 text-sm text-slate-500">${encodeHTML(item.class)}</td><td class="p-3 text-sm text-center">${item.S}</td><td class="p-3 text-sm text-center">${item.I}</td><td class="p-3 text-sm text-center">${item.A}</td><td class="p-3 text-sm font-bold text-center">${item.total}</td>
             </tr>`).join('')}</tbody></table>`;
 
     } catch (error) {
@@ -1235,7 +1264,7 @@ async function renderRecapScreen() {
 
 async function renderJurisdictionPanelScreen() {
     appContainer.innerHTML = templates.jurisdictionPanel();
-    document.getElementById('jurisdiction-panel-back-btn').addEventListener('click', () => navigateTo('adminHome'));
+    document.getElementById('jurisdiction-panel-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
     
     const treeContainer = document.getElementById('jurisdiction-tree-container');
     const detailsContainer = document.getElementById('jurisdiction-details-container');
@@ -1253,7 +1282,7 @@ async function renderJurisdictionPanelScreen() {
                 return `<ul class="${level > 0 ? 'pl-4' : ''}">${nodes.map(node => `
                     <li class="my-1">
                         <div class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-200 cursor-pointer jur-node" data-id="${node.id}" data-node='${JSON.stringify(node)}'>
-                            <span class="font-semibold text-slate-700">${node.name} <span class="text-xs text-slate-400 font-normal">(${node.type})</span></span>
+                            <span class="font-semibold text-slate-700">${encodeHTML(node.name)} <span class="text-xs text-slate-400 font-normal">(${encodeHTML(node.type)})</span></span>
                             <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                         </div>
                         ${node.children.length > 0 ? renderTree(node.children, level + 1) : ''}
@@ -1278,16 +1307,22 @@ async function renderJurisdictionPanelScreen() {
             const type = document.getElementById('jur-type').value;
             const parentId = document.getElementById('jur-parent').value || null;
             
+            if (!name.trim() || !type) {
+                showNotification('Nama dan Tingkat Yurisdiksi harus diisi.', 'error');
+                return;
+            }
+
             showLoader('Menyimpan...');
             try {
                 if (jurisdiction) { // Editing
-                    await apiService.updateJurisdiction(jurisdiction.id, name, type);
+                    await apiService.updateJurisdiction(jurisdiction.id, name, type, parentId);
                 } else { // Creating
                     await apiService.createJurisdiction(name, type, parentId);
                 }
                 showNotification('Yurisdiksi berhasil disimpan.');
                 closeModal();
                 fetchAndRenderTree();
+                detailsContainer.innerHTML = `<div class="h-full flex items-center justify-center text-center p-4 border-2 border-dashed rounded-lg"><p class="text-slate-500">Pilih yurisdiksi dari daftar.</p></div>`;
             } catch (error) {
                 showNotification(error.message, 'error');
             } finally {
@@ -1315,7 +1350,7 @@ async function renderJurisdictionPanelScreen() {
             detailsContainer.innerHTML = `
                 <div class="p-4 border rounded-lg h-full">
                      <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-lg font-bold text-slate-800">${jur.name}</h2>
+                        <h2 class="text-lg font-bold text-slate-800">${encodeHTML(jur.name)}</h2>
                         <div>
                             <button id="edit-jur-btn" class="text-sm bg-yellow-100 text-yellow-800 hover:bg-yellow-200 font-semibold py-1 px-3 rounded-lg transition">Ubah</button>
                             <button id="delete-jur-btn" class="text-sm bg-red-100 text-red-800 hover:bg-red-200 font-semibold py-1 px-3 rounded-lg transition">Hapus</button>
@@ -1324,7 +1359,7 @@ async function renderJurisdictionPanelScreen() {
                     <div class="space-y-4">
                         <div>
                             <h3 class="font-semibold text-slate-600 mb-2">Sekolah Ditugaskan (${assignedSchools.length})</h3>
-                            <div class="border rounded-lg p-2 min-h-[100px] bg-slate-50">${assignedSchools.map(s => `<p class="p-1">${s.name}</p>`).join('') || '<p class="text-sm text-slate-400 p-1">Tidak ada</p>'}</div>
+                            <div class="border rounded-lg p-2 min-h-[100px] bg-slate-50">${assignedSchools.map(s => `<p class="p-1">${encodeHTML(s.name)}</p>`).join('') || '<p class="text-sm text-slate-400 p-1">Tidak ada</p>'}</div>
                         </div>
                     </div>
                     <button id="manage-schools-btn" class="mt-4 w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg transition">Kelola Penugasan Sekolah</button>
@@ -1333,7 +1368,7 @@ async function renderJurisdictionPanelScreen() {
 
             document.getElementById('edit-jur-btn').onclick = () => showManageJurisdictionModal(jur);
             document.getElementById('delete-jur-btn').onclick = async () => {
-                const confirmed = await showConfirmation(`Anda yakin ingin menghapus ${jur.name}? Tindakan ini tidak dapat diurungkan.`);
+                const confirmed = await showConfirmation(`Anda yakin ingin menghapus ${encodeHTML(jur.name)}? Tindakan ini tidak dapat diurungkan.`);
                 if (confirmed) {
                     showLoader('Menghapus...');
                     try {
@@ -1382,14 +1417,37 @@ async function renderJurisdictionPanelScreen() {
     fetchAndRenderTree();
 }
 
+async function renderParentDashboardScreen() {
+    appContainer.innerHTML = templates.parentDashboard(); // Renders loading state initially
+    
+    const { isLoading } = state.parentDashboard;
+
+    if (isLoading) {
+        try {
+            const { parentData } = await apiService.getParentData();
+            await setState({ parentDashboard: { isLoading: false, data: parentData } });
+            renderScreen('parentDashboard'); // Re-render with the fetched data
+        } catch (error) {
+            console.error("Failed to load parent data:", error);
+            showNotification(error.message, 'error');
+            await setState({ parentDashboard: { isLoading: false, data: [] } }); // Set to empty array on error
+            renderScreen('parentDashboard');
+        }
+    } else {
+        // Data is loaded, just attach event listeners
+        document.getElementById('parent-dashboard-back-btn')?.addEventListener('click', () => navigateTo('multiRoleHome'));
+    }
+}
+
 
 export function renderScreen(screen) {
     appContainer.innerHTML = '';
     
     const screenRenderers = {
         'setup': renderSetupScreen,
-        'adminHome': renderAdminHomeScreen,
+        'multiRoleHome': renderMultiRoleHomeScreen,
         'dashboard': () => { renderDashboardScreen(); dashboardPoller(); },
+        'parentDashboard': renderParentDashboardScreen,
         'adminPanel': renderAdminPanelScreen,
         'jurisdictionPanel': renderJurisdictionPanelScreen,
         'add-students': renderAddStudentsScreen,
@@ -1414,4 +1472,3 @@ export function renderScreen(screen) {
     (screenRenderers[screen] || renderSetupScreen)();
     hideLoader();
 }
-      
