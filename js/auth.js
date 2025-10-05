@@ -50,6 +50,71 @@ export function getGsiReadyState() {
     return isGsiReady;
 }
 
+// BARU: Fungsi untuk menjalankan migrasi di sisi browser
+async function triggerClientSideMigration() {
+    console.groupCollapsed('%c[Migrasi Data Lama]', 'font-weight: bold; color: #4f46e5;');
+    try {
+        console.log('Memeriksa status migrasi ke server...');
+        const check = await apiService.checkAndStartClientMigration();
+
+        if (check.status === 'complete') {
+            console.log('Server mengonfirmasi migrasi sudah selesai. Tidak ada tindakan yang diperlukan.');
+            console.groupEnd();
+            return;
+        }
+        
+        if (check.status === 'pending' && check.data && check.data.length > 0) {
+            const rawData = check.data;
+            console.log(`Diterima ${rawData.length} baris data absensi mentah dari server.`);
+
+            console.log('Memulai pemrosesan dan pengelompokan data di browser...');
+            // Resiliently get the class column name by checking the first record
+            const classKey = 'class' in rawData[0] ? 'class' : 'class_name';
+            
+            const groupedData = rawData.reduce((acc, row) => {
+                // Skip rows with invalid data
+                if (!row.school_id || !row.date || !row[classKey]) return acc;
+                
+                const key = `${row.school_id}-${row.date}-${row[classKey]}`;
+                if (!acc[key]) {
+                    acc[key] = {
+                        school_id: row.school_id,
+                        user_email: row.teacher_email || 'migration@system.local',
+                        event_type: 'ATTENDANCE_UPDATED',
+                        payload: {
+                            date: row.date.split('T')[0], // Ensure YYYY-MM-DD format
+                            class: row[classKey],
+                            attendance: {}
+                        }
+                    };
+                }
+                acc[key].payload.attendance[row.student_name] = row.status;
+                return acc;
+            }, {});
+
+            const migratedData = Object.values(groupedData);
+            console.log(`Pemrosesan selesai. Dihasilkan ${migratedData.length} rekaman change_log yang sudah dikelompokkan.`);
+
+            if (migratedData.length > 0) {
+                console.log('Mengunggah data yang sudah diproses ke server...');
+                const uploadResult = await apiService.uploadMigratedData(migratedData);
+                console.log(`Unggah berhasil! Server mengonfirmasi ${uploadResult.count} rekaman baru telah disimpan.`);
+                console.log('Proses migrasi data lama telah selesai sepenuhnya.');
+            } else {
+                console.log('Tidak ada data valid untuk diunggah setelah diproses.');
+            }
+        } else {
+            console.log('Tidak ada data absensi lama yang perlu dimigrasi.');
+        }
+
+    } catch (error) {
+        console.error('%c[Kesalahan Migrasi Klien]', 'font-weight: bold; color: #dc2626;', error.message);
+    } finally {
+        console.groupEnd();
+    }
+}
+
+
 async function handleTokenResponse(tokenResponse) {
     if (tokenResponse.error) {
         console.error('Authentication failed:', tokenResponse);
@@ -94,19 +159,9 @@ async function handleTokenResponse(tokenResponse) {
         hideLoader();
         showNotification(`Selamat datang, ${state.userProfile.name}!`);
 
-        // Trigger background migration check for Super Admins (fire-and-forget)
+        // Trigger client-side migration for Super Admins
         if (user.primaryRole === 'SUPER_ADMIN') {
-            console.log("Super Admin logged in. Triggering background migrations check...");
-            apiService.runBackgroundMigrations().then(response => {
-                console.groupCollapsed('%c[Migration Status]', 'font-weight: bold; color: #4f46e5;');
-                console.log('Pesan: ' + response.message);
-                if (response.details) {
-                    console.log('Detail: ' + response.details);
-                }
-                console.groupEnd();
-            }).catch(error => {
-                console.error('%c[Migration Failed]', 'font-weight: bold; color: #dc2626;', error.message);
-            });
+            triggerClientSideMigration(); // Fire-and-forget
         }
 
         // ALWAYS navigate to the new multi-role home screen.
