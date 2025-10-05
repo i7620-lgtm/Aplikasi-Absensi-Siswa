@@ -652,7 +652,7 @@ async function initApp() {
     if (state.maintenanceMode.isActive && state.userProfile?.primaryRole !== 'SUPER_ADMIN') {
         navigateTo('maintenance');
     } else {
-        initializeGsi();
+        await initializeGsi();
         render();
         if (state.userProfile) {
             syncWithServer(); // Initial sync on load
