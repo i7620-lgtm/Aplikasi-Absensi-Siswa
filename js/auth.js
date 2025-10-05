@@ -27,7 +27,8 @@ export function initializeGsi() {
             client_id: clientId,
             callback: handleTokenResponse,
             auto_select: false,
-            cancel_on_tap_outside: true
+            cancel_on_tap_outside: true,
+            use_fedcm_for_prompt: true // Explicitly use the modern browser standard
         });
         isGsiReady = true;
         console.log("Google Sign-In service initialized.");
