@@ -40,7 +40,7 @@ export async function initializeGsi() {
     } catch (error) {
         console.error("Google Sign-In initialization failed:", error);
         isGsiReady = false;
-        displayAuthError('Gagal memuat layanan otentikasi.', error);
+        displayAuthError(error.message); // Menampilkan pesan error yang lebih spesifik dari API
     }
 }
 
