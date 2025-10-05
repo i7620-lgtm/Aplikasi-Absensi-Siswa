@@ -68,10 +68,6 @@ export let state = {
             interval: 10000,
         },
     },
-    maintenanceMode: {
-        isActive: false,
-        statusChecked: false,
-    },
     connectionError: null,
     adminActingAsSchool: null, // Stores {id, name} for SUPER_ADMIN context
     adminActingAsJurisdiction: null, // NEW: Stores {id, name} for SUPER_ADMIN/DINAS context
@@ -649,20 +645,17 @@ async function handleAuthenticationRedirect() {
         if (!response.ok) throw new Error(`Gagal mengambil profil: ${response.statusText}`);
         
         const profile = await response.json();
-        const { user, initialStudents, initialLogs, latestVersion, maintenance } = await apiService.loginOrRegisterUser(profile);
+        const { user, initialStudents, initialLogs, latestVersion } = await apiService.loginOrRegisterUser(profile);
 
-        if (maintenance) {
-            navigateTo('maintenance');
-        } else {
-            await setState({
-                userProfile: user,
-                studentsByClass: initialStudents || {},
-                savedLogs: initialLogs || [],
-                localVersion: latestVersion || 0,
-            });
-            showNotification(`Selamat datang, ${user.name}!`);
-            navigateTo('multiRoleHome');
-        }
+        await setState({
+            userProfile: user,
+            studentsByClass: initialStudents || {},
+            savedLogs: initialLogs || [],
+            localVersion: latestVersion || 0,
+        });
+        showNotification(`Selamat datang, ${user.name}!`);
+        navigateTo('multiRoleHome');
+
     } catch (error) {
         console.error("Gagal memproses login OAuth:", error);
         showNotification(`Gagal memproses login Anda: ${error.message}`, 'error');
@@ -684,29 +677,19 @@ async function initApp() {
     }
     
     try {
-        showLoader('Memeriksa status server...');
-        const { isMaintenance } = await apiService.getMaintenanceStatus();
-        state.maintenanceMode.isActive = isMaintenance;
-    } catch (e) {
-        console.error("Tidak dapat memeriksa status perbaikan:", e);
-        hideLoader();
-        await setState({ connectionError: e.message });
-        navigateTo('connectionFailed');
-        return;
-    } finally {
-        state.maintenanceMode.statusChecked = true;
-    }
-
-    await loadInitialData();
-    
-    if (state.maintenanceMode.isActive && state.userProfile?.primaryRole !== 'SUPER_ADMIN') {
-        navigateTo('maintenance');
-    } else {
+        // Initial app load logic
+        await loadInitialData();
         await initializeGsi();
         render();
         if (state.userProfile) {
             syncWithServer(); // Initial sync on load
         }
+    } catch (e) {
+        console.error("Gagal menginisialisasi aplikasi:", e);
+        hideLoader();
+        await setState({ connectionError: e.message });
+        navigateTo('connectionFailed');
+        return;
     }
 
     window.addEventListener('online', async () => {
