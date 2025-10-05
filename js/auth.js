@@ -19,11 +19,6 @@ export async function initializeGsi() {
         }
         googleClientId = clientId;
 
-        const loginBtnText = document.getElementById('loginBtnText');
-        if (loginBtnText && loginBtnText.textContent !== 'Login & Mulai Absensi') {
-            loginBtnText.textContent = 'Login & Mulai Absensi';
-            document.getElementById('loginBtn')?.removeAttribute('disabled');
-        }
     } catch (error) {
         console.error("Google Auth initialization failed:", error);
         displayAuthError('Konfigurasi otentikasi server tidak lengkap. Hubungi administrator.', error);
