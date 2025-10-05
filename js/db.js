@@ -1,6 +1,7 @@
 const DB_NAME = 'AbsensiAppDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Bump version for schema change
 const STORE_NAME = 'appState';
+const QUEUE_STORE_NAME = 'offline-queue';
 
 function openDB() {
     return new Promise((resolve, reject) => {
@@ -14,6 +15,9 @@ function openDB() {
             const db = event.target.result;
             if (!db.objectStoreNames.contains(STORE_NAME)) {
                 db.createObjectStore(STORE_NAME, { keyPath: 'key' });
+            }
+            if (!db.objectStoreNames.contains(QUEUE_STORE_NAME)) {
+                db.createObjectStore(QUEUE_STORE_NAME, { keyPath: 'key' });
             }
         };
     });
@@ -51,4 +55,36 @@ export const idb = {
             }
         });
     },
+
+    async getQueue() {
+        const db = await openDB();
+        return new Promise((resolve) => {
+            try {
+                const transaction = db.transaction(QUEUE_STORE_NAME, 'readonly');
+                const store = transaction.objectStore(QUEUE_STORE_NAME);
+                const request = store.get('actions');
+                request.onsuccess = () => resolve(request.result ? request.result.value : []);
+                request.onerror = () => resolve([]);
+            } catch (error) {
+                console.error("IDB getQueue error:", error);
+                resolve([]);
+            }
+        });
+    },
+
+    async setQueue(actions) {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            try {
+                const transaction = db.transaction(QUEUE_STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(QUEUE_STORE_NAME);
+                const request = store.put({ key: 'actions', value: actions });
+                request.onsuccess = () => resolve();
+                request.onerror = (event) => reject("Error setting queue: " + event.target.errorCode);
+            } catch (error) {
+                 console.error("IDB setQueue error:", error);
+                 reject(error);
+            }
+        });
+    }
 };
