@@ -72,37 +72,31 @@ async function handleTokenResponse(tokenResponse) {
         
         const profile = await userInfoResponse.json();
 
-        // Register user with our backend and get their role and data
         const loginResponse = await apiService.loginOrRegisterUser(profile);
 
         if (loginResponse.maintenance) {
-            // App is in maintenance mode for this user, navigate to maintenance screen.
             await setState({ maintenanceMode: { ...state.maintenanceMode, isActive: true } });
             hideLoader();
             navigateTo('maintenance');
             return;
         }
         
-        const { user, userData } = loginResponse;
+        const { user, initialStudents, initialLogs, latestVersion } = loginResponse;
         
-        // Use setState which now handles persistence to IndexedDB
+        // The user object now contains primaryRole and isParent
         await setState({
             userProfile: user,
-            studentsByClass: userData.students_by_class,
-            savedLogs: userData.saved_logs,
+            studentsByClass: initialStudents || state.studentsByClass,
+            savedLogs: initialLogs || state.savedLogs,
+            localVersion: latestVersion || state.localVersion,
         });
 
         hideLoader();
         showNotification(`Selamat datang, ${state.userProfile.name}!`);
 
-        // Navigate based on role
-        if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN_SEKOLAH') {
-            navigateTo('adminHome');
-        } else if (user.role === 'KEPALA_SEKOLAH' || user.role === 'DINAS_PENDIDIKAN' || user.role === 'ADMIN_DINAS_PENDIDIKAN') {
-            navigateTo('dashboard');
-        } else {
-            navigateTo('setup');
-        }
+        // ALWAYS navigate to the new multi-role home screen.
+        // This screen will decide what to show based on the user's roles.
+        navigateTo('multiRoleHome');
 
     } catch (error) {
         console.error('A critical error occurred after receiving the token:', error);
@@ -123,14 +117,14 @@ export function handleSignIn() {
 }
 
 export async function handleSignOut() {
-    // Clear state from IDB
     await idb.set('userProfile', null);
     await idb.set('userData', null);
     
-    // Reset runtime state
+    // Reset runtime state completely
     state.userProfile = null;
     state.studentsByClass = {};
     state.savedLogs = [];
+    state.localVersion = 0;
 
     navigateTo('setup');
 }
