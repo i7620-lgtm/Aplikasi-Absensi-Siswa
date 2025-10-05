@@ -111,6 +111,8 @@ async function setupTables() {
             
             await sql`CREATE TABLE IF NOT EXISTS users (email VARCHAR(255) PRIMARY KEY, name VARCHAR(255), picture TEXT, role VARCHAR(50) DEFAULT 'GURU', school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL, assigned_classes TEXT[] DEFAULT '{}', created_at TIMESTAMPTZ DEFAULT NOW(), last_login TIMESTAMPTZ);`;
             try { await sql`ALTER TABLE users ADD COLUMN jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;`; } catch (e) { if (e.code !== '42701') throw e; }
+            // --- FIX: Ensure last_login column exists for older schemas ---
+            try { await sql`ALTER TABLE users ADD COLUMN last_login TIMESTAMPTZ;`; } catch (e) { if (e.code !== '42701') throw e; }
             
             // --- SKEMA BARU: DELTA SYNC ---
             await sql`CREATE TABLE IF NOT EXISTS change_log (
