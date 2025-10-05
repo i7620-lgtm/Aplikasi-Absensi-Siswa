@@ -207,6 +207,8 @@ export const templates = {
 
                     ${primaryRole === 'SUPER_ADMIN' ? `
                     <button id="view-jurisdiction-panel-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg><div><p class="font-bold">Panel Manajemen Yurisdiksi</p><p class="text-sm font-normal opacity-90">Kelola hierarki wilayah dan sekolah.</p></div></button>
+                    <button id="go-to-migration-tool-btn" class="w-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10m16-10v10M4 17h16M4 7h16M9 4v3m6-3v3m-3 14v-3"></path></svg><div><p class="font-bold">Alat Migrasi Data Lama</p><p class="text-sm font-normal opacity-90">Unggah data dari sistem lama ke format baru.</p></div></button>
+                    <button id="toggle-maintenance-btn" class="w-full bg-slate-600 hover:bg-slate-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><div id="maintenance-toggle-container" class="w-full flex items-center justify-between"><span class="flex items-center gap-4"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg><div><p class="font-bold">Mode Perbaikan</p><p class="text-sm font-normal opacity-90">Memuat status...</p></div></span></div></button>
                     ` : ''}
 
                 </div>
@@ -586,6 +588,17 @@ export const templates = {
                 <button id="retry-connection-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Coba Lagi</button>
             </div>
         </div>`,
+    maintenance: () => `
+        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
+            <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
+                <svg class="mx-auto h-16 w-16 text-amber-500 mb-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.471-2.471a1.286 1.286 0 00-1.82-1.82L11.42 15.17zm0 0L5.57 21a2.652 2.652 0 01-3.75-3.75l5.877-5.877m0 0l2.471 2.471" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <h1 class="text-3xl font-bold text-slate-800 mb-3">Aplikasi dalam Perbaikan</h1>
+                <p class="text-slate-500">Kami sedang melakukan beberapa pembaruan untuk meningkatkan pengalaman Anda. Aplikasi akan segera kembali normal. Mohon coba lagi nanti.</p>
+            </div>
+        </div>`,
     confirmation: (message) => `
         <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
              <div class="bg-white p-8 rounded-2xl shadow-lg max-w-sm w-full text-center animate-fade-in">
@@ -822,6 +835,35 @@ export const templates = {
                 </div>
                 <div class="flex justify-end mt-8">
                     <button id="assign-schools-close-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg transition">Tutup</button>
+                </div>
+            </div>
+        </div>
+    `,
+    migrationTool: () => `
+        <div class="screen active p-4 md:p-8 max-w-4xl mx-auto">
+             <div class="bg-white p-8 rounded-2xl shadow-lg">
+                <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
+                    <h1 class="text-2xl font-bold text-slate-800">Alat Migrasi Data Lama</h1>
+                    <button id="migration-back-btn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-4 rounded-lg transition text-sm">Kembali</button>
+                </div>
+                <p class="text-slate-600 mb-4">Gunakan alat ini untuk mengimpor data dari sistem lama ke dalam format <code class="text-sm bg-slate-100 p-1 rounded">change_log</code>. Pastikan data JSON yang ditempelkan valid dan sesuai dengan struktur lama.</p>
+                <div class="space-y-4">
+                    <div>
+                        <label for="migration-school-id" class="block text-sm font-medium text-slate-700 mb-1">ID Sekolah Tujuan</label>
+                        <input type="number" id="migration-school-id" placeholder="Contoh: 1" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                    </div>
+                     <div>
+                        <label for="migration-user-email" class="block text-sm font-medium text-slate-700 mb-1">Email Pengguna Asli</label>
+                        <input type="email" id="migration-user-email" placeholder="contoh@guru.belajar.id" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                    </div>
+                    <div>
+                        <label for="migration-legacy-data" class="block text-sm font-medium text-slate-700 mb-1">Data Lama (JSON)</label>
+                        <textarea id="migration-legacy-data" rows="10" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition font-mono text-xs" placeholder='Tempelkan konten JSON lama di sini (termasuk "students_by_class" dan "saved_logs")...'></textarea>
+                    </div>
+                </div>
+                 <div class="mt-6 flex flex-col sm:flex-row justify-end items-center gap-4">
+                    <p id="migration-result" class="text-sm font-semibold flex-grow text-left"></p>
+                    <button id="migrate-data-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition w-full sm:w-auto">Mulai Migrasi</button>
                 </div>
             </div>
         </div>
