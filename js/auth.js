@@ -9,15 +9,20 @@ export function getGsiReadyState() {
     return isGsiReady;
 }
 
-export function initializeGsi() {
+export async function initializeGsi() {
     if (state.userProfile) return;
     try {
+        const { clientId } = await apiService.getAuthConfig();
+        if (!clientId) {
+            throw new Error("Google Client ID tidak dapat diambil dari server.");
+        }
+
         if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
-            throw new Error("Google Identity Services script not loaded yet.");
+            throw new Error("Skrip Google Identity Services belum dimuat.");
         }
 
         google.accounts.id.initialize({
-            client_id: '1095304913271-6p3m2v33p8doga2f99ft6f3922338kii.apps.googleusercontent.com',
+            client_id: clientId,
             callback: handleTokenResponse,
             auto_select: false,
             cancel_on_tap_outside: true
