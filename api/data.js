@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 
 // Import Handlers
 import handleLoginOrRegister from './handlers/authHandler.js';
-import { handleGetMaintenanceStatus, handleSetMaintenanceStatus, handleGetUpdateSignal, handleGetAuthConfig } from './handlers/configHandler.js';
+import { handleGetMaintenanceStatus, handleSetMaintenanceStatus, handleGetUpdateSignal } from './handlers/configHandler.js';
 import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetFullUserData } from './handlers/userHandler.js';
 import { handleGetAllSchools, handleCreateSchool } from './handlers/schoolHandler.js';
 import { handleSaveData, handleGetHistoryData, handleGetSchoolStudentData, handleGetChangesSince } from './handlers/attendanceHandler.js';
@@ -96,9 +96,6 @@ export default async function handler(request, response) {
         // Aksi publik yang tidak memerlukan setup tabel apa pun
         if (action === 'getMaintenanceStatus') {
             return await handleGetMaintenanceStatus(context);
-        }
-        if (action === 'getAuthConfig') {
-            return await handleGetAuthConfig(context);
         }
 
         // Jalankan FASE 1: Setup Esensial (sekarang membuat semua tabel)
