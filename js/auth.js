@@ -27,7 +27,7 @@ export async function initializeGsi() {
             callback: handleTokenResponse,
             auto_select: false,
             cancel_on_tap_outside: true,
-            use_fedcm_for_prompt: true // Explicitly use the modern browser standard
+            // use_fedcm_for_prompt: true // Removed this line to stabilize the library
         });
         isGsiReady = true;
         console.log("Google Sign-In service initialized.");
