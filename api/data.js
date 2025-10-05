@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 
 // Import Handlers
 import handleLoginOrRegister from './handlers/authHandler.js';
-import { handleGetMaintenanceStatus, handleSetMaintenanceStatus, handleGetUpdateSignal } from './handlers/configHandler.js';
+import { handleGetMaintenanceStatus, handleSetMaintenanceStatus, handleGetUpdateSignal, handleGetAuthConfig } from './handlers/configHandler.js';
 import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetFullUserData } from './handlers/userHandler.js';
 import { handleGetAllSchools, handleCreateSchool } from './handlers/schoolHandler.js';
 import { handleSaveData, handleGetHistoryData, handleGetSchoolStudentData, handleGetChangesSince } from './handlers/attendanceHandler.js';
@@ -94,9 +94,15 @@ export default async function handler(request, response) {
         const context = { payload, sql, response, SUPER_ADMIN_EMAILS, GoogleGenAI };
         
         // Aksi publik yang tidak memerlukan setup tabel apa pun
-        if (action === 'getMaintenanceStatus') {
-            return await handleGetMaintenanceStatus(context);
+        const preSetupPublicActions = {
+            'getMaintenanceStatus': () => handleGetMaintenanceStatus(context),
+            'getAuthConfig': () => handleGetAuthConfig(context)
+        };
+
+        if (preSetupPublicActions[action]) {
+            return await preSetupPublicActions[action]();
         }
+
 
         // Jalankan FASE 1: Setup Esensial (sekarang membuat semua tabel)
         await setupEssentialTables();
