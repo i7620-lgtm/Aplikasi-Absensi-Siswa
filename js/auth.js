@@ -9,14 +9,13 @@ export function getGsiReadyState() {
     return isGsiReady;
 }
 
-export function initializeGsi() {
+export async function initializeGsi() {
     if (state.userProfile) return;
     try {
-        // IMPORTANT: Replace this with your actual Google Client ID
-        const clientId = "1046014022822-262n39023g17cjsg58k979md8q9g5v3k.apps.googleusercontent.com";
+        const { clientId } = await apiService.getAuthConfig();
 
-        if (clientId.startsWith('YOUR_')) {
-             throw new Error("Google Client ID belum dikonfigurasi di js/auth.js.");
+        if (!clientId) {
+             throw new Error("Google Client ID tidak diterima dari server.");
         }
 
         if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
@@ -43,13 +42,13 @@ export function initializeGsi() {
     } catch (error) {
         console.error("Google Sign-In initialization failed:", error);
         isGsiReady = false;
-        displayAuthError(error.message);
+        displayAuthError('Konfigurasi otentikasi server tidak lengkap. Hubungi administrator.', error);
     }
 }
 
 export function handleSignIn() {
     try {
-        if (!isGsiReady) throw new Error("Google Sign-In service is not ready.");
+        if (!isGsiReady) throw new Error("Layanan Google Sign-In belum siap atau gagal dimuat karena masalah konfigurasi server.");
         // The notification callback is removed to comply with FedCM migration guidelines.
         // The prompt will now show without the UI status check, which resolves the warning.
         google.accounts.id.prompt();
