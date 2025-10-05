@@ -628,7 +628,57 @@ async function loadInitialData() {
 // Global scope for the listener to be added only once
 let rootListenerAttached = false;
 
+async function handleAuthenticationRedirect() {
+    if (!window.location.hash.includes('access_token')) {
+        return false;
+    }
+
+    const fragment = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = fragment.get('access_token');
+    
+    if (!accessToken) return false;
+
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    
+    showLoader('Memverifikasi...');
+    try {
+        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        if (!response.ok) throw new Error(`Gagal mengambil profil: ${response.statusText}`);
+        
+        const profile = await response.json();
+        const { user, initialStudents, initialLogs, latestVersion, maintenance } = await apiService.loginOrRegisterUser(profile);
+
+        if (maintenance) {
+            navigateTo('maintenance');
+        } else {
+            await setState({
+                userProfile: user,
+                studentsByClass: initialStudents || {},
+                savedLogs: initialLogs || [],
+                localVersion: latestVersion || 0,
+            });
+            showNotification(`Selamat datang, ${user.name}!`);
+            navigateTo('multiRoleHome');
+        }
+    } catch (error) {
+        console.error("Gagal memproses login OAuth:", error);
+        showNotification(`Gagal memproses login Anda: ${error.message}`, 'error');
+        navigateTo('setup');
+    } finally {
+        hideLoader();
+    }
+    return true;
+}
+
+
 async function initApp() {
+    if (await handleAuthenticationRedirect()) {
+        return;
+    }
+
     if(state.connectionError) {
         await setState({ connectionError: null });
     }
