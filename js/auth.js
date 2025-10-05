@@ -34,14 +34,10 @@ export function handleSignIn() {
 
     const oauth2Endpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
 
-    // Ensure a consistent redirect_uri by removing 'index.html' if it's at the end of the path.
-    // This prevents mismatches if the user accesses the site via '/some/path/' vs '/some/path/index.html'.
-    let path = window.location.pathname;
-    if (path.endsWith('/index.html')) {
-        // Removes 'index.html' but keeps the preceding '/'. e.g., /foo/index.html -> /foo/
-        path = path.slice(0, -10);
-    }
-    const redirectUri = window.location.origin + path;
+    // Create a static, canonical redirect URI pointing to the application's root.
+    // This removes inconsistencies from accessing '/index.html' vs '/' or '/path' vs '/path/'.
+    // The URI in the Google Cloud Console MUST exactly match this value (e.g., https://your-domain.com/).
+    const redirectUri = `${window.location.origin}/`;
 
     const params = {
         'client_id': googleClientId,
