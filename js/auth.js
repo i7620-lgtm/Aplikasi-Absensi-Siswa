@@ -9,12 +9,14 @@ export function getGsiReadyState() {
     return isGsiReady;
 }
 
-export async function initializeGsi() {
+export function initializeGsi() {
     if (state.userProfile) return;
     try {
-        const { clientId } = await apiService.getAuthConfig();
-        if (!clientId) {
-            throw new Error("Google Client ID tidak dapat diambil dari server.");
+        // IMPORTANT: Replace this with your actual Google Client ID
+        const clientId = "1046014022822-262n39023g17cjsg58k979md8q9g5v3k.apps.googleusercontent.com";
+
+        if (clientId.startsWith('YOUR_')) {
+             throw new Error("Google Client ID belum dikonfigurasi di js/auth.js.");
         }
 
         if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
@@ -40,7 +42,7 @@ export async function initializeGsi() {
     } catch (error) {
         console.error("Google Sign-In initialization failed:", error);
         isGsiReady = false;
-        displayAuthError(error.message); // Menampilkan pesan error yang lebih spesifik dari API
+        displayAuthError(error.message);
     }
 }
 
