@@ -27,10 +27,8 @@ export async function initializeGsi() {
             callback: handleTokenResponse,
             auto_select: false,
             cancel_on_tap_outside: true,
-            use_fedcm_for_prompt: false // Explicitly disable FedCM to prevent AbortError
         });
         isGsiReady = true;
-        // console.log("Google Sign-In service initialized."); // Removed for cleaner production console
 
         // If GSI is ready but the button text hasn't updated, update it now.
         const loginBtnText = document.getElementById('loginBtnText');
@@ -49,8 +47,7 @@ export async function initializeGsi() {
 export function handleSignIn() {
     try {
         if (!isGsiReady) throw new Error("Layanan Google Sign-In belum siap atau gagal dimuat karena masalah konfigurasi server.");
-        // The notification callback is removed to comply with FedCM migration guidelines.
-        // The prompt will now show without the UI status check, which resolves the warning.
+        // Prompt the user to sign in, using FedCM by default.
         google.accounts.id.prompt();
     } catch (error) {
         console.error("Error triggering GSI prompt:", error);
@@ -103,7 +100,6 @@ async function handleTokenResponse(response) {
         });
 
         showNotification(`Selamat datang, ${user.name}!`);
-        // console.log("Google Sign-In successful. User profile:", user); // Removed to protect user privacy in console
 
         navigateTo('multiRoleHome');
     } catch (error) {
