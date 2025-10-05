@@ -2,57 +2,53 @@ import { setState, navigateTo, state } from './main.js';
 import { showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
 
-let isGsiReady = false;
+let googleClientId = null;
+let authInitStarted = false;
 
 // --- GOOGLE SIGN-IN LOGIC ---
-export function getGsiReadyState() {
-    return isGsiReady;
-}
 
 export async function initializeGsi() {
-    if (state.userProfile) return;
+    if (state.userProfile || authInitStarted) return;
+    authInitStarted = true;
+
     try {
         const { clientId } = await apiService.getAuthConfig();
 
         if (!clientId) {
              throw new Error("Google Client ID tidak diterima dari server.");
         }
+        googleClientId = clientId;
 
-        if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
-            throw new Error("Skrip Google Identity Services belum dimuat.");
-        }
-
-        google.accounts.id.initialize({
-            client_id: clientId,
-            callback: handleTokenResponse,
-            auto_select: false,
-            cancel_on_tap_outside: true,
-        });
-        isGsiReady = true;
-
-        // If GSI is ready but the button text hasn't updated, update it now.
         const loginBtnText = document.getElementById('loginBtnText');
         if (loginBtnText && loginBtnText.textContent !== 'Login & Mulai Absensi') {
             loginBtnText.textContent = 'Login & Mulai Absensi';
             document.getElementById('loginBtn')?.removeAttribute('disabled');
         }
-
     } catch (error) {
-        console.error("Google Sign-In initialization failed:", error);
-        isGsiReady = false;
+        console.error("Google Auth initialization failed:", error);
         displayAuthError('Konfigurasi otentikasi server tidak lengkap. Hubungi administrator.', error);
     }
 }
 
 export function handleSignIn() {
-    try {
-        if (!isGsiReady) throw new Error("Layanan Google Sign-In belum siap atau gagal dimuat karena masalah konfigurasi server.");
-        // Prompt the user to sign in, using FedCM by default.
-        google.accounts.id.prompt();
-    } catch (error) {
-        console.error("Error triggering GSI prompt:", error);
-        displayAuthError('Tidak dapat memulai proses login.', error);
+    if (!googleClientId) {
+        displayAuthError('Konfigurasi otentikasi belum siap. Coba lagi sesaat.');
+        console.error("handleSignIn called before googleClientId was fetched.");
+        return;
     }
+
+    const oauth2Endpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
+
+    const params = {
+        'client_id': googleClientId,
+        'redirect_uri': window.location.origin + window.location.pathname,
+        'response_type': 'token',
+        'scope': 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+        'include_granted_scopes': 'true'
+    };
+
+    const url = `${oauth2Endpoint}?${new URLSearchParams(params).toString()}`;
+    window.location.href = url;
 }
 
 export async function handleSignOut() {
@@ -64,49 +60,6 @@ export async function handleSignOut() {
         adminActingAsSchool: null,
         adminActingAsJurisdiction: null,
     });
-    if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
-      google.accounts.id.disableAutoSelect();
-    }
     navigateTo('setup');
     showNotification('Anda telah berhasil logout.', 'info');
-}
-
-async function handleTokenResponse(response) {
-    showLoader('Memverifikasi...');
-    try {
-        const token = response.credential;
-        
-        // --- FIX: Correctly decode Base64Url JWT payload ---
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
-        const profile = JSON.parse(jsonPayload);
-        // --- END FIX ---
-
-        const { user, initialStudents, initialLogs, latestVersion, maintenance } = await apiService.loginOrRegisterUser(profile);
-
-        if (maintenance) {
-            navigateTo('maintenance');
-            return;
-        }
-
-        await setState({
-            userProfile: user,
-            studentsByClass: initialStudents || {},
-            savedLogs: initialLogs || [],
-            localVersion: latestVersion || 0,
-        });
-
-        showNotification(`Selamat datang, ${user.name}!`);
-
-        navigateTo('multiRoleHome');
-    } catch (error) {
-        console.error("A critical error occurred after receiving the token:", error);
-        displayAuthError('Gagal memproses login Anda.', error);
-        await handleSignOut(); // Ensure clean state on failure
-    } finally {
-        hideLoader();
-    }
 }
