@@ -94,6 +94,21 @@ async function handleTokenResponse(tokenResponse) {
         hideLoader();
         showNotification(`Selamat datang, ${state.userProfile.name}!`);
 
+        // Trigger background migration check for Super Admins (fire-and-forget)
+        if (user.primaryRole === 'SUPER_ADMIN') {
+            console.log("Super Admin logged in. Triggering background migrations check...");
+            apiService.runBackgroundMigrations().then(response => {
+                console.groupCollapsed('%c[Migration Status]', 'font-weight: bold; color: #4f46e5;');
+                console.log('Pesan: ' + response.message);
+                if (response.details) {
+                    console.log('Detail: ' + response.details);
+                }
+                console.groupEnd();
+            }).catch(error => {
+                console.error('%c[Migration Failed]', 'font-weight: bold; color: #dc2626;', error.message);
+            });
+        }
+
         // ALWAYS navigate to the new multi-role home screen.
         // This screen will decide what to show based on the user's roles.
         navigateTo('multiRoleHome');
