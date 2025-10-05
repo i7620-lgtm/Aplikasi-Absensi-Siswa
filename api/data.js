@@ -11,8 +11,6 @@ import handleGetDashboardData from './handlers/dashboardHandler.js';
 import handleGetRecapData from './handlers/recapHandler.js';
 import handleAiRecommendation from './handlers/aiHandler.js';
 import handleGetParentData from './handlers/parentHandler.js';
-// BARU: Impor handler migrasi sisi klien
-import { handleCheckAndStartClientMigration, handleUploadMigratedData } from './handlers/migrationHandler.js'; 
 import { 
     handleGetJurisdictionTree, 
     handleCreateJurisdiction, 
@@ -40,7 +38,7 @@ async function setupEssentialTables() {
             await sql`CREATE TABLE IF NOT EXISTS jurisdictions (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL, parent_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL, created_at TIMESTAMPTZ DEFAULT NOW());`;
             await sql`CREATE TABLE IF NOT EXISTS users (email VARCHAR(255) PRIMARY KEY, name VARCHAR(255), picture TEXT, role VARCHAR(50) DEFAULT 'GURU', school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL, assigned_classes TEXT[] DEFAULT '{}', created_at TIMESTAMPTZ DEFAULT NOW());`;
             
-            // Tabel Data (dipindahkan ke sini untuk konsistensi)
+            // Tabel Data
             await sql`CREATE TABLE IF NOT EXISTS change_log (
                 id BIGSERIAL PRIMARY KEY,
                 school_id INTEGER NOT NULL,
@@ -49,21 +47,6 @@ async function setupEssentialTables() {
                 payload JSONB NOT NULL,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );`;
-            // Tabel absensi lama, hanya ada untuk migrasi. Bisa dihapus setelah migrasi selesai.
-            await sql`CREATE TABLE IF NOT EXISTS absensi_data (
-                id BIGSERIAL PRIMARY KEY,
-                school_id INTEGER,
-                student_name VARCHAR(255),
-                class VARCHAR(50),
-                class_name VARCHAR(50),
-                date DATE,
-                status CHAR(1),
-                teacher_email VARCHAR(255),
-                last_updated TIMESTAMPTZ DEFAULT NOW()
-            );`;
-            
-            // Tabel untuk melacak status migrasi
-            await sql`CREATE TABLE IF NOT EXISTS migrations (name VARCHAR(255) PRIMARY KEY, executed_at TIMESTAMPTZ DEFAULT NOW());`;
 
             // Migrasi Skema / Alter Table
             await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;`;
@@ -135,11 +118,7 @@ export default async function handler(request, response) {
         }
         
         // Dari titik ini, semua aksi memerlukan setup lanjutan (indeks)
-        const nonExtendedSetupActions = ['checkAndStartClientMigration', 'uploadMigratedData'];
-        if (!nonExtendedSetupActions.includes(action)) {
-            await setupExtendedTables();
-        }
-
+        await setupExtendedTables();
 
         if (!userEmail) {
             return response.status(401).json({ error: 'Unauthorized: userEmail is required' });
@@ -168,8 +147,6 @@ export default async function handler(request, response) {
 
 
         const authenticatedActions = {
-            'checkAndStartClientMigration': () => handleCheckAndStartClientMigration(context), // BARU
-            'uploadMigratedData': () => handleUploadMigratedData(context), // BARU
             'getUserProfile': () => response.status(200).json({ userProfile: context.user }),
             'getFullUserData': () => handleGetFullUserData(context),
             'getUpdateSignal': () => handleGetUpdateSignal(context),
