@@ -15,7 +15,11 @@ export async function handleCheckAndStartClientMigration({ user, sql, response }
         // untuk menghindari masalah nama kolom yang tidak konsisten (`class` vs `class_name`).
         const { rows: rawData } = await sql`SELECT * FROM absensi_data`;
         
-        return response.status(200).json({ status: 'pending', data: rawData });
+        // Tambahan: Ambil ID sekolah default (sekolah pertama yang dibuat) untuk data lama yang mungkin tidak memiliki school_id.
+        const { rows: schools } = await sql`SELECT id FROM schools ORDER BY id ASC LIMIT 1`;
+        const defaultSchoolId = schools.length > 0 ? schools[0].id : null;
+
+        return response.status(200).json({ status: 'pending', data: rawData, defaultSchoolId });
 
     } catch (error) {
         // Jika tabel 'absensi_data' tidak ada, itu bukan error, berarti tidak ada yang perlu dimigrasi.
