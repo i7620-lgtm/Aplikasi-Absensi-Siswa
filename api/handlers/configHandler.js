@@ -38,3 +38,32 @@ export async function handleSetMaintenanceStatus({ payload, user, response }) {
         return response.status(500).json({ error: 'Failed to update maintenance status.' });
     }
 }
+
+export async function handleGetUpdateSignal({ payload, user, sql, response }) {
+    const schoolId = payload.schoolId || user.school_id;
+    if (!schoolId) {
+        return response.status(400).json({ error: 'School ID is required for update signal.' });
+    }
+
+    // Prioritize Edge Config for speed
+    if (process.env.EDGE_CONFIG) {
+        try {
+            const edgeConfigClient = createClient(process.env.EDGE_CONFIG);
+            const key = `school_version_${schoolId}`;
+            const latestVersion = await edgeConfigClient.get(key);
+            return response.status(200).json({ latestVersion: latestVersion || 0 });
+        } catch (error) {
+            console.warn("Edge Config read error for update signal, falling back to DB:", error);
+        }
+    }
+
+    // Fallback to database if Edge Config is not available or fails
+    try {
+        const { rows } = await sql`SELECT MAX(id) as max_id FROM change_log WHERE school_id = ${schoolId}`;
+        const latestVersion = rows[0]?.max_id || 0;
+        return response.status(200).json({ latestVersion });
+    } catch (dbError) {
+        console.error("DB fallback for update signal failed:", dbError);
+        return response.status(500).json({ error: 'Failed to read server update signal from DB.' });
+    }
+}
