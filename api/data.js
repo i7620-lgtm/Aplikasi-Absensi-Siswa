@@ -10,7 +10,8 @@ import { handleSaveData, handleGetHistoryData, handleGetSchoolStudentData, handl
 import handleGetDashboardData from './handlers/dashboardHandler.js';
 import handleGetRecapData from './handlers/recapHandler.js';
 import handleAiRecommendation from './handlers/aiHandler.js';
-import handleGetParentData from './handlers/parentHandler.js'; // New
+import handleGetParentData from './handlers/parentHandler.js';
+import handleRunBackgroundMigrations from './handlers/migrationHandler.js'; // Baru
 import { 
     handleGetJurisdictionTree, 
     handleCreateJurisdiction, 
@@ -26,37 +27,19 @@ export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.co
 
 // --- SETUP DATABASE PARSIAL (DUA FASE) ---
 
-// FASE 1: Setup super cepat, hanya untuk kebutuhan login.
+// FASE 1: Setup super cepat, membuat SEMUA tabel esensial.
 let essentialDbSetupPromise = null;
 async function setupEssentialTables() {
     if (essentialDbSetupPromise) return essentialDbSetupPromise;
     essentialDbSetupPromise = (async () => {
         try {
-            console.log("Menjalankan setup skema database esensial untuk login...");
-            await sql`CREATE TABLE IF NOT EXISTS schools (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW());`;
+            console.log("Menjalankan setup skema database esensial...");
+            // Tabel Inti
+            await sql`CREATE TABLE IF NOT EXISTS schools (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW(), jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL);`;
             await sql`CREATE TABLE IF NOT EXISTS jurisdictions (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL, parent_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL, created_at TIMESTAMPTZ DEFAULT NOW());`;
             await sql`CREATE TABLE IF NOT EXISTS users (email VARCHAR(255) PRIMARY KEY, name VARCHAR(255), picture TEXT, role VARCHAR(50) DEFAULT 'GURU', school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL, assigned_classes TEXT[] DEFAULT '{}', created_at TIMESTAMPTZ DEFAULT NOW());`;
-            await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;`;
-            await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;`;
-            console.log("Setup skema esensial berhasil.");
-        } catch (error) {
-            console.error("Gagal melakukan setup tabel esensial:", error);
-            essentialDbSetupPromise = null; 
-            throw error;
-        }
-    })();
-    return essentialDbSetupPromise;
-}
-
-// FASE 2: Setup lanjutan, dijalankan hanya saat dibutuhkan setelah login.
-let extendedDbSetupPromise = null;
-async function setupExtendedTables() {
-    if (extendedDbSetupPromise) return extendedDbSetupPromise;
-    extendedDbSetupPromise = (async () => {
-        try {
-            console.log("Menjalankan setup skema database lanjutan (change_log, dll)...");
             
-            // Tabel `change_log` adalah inti dari semua fitur setelah login.
+            // Tabel Data (dipindahkan ke sini untuk konsistensi)
             await sql`CREATE TABLE IF NOT EXISTS change_log (
                 id BIGSERIAL PRIMARY KEY,
                 school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
@@ -65,9 +48,8 @@ async function setupExtendedTables() {
                 payload JSONB NOT NULL,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );`;
-            
-            // Tabel `absensi_data` yang di-denormalisasi (opsional, tapi bagus untuk performa rekap)
-             await sql`CREATE TABLE IF NOT EXISTS absensi_data (
+            // Tabel absensi lama, hanya ada untuk migrasi. Bisa dihapus setelah migrasi selesai.
+            await sql`CREATE TABLE IF NOT EXISTS absensi_data (
                 id BIGSERIAL PRIMARY KEY,
                 school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
                 student_name VARCHAR(255) NOT NULL,
@@ -78,14 +60,39 @@ async function setupExtendedTables() {
                 last_updated TIMESTAMPTZ DEFAULT NOW()
             );`;
             
+            // Tabel untuk melacak status migrasi
+            await sql`CREATE TABLE IF NOT EXISTS migrations (name VARCHAR(255) PRIMARY KEY, executed_at TIMESTAMPTZ DEFAULT NOW());`;
+
+            // Migrasi Skema / Alter Table
+            await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;`;
+            await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;`;
+            
+            console.log("Setup skema esensial (semua tabel) berhasil.");
+        } catch (error) {
+            console.error("Gagal melakukan setup tabel esensial:", error);
+            essentialDbSetupPromise = null; 
+            throw error;
+        }
+    })();
+    return essentialDbSetupPromise;
+}
+
+// FASE 2: Setup lanjutan, hanya untuk optimasi (indeks).
+let extendedDbSetupPromise = null;
+async function setupExtendedTables() {
+    if (extendedDbSetupPromise) return extendedDbSetupPromise;
+    extendedDbSetupPromise = (async () => {
+        try {
+            console.log("Menjalankan setup skema database lanjutan (indeks)...");
+            
             // Indeks untuk mempercepat query
             await sql`CREATE INDEX IF NOT EXISTS idx_change_log_school_id_id ON change_log (school_id, id);`;
             await sql`CREATE INDEX IF NOT EXISTS idx_absensi_data_school_class_date ON absensi_data (school_id, class_name, date);`;
             await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_absensi ON absensi_data (school_id, student_name, date);`;
 
-            console.log("Setup skema lanjutan berhasil.");
+            console.log("Setup skema lanjutan (indeks) berhasil.");
         } catch (error) {
-            console.error("Gagal melakukan setup tabel lanjutan:", error);
+            console.error("Gagal melakukan setup tabel lanjutan (indeks):", error);
             extendedDbSetupPromise = null;
             throw error;
         }
@@ -108,7 +115,7 @@ export default async function handler(request, response) {
             return await handleGetMaintenanceStatus(context);
         }
 
-        // Jalankan FASE 1: Setup Esensial (sangat cepat)
+        // Jalankan FASE 1: Setup Esensial (sekarang membuat semua tabel)
         await setupEssentialTables();
 
         if (request.method !== 'POST') {
@@ -124,9 +131,12 @@ export default async function handler(request, response) {
             return await publicActions[action]();
         }
         
-        // Dari titik ini, semua aksi memerlukan setup lanjutan
-        // Jalankan FASE 2: Setup Lanjutan (dijalankan sesuai kebutuhan)
-        await setupExtendedTables();
+        // Dari titik ini, semua aksi memerlukan setup lanjutan (indeks)
+        // Kita tidak menunggu ini untuk aksi super admin tertentu seperti migrasi
+        if (action !== 'runBackgroundMigrations') {
+            await setupExtendedTables();
+        }
+
 
         if (!userEmail) {
             return response.status(401).json({ error: 'Unauthorized: userEmail is required' });
@@ -155,6 +165,7 @@ export default async function handler(request, response) {
 
 
         const authenticatedActions = {
+            'runBackgroundMigrations': () => handleRunBackgroundMigrations(context), // Baru
             'getUserProfile': () => response.status(200).json({ userProfile: context.user }),
             'getFullUserData': () => handleGetFullUserData(context),
             'getUpdateSignal': () => handleGetUpdateSignal(context),
