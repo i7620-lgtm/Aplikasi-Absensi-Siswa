@@ -1,71 +1,79 @@
-export default async function handleRunBackgroundMigrations({ user, sql, response }) {
+export async function handleCheckAndStartClientMigration({ user, sql, response }) {
     if (user.role !== 'SUPER_ADMIN') {
-        return response.status(403).json({ error: 'Forbidden: Only Super Admins can run migrations.' });
+        return response.status(403).json({ error: 'Forbidden' });
     }
 
-    const MIGRATION_NAME = 'migrate_v1_absensi_data_to_changelog';
+    const MIGRATION_NAME = 'client_side_migration_v1';
 
     try {
         const { rows: ranMigrations } = await sql`SELECT name FROM migrations WHERE name = ${MIGRATION_NAME}`;
         if (ranMigrations.length > 0) {
-            return response.status(200).json({ 
-                message: `Migrasi '${MIGRATION_NAME}' sudah pernah dijalankan.`,
-                details: "Tidak ada tindakan yang diambil."
-            });
+            return response.status(200).json({ status: 'complete' });
         }
 
-        // Begin migration
-        const client = await sql.connect();
-        try {
-            await client.query('BEGIN');
-            
-            // Mengelompokkan data absensi lama dan memasukkannya ke dalam change_log
-            // FIX: Using "class" instead of "class_name" to match the older schema that likely exists in production.
-            // "class" is a reserved keyword, so it must be in double quotes.
-            const { rows: migratedRows } = await client.query(`
-                WITH grouped_absensi AS (
-                    SELECT
-                        school_id,
-                        "class",
-                        date,
-                        jsonb_object_agg(student_name, status) as attendance,
-                        (array_agg(teacher_email))[1] as user_email
-                    FROM absensi_data
-                    GROUP BY school_id, "class", date
-                )
-                INSERT INTO change_log (school_id, user_email, event_type, payload)
-                SELECT
-                    school_id,
-                    COALESCE(user_email, 'migration@system.local'),
-                    'ATTENDANCE_UPDATED',
-                    jsonb_build_object(
-                        'date', date::text,
-                        'class', "class",
-                        'attendance', attendance
-                    )
-                FROM grouped_absensi
-                RETURNING id;
-            `);
+        // Ambil SEMUA data mentah dari tabel lama. `SELECT *` adalah cara paling aman
+        // untuk menghindari masalah nama kolom yang tidak konsisten (`class` vs `class_name`).
+        const { rows: rawData } = await sql`SELECT * FROM absensi_data`;
+        
+        return response.status(200).json({ status: 'pending', data: rawData });
 
-            // Menandai migrasi sebagai selesai
-            await client.query(`INSERT INTO migrations (name) VALUES ($1)`, [MIGRATION_NAME]);
-
-            await client.query('COMMIT');
-            
-            const message = `Migrasi '${MIGRATION_NAME}' berhasil diselesaikan.`;
-            const details = `${migratedRows.length} rekaman absensi (dikelompokkan per kelas/hari) berhasil dimigrasi ke format baru.`;
-            
-            return response.status(200).json({ message, details });
-
-        } catch(error) {
-            await client.query('ROLLBACK');
-            console.error(`Migration ${MIGRATION_NAME} failed:`, error);
-            return response.status(500).json({ error: `Proses migrasi gagal: ${error.message}` });
-        } finally {
-            client.release();
-        }
     } catch (error) {
+        // Jika tabel 'absensi_data' tidak ada, itu bukan error, berarti tidak ada yang perlu dimigrasi.
+        if (error.message.includes('relation "absensi_data" does not exist')) {
+            console.log("Tabel 'absensi_data' tidak ditemukan, migrasi dilewati.");
+            return response.status(200).json({ status: 'no_data_table' });
+        }
         console.error("Gagal memeriksa status migrasi:", error);
         return response.status(500).json({ error: `Gagal memeriksa status migrasi: ${error.message}` });
+    }
+}
+
+export async function handleUploadMigratedData({ payload, user, sql, response }) {
+    if (user.role !== 'SUPER_ADMIN') {
+        return response.status(403).json({ error: 'Forbidden' });
+    }
+
+    const { migratedData } = payload;
+    if (!migratedData || !Array.isArray(migratedData) || migratedData.length === 0) {
+        return response.status(400).json({ error: 'Tidak ada data migrasi yang diberikan.' });
+    }
+    
+    const MIGRATION_NAME = 'client_side_migration_v1';
+    const client = await sql.connect();
+
+    try {
+        await client.query('BEGIN');
+
+        // Menggunakan unnest untuk bulk insert yang efisien
+        const values = migratedData.map(item => [
+            item.school_id,
+            item.user_email,
+            item.event_type,
+            JSON.stringify(item.payload)
+        ]);
+
+        const text = 'INSERT INTO change_log (school_id, user_email, event_type, payload) SELECT * FROM unnest($1::int[], $2::varchar[], $3::varchar[], $4::jsonb[])';
+        const params = [
+            values.map(v => v[0]),
+            values.map(v => v[1]),
+            values.map(v => v[2]),
+            values.map(v => v[3])
+        ];
+        
+        const { rowCount } = await client.query(text, params);
+        
+        // Menandai migrasi sebagai selesai
+        await client.query(`INSERT INTO migrations (name) VALUES ($1)`, [MIGRATION_NAME]);
+
+        await client.query('COMMIT');
+        
+        return response.status(200).json({ status: 'success', count: rowCount });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Gagal mengunggah data migrasi:', error);
+        return response.status(500).json({ error: `Gagal menyimpan data migrasi: ${error.message}` });
+    } finally {
+        client.release();
     }
 }
