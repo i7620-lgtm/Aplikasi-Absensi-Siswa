@@ -1,4 +1,5 @@
 
+
 import { setState, navigateTo, state } from './main.js';
 import { showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
@@ -79,7 +80,16 @@ async function handleTokenResponse(response) {
     showLoader('Memverifikasi...');
     try {
         const token = response.credential;
-        const profile = JSON.parse(atob(token.split('.')[1]));
+        
+        // --- FIX: Correctly decode Base64Url JWT payload ---
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        const profile = JSON.parse(jsonPayload);
+        // --- END FIX ---
+
         const { user, initialStudents, initialLogs, latestVersion, maintenance } = await apiService.loginOrRegisterUser(profile);
 
         if (maintenance) {
