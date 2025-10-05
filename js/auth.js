@@ -42,11 +42,9 @@ export function initializeGsi() {
 export function handleSignIn() {
     try {
         if (!isGsiReady) throw new Error("Google Sign-In service is not ready.");
-        google.accounts.id.prompt((notification) => {
-            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                console.warn("GSI prompt was not displayed or was skipped.");
-            }
-        });
+        // The notification callback is removed to comply with FedCM migration guidelines.
+        // The prompt will now show without the UI status check, which resolves the warning.
+        google.accounts.id.prompt();
     } catch (error) {
         console.error("Error triggering GSI prompt:", error);
         displayAuthError('Tidak dapat memulai proses login.', error);
