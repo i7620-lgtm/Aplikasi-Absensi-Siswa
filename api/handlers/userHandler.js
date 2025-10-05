@@ -14,6 +14,46 @@ async function getSubJurisdictionIds(jurisdictionId, sql) {
     return rows.map(r => r.id);
 }
 
+export async function handleGetFullUserData({ user, sql, response }) {
+    // This function is now mostly DEPRECATED in the delta-sync model.
+    // The initial data load is handled by the login function.
+    // This can serve as a hard refresh fallback if needed.
+    console.warn("handleGetFullUserData was called. This should be infrequent in the new delta-sync architecture.");
+    
+    if (!user.school_id) {
+        return response.status(200).json({ userData: { students_by_class: {}, saved_logs: [] }, updateSignal: 0 });
+    }
+
+    // Reconstruct state from logs as a fallback
+    const { rows: changes } = await sql`
+        SELECT id, event_type, payload
+        FROM change_log
+        WHERE school_id = ${user.school_id}
+        ORDER BY id ASC;
+    `;
+
+    const studentsByClass = {};
+    const attendanceLogs = {}; // Use map for efficient updates
+
+    changes.forEach(change => {
+        if (change.event_type === 'ATTENDANCE_UPDATED') {
+            const logKey = `${change.payload.class}-${change.payload.date}`;
+            attendanceLogs[logKey] = change.payload;
+        } else if (change.event_type === 'STUDENT_LIST_UPDATED') {
+            studentsByClass[change.payload.class] = { students: change.payload.students };
+        }
+    });
+
+    const latestVersion = changes.length > 0 ? changes[changes.length - 1].id : 0;
+
+    const userData = {
+        students_by_class: studentsByClass,
+        saved_logs: Object.values(attendanceLogs)
+    };
+    
+    return response.status(200).json({ userData, updateSignal: latestVersion });
+}
+
 
 export async function handleGetAllUsers({ user, sql, response }) {
     const authorizedRoles = ['SUPER_ADMIN', 'ADMIN_SEKOLAH', 'ADMIN_DINAS_PENDIDIKAN'];
