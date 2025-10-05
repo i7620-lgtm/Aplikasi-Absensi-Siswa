@@ -1,5 +1,3 @@
-
-
 import { setState, navigateTo, state } from './main.js';
 import { showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
@@ -32,7 +30,7 @@ export async function initializeGsi() {
             use_fedcm_for_prompt: false // Explicitly disable FedCM to prevent AbortError
         });
         isGsiReady = true;
-        console.log("Google Sign-In service initialized.");
+        // console.log("Google Sign-In service initialized."); // Removed for cleaner production console
 
         // If GSI is ready but the button text hasn't updated, update it now.
         const loginBtnText = document.getElementById('loginBtnText');
@@ -105,7 +103,7 @@ async function handleTokenResponse(response) {
         });
 
         showNotification(`Selamat datang, ${user.name}!`);
-        console.log("Google Sign-In successful. User profile:", user);
+        // console.log("Google Sign-In successful. User profile:", user); // Removed to protect user privacy in console
 
         navigateTo('multiRoleHome');
     } catch (error) {
