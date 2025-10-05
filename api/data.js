@@ -24,80 +24,6 @@ import {
 // --- KONFIGURASI ---
 export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
 
-// --- FUNGSI MIGRASI DATA ---
-async function runMigrations() {
-    console.log("Memeriksa status migrasi...");
-    const { rows: executed } = await sql`SELECT name FROM migrations WHERE name = 'migrate_legacy_logs_to_changelog_v2'`;
-    if (executed.length > 0) {
-        console.log("Migrasi data lama ke change_log sudah dijalankan. Melewati.");
-        return;
-    }
-
-    console.log("Memulai migrasi data dari 'absensi_data' ke 'change_log'...");
-    const { rows: legacyData } = await sql`
-        SELECT user_email, school_id, students_by_class, saved_logs 
-        FROM absensi_data 
-        WHERE saved_logs IS NOT NULL AND jsonb_array_length(saved_logs) > 0;
-    `;
-
-    if (legacyData.length === 0) {
-        console.log("Tidak ada data lama yang perlu dimigrasi.");
-        await sql`INSERT INTO migrations (name) VALUES ('migrate_legacy_logs_to_changelog_v2')`;
-        return;
-    }
-
-    const client = await sql.connect();
-    try {
-        await client.query('BEGIN');
-        console.log(`Ditemukan ${legacyData.length} pengguna dengan data lama untuk dimigrasi.`);
-
-        for (const row of legacyData) {
-            // Migrasi log absensi
-            for (const log of row.saved_logs) {
-                const payload = {
-                    class: log.class,
-                    date: log.date,
-                    attendance: log.attendance
-                };
-                const createdAt = log.lastModified || new Date().toISOString();
-                
-                await client.query(
-                    `INSERT INTO change_log (school_id, user_email, event_type, payload, created_at) VALUES ($1, $2, 'ATTENDANCE_UPDATED', $3, $4)`,
-                    [row.school_id, row.user_email, JSON.stringify(payload), createdAt]
-                );
-            }
-            
-            // Migrasi daftar siswa
-            if (row.students_by_class) {
-                 for (const className in row.students_by_class) {
-                    const studentData = row.students_by_class[className];
-                    const payload = {
-                        class: className,
-                        students: studentData.students || []
-                    };
-                    const createdAt = studentData.lastModified || new Date().toISOString();
-                    
-                     await client.query(
-                        `INSERT INTO change_log (school_id, user_email, event_type, payload, created_at) VALUES ($1, $2, 'STUDENT_LIST_UPDATED', $3, $4)`,
-                        [row.school_id, row.user_email, JSON.stringify(payload), createdAt]
-                    );
-                 }
-            }
-        }
-
-        await client.query(`INSERT INTO migrations (name) VALUES ('migrate_legacy_logs_to_changelog_v2')`);
-        await client.query('COMMIT');
-        console.log("Migrasi data lama berhasil diselesaikan.");
-    } catch (error) {
-        await client.query('ROLLBACK');
-        console.error("Gagal melakukan migrasi data:", error);
-        throw error; // Hentikan proses jika migrasi gagal
-    } finally {
-        client.release();
-    }
-}
-
-
 // --- SETUP DATABASE YANG EFISIEN ---
 let dbSetupPromise = null;
 async function setupTables() {
@@ -139,9 +65,7 @@ async function setupTables() {
             await sql`CREATE INDEX IF NOT EXISTS idx_changelog_latest_student_list ON change_log (school_id, (payload->>'class'), id DESC) WHERE event_type = 'STUDENT_LIST_UPDATED';`;
             await sql`CREATE INDEX IF NOT EXISTS idx_changelog_students_gin ON change_log USING GIN ((payload->'students')) WHERE event_type = 'STUDENT_LIST_UPDATED';`;
             console.log("Indeks berhasil diverifikasi/dibuat.");
-
-            console.log("Setup skema database berhasil. Menjalankan migrasi jika diperlukan...");
-            await runMigrations(); 
+            console.log("Setup skema database berhasil.");
 
         } catch (error) {
             console.error("Gagal melakukan setup tabel:", error);
