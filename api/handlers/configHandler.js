@@ -4,7 +4,7 @@ export async function handleGetAuthConfig({ response }) {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) {
         console.error("SERVER_CONFIGURATION_ERROR: GOOGLE_CLIENT_ID is not set.");
-        return response.status(500).json({ error: 'Konfigurasi otentikasi server tidak lengkap.' });
+        return response.status(503).json({ error: 'Konfigurasi otentikasi server tidak lengkap. Hubungi administrator.' });
     }
     return response.status(200).json({ clientId });
 }
