@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 
 // Import Handlers
 import handleLoginOrRegister from './handlers/authHandler.js';
-import { handleGetMaintenanceStatus, handleSetMaintenanceStatus, handleGetUpdateSignal, handleGetAuthConfig } from './handlers/configHandler.js';
+import { handleGetUpdateSignal, handleGetAuthConfig } from './handlers/configHandler.js';
 import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetFullUserData } from './handlers/userHandler.js';
 import { handleGetAllSchools, handleCreateSchool } from './handlers/schoolHandler.js';
 import { handleSaveData, handleGetHistoryData, handleGetSchoolStudentData, handleGetChangesSince } from './handlers/attendanceHandler.js';
@@ -25,18 +25,16 @@ import {
 // --- KONFIGURASI ---
 export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
 
-// --- SETUP DATABASE PARSIAL (DUA FASE) ---
-
-// FASE 1: Setup super cepat, membuat SEMUA tabel esensial.
-let essentialDbSetupPromise = null;
-async function setupEssentialTables() {
-    if (essentialDbSetupPromise) return essentialDbSetupPromise;
-    essentialDbSetupPromise = (async () => {
+// --- SETUP DATABASE ---
+let dbSetupPromise = null;
+async function setupDatabase() {
+    if (dbSetupPromise) return dbSetupPromise;
+    dbSetupPromise = (async () => {
         try {
-            console.log("Menjalankan setup skema database esensial...");
+            console.log("Menjalankan setup skema database...");
             // Tabel Inti
-            await sql`CREATE TABLE IF NOT EXISTS schools (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW(), jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL);`;
             await sql`CREATE TABLE IF NOT EXISTS jurisdictions (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL, parent_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL, created_at TIMESTAMPTZ DEFAULT NOW());`;
+            await sql`CREATE TABLE IF NOT EXISTS schools (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW(), jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL);`;
             await sql`CREATE TABLE IF NOT EXISTS users (email VARCHAR(255) PRIMARY KEY, name VARCHAR(255), picture TEXT, role VARCHAR(50) DEFAULT 'GURU', school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL, assigned_classes TEXT[] DEFAULT '{}', created_at TIMESTAMPTZ DEFAULT NOW());`;
             
             // Tabel Data
@@ -52,40 +50,28 @@ async function setupEssentialTables() {
             // Migrasi Skema / Alter Table
             await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;`;
             await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;`;
-            
-            console.log("Setup skema esensial (semua tabel) berhasil.");
-        } catch (error) {
-            console.error("Gagal melakukan setup tabel esensial:", error);
-            essentialDbSetupPromise = null; 
-            throw error;
-        }
-    })();
-    return essentialDbSetupPromise;
-}
 
-// FASE 2: Setup lanjutan, hanya untuk optimasi (indeks).
-let extendedDbSetupPromise = null;
-async function setupExtendedTables() {
-    if (extendedDbSetupPromise) return extendedDbSetupPromise;
-    extendedDbSetupPromise = (async () => {
-        try {
-            console.log("Menjalankan setup skema database lanjutan (indeks)...");
-            
             // Indeks untuk mempercepat query
             await sql`CREATE INDEX IF NOT EXISTS idx_change_log_school_id_id ON change_log (school_id, id);`;
             
-            console.log("Setup skema lanjutan (indeks) berhasil.");
+            console.log("Setup skema database (tabel dan indeks) berhasil.");
         } catch (error) {
-            console.error("Gagal melakukan setup tabel lanjutan (indeks):", error);
-            extendedDbSetupPromise = null;
+            console.error("Gagal melakukan setup database:", error);
+            dbSetupPromise = null; 
             throw error;
         }
     })();
-    return extendedDbSetupPromise;
+    return dbSetupPromise;
 }
+
 
 // --- LOGIKA UTAMA HANDLER ---
 export default async function handler(request, response) {
+    // Validasi metode request di awal untuk menolak permintaan yang tidak valid secepat mungkin.
+    if (request.method !== 'POST') {
+        return response.status(405).json({ error: 'Method Not Allowed' });
+    }
+
     try {
         const { action, payload, userEmail } = request.body;
         if (!action) {
@@ -93,26 +79,16 @@ export default async function handler(request, response) {
         }
         
         const context = { payload, sql, response, SUPER_ADMIN_EMAILS, GoogleGenAI };
-        
-        // Aksi publik yang tidak memerlukan setup tabel apa pun
-        const preSetupPublicActions = {
-            'getMaintenanceStatus': () => handleGetMaintenanceStatus(context),
-            'getAuthConfig': () => handleGetAuthConfig(context)
-        };
 
-        if (preSetupPublicActions[action]) {
-            return await preSetupPublicActions[action]();
-        }
-
-
-        // Jalankan FASE 1: Setup Esensial (sekarang membuat semua tabel)
-        await setupEssentialTables();
-
-        if (request.method !== 'POST') {
-            return response.status(405).json({ error: 'Method Not Allowed' });
+        // Aksi 'getAuthConfig' adalah satu-satunya yang tidak memerlukan koneksi DB.
+        if (action === 'getAuthConfig') {
+            return await handleGetAuthConfig(context);
         }
         
-        // Aksi publik yang hanya memerlukan setup esensial
+        // Semua aksi lain memerlukan koneksi DB, jadi inisialisasi sekarang.
+        await setupDatabase();
+        
+        // Aksi publik yang memerlukan koneksi DB
         const publicActions = {
             'loginOrRegister': () => handleLoginOrRegister(context),
         };
@@ -121,9 +97,7 @@ export default async function handler(request, response) {
             return await publicActions[action]();
         }
         
-        // Dari titik ini, semua aksi memerlukan setup lanjutan (indeks)
-        await setupExtendedTables();
-
+        // Dari titik ini, semua aksi memerlukan autentikasi pengguna.
         if (!userEmail) {
             return response.status(401).json({ error: 'Unauthorized: userEmail is required' });
         }
@@ -155,7 +129,6 @@ export default async function handler(request, response) {
             'getFullUserData': () => handleGetFullUserData(context),
             'getUpdateSignal': () => handleGetUpdateSignal(context),
             'getChangesSince': () => handleGetChangesSince(context),
-            'setMaintenanceStatus': () => handleSetMaintenanceStatus(context),
             'getAllUsers': () => handleGetAllUsers(context),
             'updateUserConfiguration': () => handleUpdateUserConfiguration(context),
             'updateUsersBulk': () => handleUpdateUsersBulk(context),
