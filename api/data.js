@@ -24,62 +24,78 @@ import {
 // --- KONFIGURASI ---
 export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
 
-// --- SETUP DATABASE YANG EFISIEN ---
-let dbSetupPromise = null;
-async function setupTables() {
-    if (dbSetupPromise) return dbSetupPromise;
-    dbSetupPromise = (async () => {
+// --- SETUP DATABASE PARSIAL (DUA FASE) ---
+
+// FASE 1: Setup super cepat, hanya untuk kebutuhan login.
+let essentialDbSetupPromise = null;
+async function setupEssentialTables() {
+    if (essentialDbSetupPromise) return essentialDbSetupPromise;
+    essentialDbSetupPromise = (async () => {
         try {
-            console.log("Menjalankan setup skema database untuk instans ini...");
+            console.log("Menjalankan setup skema database esensial untuk login...");
             await sql`CREATE TABLE IF NOT EXISTS schools (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW());`;
             await sql`CREATE TABLE IF NOT EXISTS jurisdictions (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL, parent_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL, created_at TIMESTAMPTZ DEFAULT NOW());`;
-            
-            // --- FIX: Use idempotent ALTER TABLE statements to prevent race conditions ---
-            await sql`ALTER TABLE schools ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;`;
-            
             await sql`CREATE TABLE IF NOT EXISTS users (email VARCHAR(255) PRIMARY KEY, name VARCHAR(255), picture TEXT, role VARCHAR(50) DEFAULT 'GURU', school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL, assigned_classes TEXT[] DEFAULT '{}', created_at TIMESTAMPTZ DEFAULT NOW());`;
-            
-            // --- FIX: Use idempotent ALTER TABLE statements for all column additions ---
             await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;`;
             await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;`;
+            console.log("Setup skema esensial berhasil.");
+        } catch (error) {
+            console.error("Gagal melakukan setup tabel esensial:", error);
+            essentialDbSetupPromise = null; 
+            throw error;
+        }
+    })();
+    return essentialDbSetupPromise;
+}
+
+// FASE 2: Setup lanjutan, dijalankan hanya saat dibutuhkan setelah login.
+let extendedDbSetupPromise = null;
+async function setupExtendedTables() {
+    if (extendedDbSetupPromise) return extendedDbSetupPromise;
+    extendedDbSetupPromise = (async () => {
+        try {
+            console.log("Menjalankan setup skema database lanjutan (change_log, dll)...");
             
+            // Tabel `change_log` adalah inti dari semua fitur setelah login.
             await sql`CREATE TABLE IF NOT EXISTS change_log (
-                id SERIAL PRIMARY KEY,
-                school_id INTEGER REFERENCES schools(id) ON DELETE CASCADE,
-                user_email VARCHAR(255) REFERENCES users(email) ON DELETE SET NULL,
+                id BIGSERIAL PRIMARY KEY,
+                school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+                user_email VARCHAR(255) NOT NULL,
                 event_type VARCHAR(50) NOT NULL,
                 payload JSONB NOT NULL,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );`;
             
-            await sql`CREATE TABLE IF NOT EXISTS migrations (id SERIAL PRIMARY KEY, name VARCHAR(255) UNIQUE, executed_at TIMESTAMPTZ DEFAULT NOW());`;
-
-            await sql`CREATE TABLE IF NOT EXISTS absensi_data (user_email VARCHAR(255) PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE, school_id INTEGER, students_by_class JSONB, saved_logs JSONB, last_updated TIMESTAMPTZ DEFAULT NOW());`;
+            // Tabel `absensi_data` yang di-denormalisasi (opsional, tapi bagus untuk performa rekap)
+             await sql`CREATE TABLE IF NOT EXISTS absensi_data (
+                id BIGSERIAL PRIMARY KEY,
+                school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+                student_name VARCHAR(255) NOT NULL,
+                class_name VARCHAR(50) NOT NULL,
+                date DATE NOT NULL,
+                status CHAR(1) NOT NULL,
+                teacher_email VARCHAR(255),
+                last_updated TIMESTAMPTZ DEFAULT NOW()
+            );`;
             
-            console.log("Memeriksa dan membuat indeks database untuk optimasi...");
-            await sql`CREATE INDEX IF NOT EXISTS idx_schools_jurisdiction_id ON schools (jurisdiction_id);`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_jurisdictions_parent_id ON jurisdictions (parent_id);`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_users_school_id ON users (school_id);`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_users_jurisdiction_id ON users (jurisdiction_id);`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_changelog_main_query ON change_log (school_id, event_type, ((payload->>'date')::date));`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_changelog_latest_student_list ON change_log (school_id, (payload->>'class'), id DESC) WHERE event_type = 'STUDENT_LIST_UPDATED';`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_changelog_students_gin ON change_log USING GIN ((payload->'students')) WHERE event_type = 'STUDENT_LIST_UPDATED';`;
-            console.log("Indeks berhasil diverifikasi/dibuat.");
-            console.log("Setup skema database berhasil.");
+            // Indeks untuk mempercepat query
+            await sql`CREATE INDEX IF NOT EXISTS idx_change_log_school_id_id ON change_log (school_id, id);`;
+            await sql`CREATE INDEX IF NOT EXISTS idx_absensi_data_school_class_date ON absensi_data (school_id, class_name, date);`;
+            await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_absensi ON absensi_data (school_id, student_name, date);`;
 
+            console.log("Setup skema lanjutan berhasil.");
         } catch (error) {
-            console.error("Gagal melakukan setup tabel:", error);
-            dbSetupPromise = null; 
+            console.error("Gagal melakukan setup tabel lanjutan:", error);
+            extendedDbSetupPromise = null;
             throw error;
         }
     })();
-    return dbSetupPromise;
+    return extendedDbSetupPromise;
 }
 
 // --- LOGIKA UTAMA HANDLER ---
 export default async function handler(request, response) {
     try {
-        
         const { action, payload, userEmail } = request.body;
         if (!action) {
             return response.status(400).json({ error: 'Action is required' });
@@ -87,16 +103,19 @@ export default async function handler(request, response) {
         
         const context = { payload, sql, response, SUPER_ADMIN_EMAILS, GoogleGenAI };
         
+        // Aksi publik yang tidak memerlukan setup tabel apa pun
         if (action === 'getMaintenanceStatus') {
             return await handleGetMaintenanceStatus(context);
         }
 
-        await setupTables();
+        // Jalankan FASE 1: Setup Esensial (sangat cepat)
+        await setupEssentialTables();
 
         if (request.method !== 'POST') {
             return response.status(405).json({ error: 'Method Not Allowed' });
         }
-
+        
+        // Aksi publik yang hanya memerlukan setup esensial
         const publicActions = {
             'loginOrRegister': () => handleLoginOrRegister(context),
         };
@@ -104,6 +123,10 @@ export default async function handler(request, response) {
         if (publicActions[action]) {
             return await publicActions[action]();
         }
+        
+        // Dari titik ini, semua aksi memerlukan setup lanjutan
+        // Jalankan FASE 2: Setup Lanjutan (dijalankan sesuai kebutuhan)
+        await setupExtendedTables();
 
         if (!userEmail) {
             return response.status(401).json({ error: 'Unauthorized: userEmail is required' });
@@ -111,6 +134,7 @@ export default async function handler(request, response) {
         const { rows: userRows } = await sql`SELECT email, role, school_id, jurisdiction_id, assigned_classes, name, picture FROM users WHERE email = ${userEmail}`;
         
         if (userRows.length === 0) {
+            // Cek apakah pengguna adalah orang tua
             const { rows: parentCheck } = await sql`
                 SELECT 1 FROM change_log
                 WHERE event_type = 'STUDENT_LIST_UPDATED'
