@@ -3,40 +3,127 @@ import { createClient } from '@vercel/edge-config';
 async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
     const { email, name, picture } = profile;
     
-    const { rows } = await sql`SELECT email, name, picture, role, school_id, jurisdiction_id, assigned_classes FROM users WHERE email = ${email}`;
-    let user = rows[0];
+    // 1. Check for a primary role in the main users table
+    const { rows: userRows } = await sql`SELECT email, name, picture, role, school_id, jurisdiction_id, assigned_classes FROM users WHERE email = ${email}`;
+    let primaryUser = userRows[0];
+    let primaryRole = null;
 
-    if (user) {
+    if (primaryUser) {
+        // Existing user: update login time and profile info
         await sql`UPDATE users SET last_login = NOW(), name = ${name}, picture = ${picture} WHERE email = ${email}`;
-        user.last_login = new Date();
-        user.assigned_classes = user.assigned_classes || []; // Pastikan tidak null
+        primaryRole = primaryUser.role;
     } else {
-        const role = SUPER_ADMIN_EMAILS.includes(email) ? 'SUPER_ADMIN' : 'GURU';
-        const { rows: newRows } = await sql`
-            INSERT INTO users (email, name, picture, role, last_login, assigned_classes)
-            VALUES (${email}, ${name}, ${picture}, ${role}, NOW(), '{}')
-            RETURNING email, name, picture, role, school_id, jurisdiction_id, assigned_classes;
-        `;
-        user = newRows[0];
-        user.assigned_classes = user.assigned_classes || [];
+        // If not an existing user in the main table, they might be a new user or a parent-only user.
+        // For new users, determine if they should be Super Admin.
+        if (SUPER_ADMIN_EMAILS.includes(email)) {
+            primaryRole = 'SUPER_ADMIN';
+        }
+        // Note: Default 'GURU' role is now handled below after the parent check.
+    }
+
+    // 2. Independently, check if the email is registered as a parent
+    const { rows: parentCheck } = await sql`
+        SELECT 1 FROM change_log
+        WHERE event_type = 'STUDENT_LIST_UPDATED'
+        AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements(payload->'students') as s
+            WHERE s->>'parentEmail' = ${email}
+        )
+        LIMIT 1;
+    `;
+    const isParent = parentCheck.length > 0;
+
+    // 3. Consolidate user profile and handle new user registration if needed
+    let finalUser;
+    if (primaryUser) {
+        finalUser = { ...primaryUser, primaryRole: primaryUser.role, isParent };
+    } else {
+        // Determine the final primary role for new or parent-only users
+        if (!primaryRole) {
+            if (isParent) {
+                primaryRole = 'ORANG_TUA';
+            } else {
+                primaryRole = 'GURU'; // Default role for brand new users
+            }
+        }
+        
+        // If the user needs to be created in the `users` table (i.e., not a parent-only login)
+        if (primaryRole !== 'ORANG_TUA') {
+             const { rows: newRows } = await sql`
+                INSERT INTO users (email, name, picture, role, last_login, assigned_classes)
+                VALUES (${email}, ${name}, ${picture}, ${primaryRole}, NOW(), '{}')
+                RETURNING email, name, picture, role as "primaryRole", school_id, jurisdiction_id, assigned_classes;
+            `;
+            finalUser = { ...newRows[0], isParent };
+        } else {
+            // This is a parent-only login, create a temporary user object for this session.
+            finalUser = {
+                email,
+                name,
+                picture,
+                primaryRole: 'ORANG_TUA',
+                isParent: true,
+                school_id: null,
+                jurisdiction_id: null,
+                assigned_classes: [],
+            };
+        }
     }
     
-    // Cek maintenance mode dari Edge Config, bukan database
+    // Ensure assigned_classes is an array
+    if (finalUser.assigned_classes === null || finalUser.assigned_classes === undefined) {
+        finalUser.assigned_classes = [];
+    }
+
+    // 4. Check maintenance mode
     if (process.env.EDGE_CONFIG) {
         try {
             const edgeConfigClient = createClient(process.env.EDGE_CONFIG);
             const isMaintenance = await edgeConfigClient.get('maintenance_mode');
-            if (isMaintenance && user.role !== 'SUPER_ADMIN') {
+            if (isMaintenance && finalUser.primaryRole !== 'SUPER_ADMIN') {
                 return { maintenance: true };
             }
         } catch (e) {
-            // Fail open: Jika Edge Config gagal dibaca, asumsikan tidak dalam maintenance
-            // agar tidak memblokir login pengguna secara tidak sengaja.
             console.error("Auth handler failed to read Edge Config, proceeding without maintenance check:", e);
         }
     }
     
-    return { user };
+    return { user: finalUser };
+}
+
+
+// Function to reconstruct current state from change_log
+async function reconstructStateFromLogs(schoolId, sql) {
+    if (!schoolId) {
+        return { initialStudents: {}, initialLogs: [], latestVersion: 0 };
+    }
+
+    const { rows: changes } = await sql`
+        SELECT id, event_type, payload
+        FROM change_log
+        WHERE school_id = ${schoolId}
+        ORDER BY id ASC;
+    `;
+
+    const studentsByClass = {};
+    const attendanceLogs = {}; // Use map for efficient updates: key=`${class}-${date}`
+
+    changes.forEach(change => {
+        if (change.event_type === 'ATTENDANCE_UPDATED') {
+            const logKey = `${change.payload.class}-${change.payload.date}`;
+            attendanceLogs[logKey] = change.payload;
+        } else if (change.event_type === 'STUDENT_LIST_UPDATED') {
+            studentsByClass[change.payload.class] = { students: change.payload.students };
+        }
+    });
+
+    const latestVersion = changes.length > 0 ? changes[changes.length - 1].id : 0;
+    
+    return {
+        initialStudents: studentsByClass,
+        initialLogs: Object.values(attendanceLogs),
+        latestVersion
+    };
 }
 
 
@@ -49,8 +136,15 @@ export default async function handleLoginOrRegister({ payload, sql, response, SU
         return response.status(200).json({ maintenance: true });
     }
 
-    const loggedInUser = loginResult.user;
-    const { rows: dataRows } = await sql`SELECT students_by_class, saved_logs FROM absensi_data WHERE user_email = ${loggedInUser.email}`;
-    const userData = dataRows[0] || { students_by_class: {}, saved_logs: [] };
-    return response.status(200).json({ user: loggedInUser, userData });
+    const { user } = loginResult;
+
+    // For roles that require initial school data, bootstrap it.
+    if (user.primaryRole !== 'ORANG_TUA' && user.school_id) {
+        const { initialStudents, initialLogs, latestVersion } = await reconstructStateFromLogs(user.school_id, sql);
+        return response.status(200).json({ user, initialStudents, initialLogs, latestVersion });
+    }
+    
+    // For other roles (Super Admin without school, Parent, Dinas), just return the user profile. 
+    // Data will be fetched based on context later.
+    return response.status(200).json({ user });
 }
