@@ -20,16 +20,18 @@ export default async function handleRunBackgroundMigrations({ user, sql, respons
             await client.query('BEGIN');
             
             // Mengelompokkan data absensi lama dan memasukkannya ke dalam change_log
+            // FIX: Using "class" instead of "class_name" to match the older schema that likely exists in production.
+            // "class" is a reserved keyword, so it must be in double quotes.
             const { rows: migratedRows } = await client.query(`
                 WITH grouped_absensi AS (
                     SELECT
                         school_id,
-                        class_name,
+                        "class",
                         date,
                         jsonb_object_agg(student_name, status) as attendance,
                         (array_agg(teacher_email))[1] as user_email
                     FROM absensi_data
-                    GROUP BY school_id, class_name, date
+                    GROUP BY school_id, "class", date
                 )
                 INSERT INTO change_log (school_id, user_email, event_type, payload)
                 SELECT
@@ -38,7 +40,7 @@ export default async function handleRunBackgroundMigrations({ user, sql, respons
                     'ATTENDANCE_UPDATED',
                     jsonb_build_object(
                         'date', date::text,
-                        'class', class_name,
+                        'class', "class",
                         'attendance', attendance
                     )
                 FROM grouped_absensi
