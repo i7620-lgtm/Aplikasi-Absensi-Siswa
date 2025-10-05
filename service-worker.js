@@ -1,3 +1,4 @@
+
 const CACHE_NAME = 'absensi-cache-v5';
 const localUrlsToCache = [
   '/',
@@ -13,7 +14,7 @@ const localUrlsToCache = [
 ];
 const crossOriginUrlsToCache = [
   'https://cdn.tailwindcss.com',
-  'https://rsms.me/inter/inter.css',
+  'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap',
   'https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png'
 ];
 
