@@ -1,10 +1,38 @@
 import { state } from './main.js';
+import { idb } from './db.js';
 
 async function _fetch(action, payload = {}) {
-    if (!navigator.onLine) {
-        throw new Error('Koneksi internet terputus. Silakan periksa jaringan Anda.');
+    // Logic to queue 'saveData' action when offline
+    if (action === 'saveData' && !navigator.onLine) {
+        console.log(`Offline mode detected. Queuing action: ${action}`);
+        try {
+            const queue = await idb.getQueue();
+            const offlineAction = {
+                body: {
+                    action,
+                    payload,
+                    userEmail: state.userProfile?.email
+                }
+            };
+
+            queue.push(offlineAction);
+            await idb.setQueue(queue);
+            
+            if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                navigator.serviceWorker.ready.then(sw => {
+                    sw.sync.register('sync-offline-actions');
+                    console.log('Background sync registered for offline actions.');
+                });
+            }
+
+            return Promise.resolve({ success: true, queued: true, savedBy: state.userProfile.name });
+        } catch (error) {
+            console.error('Failed to queue offline action:', error);
+            throw new Error('Gagal menyimpan data secara lokal. Coba lagi.');
+        }
     }
-    
+
+    // Original online logic
     try {
         const response = await fetch('/api/data', {
             method: 'POST',
@@ -44,10 +72,25 @@ export const apiService = {
     async getUserProfile() {
         return await _fetch('getUserProfile');
     },
+    
+    async getFullUserData() {
+        // DEPRECATED in delta-sync model, login provides initial data.
+        // Kept for compatibility if some flows still use it, but should be phased out.
+        console.warn("getFullUserData is deprecated.");
+        return await _fetch('getFullUserData');
+    },
+    
+    async getUpdateSignal(params) {
+        return await _fetch('getUpdateSignal', params);
+    },
 
-    async saveData(data) {
+    async getChangesSince(params) {
+        return await _fetch('getChangesSince', params);
+    },
+
+    async saveData(event) { // Now sends a single event object
         const payload = {
-            ...data,
+            ...event,
             actingAsSchoolId: state.adminActingAsSchool?.id || null,
         };
         return await _fetch('saveData', payload);
@@ -63,6 +106,10 @@ export const apiService = {
 
     async getRecapData(params) {
         return await _fetch('getRecapData', params);
+    },
+
+    async getParentData() {
+        return await _fetch('getParentData');
     },
     
     async getSchoolStudentData(schoolId) {
@@ -108,8 +155,8 @@ export const apiService = {
     async createJurisdiction(name, type, parentId) {
         return await _fetch('createJurisdiction', { name, type, parentId });
     },
-    async updateJurisdiction(id, name, type) {
-        return await _fetch('updateJurisdiction', { id, name, type });
+    async updateJurisdiction(id, name, type, parentId) {
+        return await _fetch('updateJurisdiction', { id, name, type, parentId });
     },
     async deleteJurisdiction(id) {
         return await _fetch('deleteJurisdiction', { id });
