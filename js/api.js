@@ -48,7 +48,7 @@ async function _fetch(action, payload = {}) {
             const errorData = await response.json().catch(() => ({}));
             let errorMessage;
             if (response.status === 503) {
-                 errorMessage = `Layanan tidak tersedia: ${errorData.error || 'Masalah konfigurasi server.'}`;
+                 errorMessage = `Layanan tidak tersedia: ${errorData.error || 'Konfigurasi otentikasi server tidak lengkap. Hubungi administrator.'}`;
             } else if (response.status >= 500) {
                 errorMessage = `Kesalahan Server (${response.status}): ${errorData.error || 'Gagal terhubung ke database.'}`;
             } else {
@@ -69,6 +69,10 @@ async function _fetch(action, payload = {}) {
 }
 
 export const apiService = {
+    async getAuthConfig() {
+        return await _fetch('getAuthConfig');
+    },
+
     async loginOrRegisterUser(profile) {
         return await _fetch('loginOrRegister', { profile });
     },
