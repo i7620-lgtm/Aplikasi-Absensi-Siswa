@@ -1,200 +1,209 @@
-import { state, setState, navigateTo } from './main.js';
-import { renderScreen, showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
-import { apiService } from './api.js';
-import { idb } from './db.js';
-
-// --- GSI CONFIG ---
-const CLIENT_ID = '584511730006-avkntpukucstgnf7c0otn3dt0lajtu43.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
-
-let gsiClient;
-let isGsiReady = false;
-
-export function initializeGsi() {
-    const gsiLoadCheck = setInterval(() => {
-        if (window.google && window.google.accounts) {
-            clearInterval(gsiLoadCheck);
-            try {
-                gsiClient = google.accounts.oauth2.initTokenClient({
-                    client_id: CLIENT_ID,
-                    scope: SCOPES,
-                    callback: handleTokenResponse,
-                });
-                isGsiReady = true;
-                console.log("Google Sign-In service initialized.");
-            } catch (err) {
-                isGsiReady = false;
-                console.error("GSI Initialization Failed:", err);
-                displayAuthError('Gagal memuat layanan login Google.', err);
-            } finally {
-                if (state.currentScreen === 'setup') {
-                    renderScreen('setup'); 
-                }
-            }
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="https://www.gstatic.com/images/branding/product/1x/drive_2020q4_48dp.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#4285F4">
+    <meta name="description" content="Aplikasi PWA untuk mencatat absensi siswa secara online dengan sistem multi-peran untuk guru, kepala sekolah, dan admin." />
+    <meta name="google-site-verification" content="dhTj8lqPNS9MFRD_mKVyOblB_O3q5XpZLDp85RF0AOU" />
+    <title>Absensi Online Siswa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Using Google Fonts for reliable font delivery -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .screen { display: none; }
+        .screen.active { display: block; }
+        .hidden { display: none; }
+        #loader-wrapper {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background-color: rgba(241, 245, 249, 0.8);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            transition: opacity 0.3s ease;
         }
-    }, 100);
-
-    setTimeout(() => {
-        if (!isGsiReady) {
-            clearInterval(gsiLoadCheck);
-            console.error("GSI script failed to load within 10 seconds.");
-            if (state.currentScreen === 'setup') {
-                 isGsiReady = false;
-                 renderScreen('setup');
-            }
+        .loader {
+            border: 4px solid #e2e8f0; border-top: 4px solid #3b82f6;
+            border-radius: 50%; width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
         }
-    }, 10000);
-}
-
-export function getGsiReadyState() {
-    return isGsiReady;
-}
-
-// BARU: Fungsi untuk menjalankan migrasi di sisi browser
-async function triggerClientSideMigration() {
-    console.groupCollapsed('%c[Migrasi Data Lama]', 'font-weight: bold; color: #4f46e5;');
-    try {
-        console.log('Memeriksa status migrasi ke server...');
-        const check = await apiService.checkAndStartClientMigration();
-
-        if (check.status === 'complete') {
-            console.log('Server mengonfirmasi migrasi sudah selesai. Tidak ada tindakan yang diperlukan.');
-            console.groupEnd();
-            return;
-        }
+        .loader-text { margin-top: 16px; color: #475569; font-weight: 500; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        if (check.status === 'pending' && check.data && check.data.length > 0) {
-            const rawData = check.data;
-            console.log(`Diterima ${rawData.length} baris data absensi mentah dari server.`);
-
-            console.log('Memulai pemrosesan dan pengelompokan data di browser...');
-            // Resiliently get the class column name by checking the first record
-            const classKey = 'class' in rawData[0] ? 'class' : 'class_name';
-            
-            const groupedData = rawData.reduce((acc, row) => {
-                // Skip rows with invalid data
-                if (!row.school_id || !row.date || !row[classKey]) return acc;
-                
-                const key = `${row.school_id}-${row.date}-${row[classKey]}`;
-                if (!acc[key]) {
-                    acc[key] = {
-                        school_id: row.school_id,
-                        user_email: row.teacher_email || 'migration@system.local',
-                        event_type: 'ATTENDANCE_UPDATED',
-                        payload: {
-                            date: row.date.split('T')[0], // Ensure YYYY-MM-DD format
-                            class: row[classKey],
-                            attendance: {}
-                        }
-                    };
-                }
-                acc[key].payload.attendance[row.student_name] = row.status;
-                return acc;
-            }, {});
-
-            const migratedData = Object.values(groupedData);
-            console.log(`Pemrosesan selesai. Dihasilkan ${migratedData.length} rekaman change_log yang sudah dikelompokkan.`);
-
-            if (migratedData.length > 0) {
-                console.log('Mengunggah data yang sudah diproses ke server...');
-                const uploadResult = await apiService.uploadMigratedData(migratedData);
-                console.log(`Unggah berhasil! Server mengonfirmasi ${uploadResult.count} rekaman baru telah disimpan.`);
-                console.log('Proses migrasi data lama telah selesai sepenuhnya.');
-            } else {
-                console.log('Tidak ada data valid untuk diunggah setelah diproses.');
-            }
-        } else {
-            console.log('Tidak ada data absensi lama yang perlu dimigrasi.');
+        /* --- Animations for Success Screen --- */
+        .checkmark-wrapper { width: 100px; height: 100px; }
+        .checkmark { width: 100px; height: 100px; border-radius: 50%; display: block; stroke-width: 4; stroke: #4CAF50; stroke-miterlimit: 10; margin: 0 auto; box-shadow: inset 0px 0px 0px #4CAF50; animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both; }
+        .checkmark__circle { stroke-dasharray: 166; stroke-dashoffset: 166; stroke-width: 3; stroke-miterlimit: 10; stroke: #4CAF50; fill: none; animation: stroke .6s cubic-bezier(0.65, 0, 0.45, 1) forwards; }
+        .checkmark__check { transform-origin: 50% 50%; stroke-dasharray: 48; stroke-dashoffset: 48; stroke-width: 4; animation: stroke .3s cubic-bezier(0.65, 0, 0.45, 1) .8s forwards; }
+        @keyframes stroke { 100% { stroke-dashoffset: 0; } }
+        @keyframes scale { 0%, 100% { transform: none; } 50% { transform: scale3d(1.1, 1.1, 1); } }
+        @keyframes fill { 100% { box-shadow: inset 0px 0px 0px 50px #4CAF50; } }
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.5s ease-out forwards;
         }
 
-    } catch (error) {
-        console.error('%c[Kesalahan Migrasi Klien]', 'font-weight: bold; color: #dc2626;', error.message);
-    } finally {
-        console.groupEnd();
-    }
+        /* --- Custom Notification --- */
+        #notification {
+            position: fixed;
+            top: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            color: white;
+            z-index: 10002;
+            transition: top 0.5s ease-in-out;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-width: 90%;
+            text-align: center;
+        }
+        #notification.show {
+            top: 20px;
+        }
+        #notification.error { background-color: #ef4444; }
+        #notification.success { background-color: #22c55e; }
+        #notification.info { background-color: #3b82f6; }
+
+        /* --- Offline Indicator --- */
+        #offline-indicator {
+            position: fixed;
+            bottom: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #475569;
+            color: white;
+            padding: 0.75rem 1.25rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            z-index: 10001;
+            transition: bottom 0.5s ease-in-out;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        #offline-indicator.show {
+            bottom: 20px;
+        }
+        /* AI Response Formatting */
+        .gemini-response .card-content ul { list-style-type: disc; padding-left: 1.25rem; margin-top: 0.5rem; }
+        .gemini-response .card-content li { margin-bottom: 0.5rem; color: #475569; line-height: 1.6; }
+        .gemini-response .card-content li::marker { color: #94a3b8; }
+        .gemini-response .card-content p { color: #475569; line-height: 1.6; margin-bottom: 0.75rem; }
+        .gemini-response .card-content strong { font-weight: 600; color: #1e293b; }
+        .gemini-response { background-color: transparent !important; padding: 0 !important; }
+
+        /* --- Custom Date Picker --- */
+        .custom-datepicker-wrapper { position: relative; display: inline-block; }
+        #ks-date-display {
+            cursor: pointer; user-select: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 1.25rem;
+            padding-right: 2.5rem;
+        }
+        .datepicker-popup {
+            position: absolute; top: calc(100% + 5px); right: 0;
+            background-color: white; border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+            z-index: 1000; width: 320px; padding: 1rem; border: 1px solid #e2e8f0;
+        }
+        .datepicker-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .datepicker-header .month-year { font-weight: 600; color: #1e293b; }
+        .datepicker-header .nav-btn { background: none; border: none; cursor: pointer; padding: 0.5rem; border-radius: 9999px; transition: background-color 0.2s; }
+        .datepicker-header .nav-btn:hover { background-color: #f1f5f9; }
+        .datepicker-grid { width: 100%; border-collapse: collapse; text-align: center; }
+        .datepicker-grid th { color: #64748b; font-weight: 500; font-size: 0.75rem; padding-bottom: 0.5rem; }
+        .datepicker-grid td { padding: 0; }
+        .datepicker-grid .day {
+            width: 40px; height: 40px; border: none; background: none; cursor: pointer;
+            border-radius: 9999px; transition: background-color 0.2s, color 0.2s; color: #334155;
+        }
+        .datepicker-grid .day:hover { background-color: #e0f2fe; color: #0c4a6e; }
+        .datepicker-grid .day.other-month { color: #94a3b8; cursor: not-allowed; }
+        .datepicker-grid .day.today { font-weight: 700; color: #2563eb; border: 1px solid #93c5fd; }
+        .datepicker-grid .day.selected { background-color: #3b82f6; color: white; }
+        .datepicker-grid .day.in-range {
+            background: linear-gradient(90deg, #fffde7, #fff9c4);
+            border-radius: 0; color: #334155;
+        }
+        .datepicker-grid .day.in-range.selected { background: #3b82f6; color: white; border-radius: 9999px; }
+        .datepicker-grid .day.range-start { border-top-left-radius: 9999px; border-bottom-left-radius: 9999px; }
+        .datepicker-grid .day.range-end { border-top-right-radius: 9999px; border-bottom-right-radius: 9999px; }
+        .datepicker-grid .day.selected.in-range { position: relative; z-index: 1; }
+        .datepicker-grid .day.disabled-future {
+            color: #cbd5e1; /* slate-300 */
+            cursor: not-allowed;
+            background-color: transparent !important; /* Ensure no background on hover */
+        }
+        .datepicker-grid .day.disabled-future:hover {
+            color: #cbd5e1; /* Keep color same on hover */
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "@vercel/postgres": "https://aistudiocdn.com/@vercel/postgres@^0.10.0",
+    "@google/genai": "https://esm.run/@google/genai",
+    "@vercel/edge-config": "https://aistudiocdn.com/@vercel/edge-config@^1.4.0"
+  }
 }
-
-
-async function handleTokenResponse(tokenResponse) {
-    if (tokenResponse.error) {
-        console.error('Authentication failed:', tokenResponse);
-        if (tokenResponse.error === 'popup_closed_by_user' || tokenResponse.error === 'access_denied') {
-            showNotification('Proses login dibatalkan oleh pengguna.', 'error');
-            hideLoader();
-            return;
-        }
-        displayAuthError('Proses otentikasi gagal.', new Error(tokenResponse.error_description || 'Detail tidak tersedia.'));
-        hideLoader();
-        return;
-    }
-
-    try {
-        showLoader('Login berhasil, mengambil data...');
-        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-            headers: { 'Authorization': `Bearer ${tokenResponse.access_token}` }
-        });
-        if (!userInfoResponse.ok) throw new Error(`Gagal mengambil info pengguna: ${userInfoResponse.statusText}`);
-        
-        const profile = await userInfoResponse.json();
-
-        const loginResponse = await apiService.loginOrRegisterUser(profile);
-
-        if (loginResponse.maintenance) {
-            await setState({ maintenanceMode: { ...state.maintenanceMode, isActive: true } });
-            hideLoader();
-            navigateTo('maintenance');
-            return;
-        }
-        
-        const { user, initialStudents, initialLogs, latestVersion } = loginResponse;
-        
-        // The user object now contains primaryRole and isParent
-        await setState({
-            userProfile: user,
-            studentsByClass: initialStudents || state.studentsByClass,
-            savedLogs: initialLogs || state.savedLogs,
-            localVersion: latestVersion || state.localVersion,
-        });
-
-        hideLoader();
-        showNotification(`Selamat datang, ${state.userProfile.name}!`);
-
-        // Trigger client-side migration for Super Admins
-        if (user.primaryRole === 'SUPER_ADMIN') {
-            triggerClientSideMigration(); // Fire-and-forget
-        }
-
-        // ALWAYS navigate to the new multi-role home screen.
-        // This screen will decide what to show based on the user's roles.
-        navigateTo('multiRoleHome');
-
-    } catch (error) {
-        console.error('A critical error occurred after receiving the token:', error);
-        hideLoader();
-        showNotification(error.message || 'Terjadi kesalahan saat mengambil data.', 'error');
-        displayAuthError('Terjadi kesalahan setelah login berhasil.', error);
-        handleSignOut(); 
-    }
-}
-
-export function handleSignIn() {
-    if (!isGsiReady || !gsiClient) {
-        showNotification("Layanan login belum siap, coba lagi.", "error");
-        return;
-    }
-    showLoader('Membuka jendela login Google...');
-    gsiClient.requestAccessToken({ prompt: 'consent' });
-}
-
-export async function handleSignOut() {
-    await idb.set('userProfile', null);
-    await idb.set('userData', null);
+</script>
+</head>
+<body class="bg-slate-100 flex flex-col min-h-screen">
     
-    // Reset runtime state completely
-    state.userProfile = null;
-    state.studentsByClass = {};
-    state.savedLogs = [];
-    state.localVersion = 0;
+    <div id="root" class="flex-grow">
+        <!-- Custom Notification element -->
+        <div id="notification"></div>
 
-    navigateTo('setup');
-}
+        <!-- Initial Loader / Saving Loader -->
+        <div id="loader-wrapper" style="display: flex;">
+            <div class="loader"></div>
+            <p class="loader-text">Memuat Aplikasi Absensi...</p>
+        </div>
+
+        <!-- App Screens will be injected here -->
+        <div id="app-container"></div>
+    </div>
+
+    <!-- Offline Status Indicator -->
+    <div id="offline-indicator">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+        </svg>
+        <span>Anda sedang offline. Perubahan disimpan lokal.</span>
+    </div>
+
+    <footer class="text-center py-4 px-4 text-xs text-slate-500">
+        <a href="./terms.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Ketentuan Layanan</a> &
+        <a href="./privacy.html" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-600 hover:underline">Kebijakan Privasi</a>
+    </footer>
+
+    <script type="module" src="./js/main.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('ServiceWorker registration failed: ', error);
+                    });
+            });
+        }
+    </script>
+
+</body>
+</html>
