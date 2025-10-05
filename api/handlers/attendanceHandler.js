@@ -1,101 +1,155 @@
+import { createClient } from '@vercel/edge-config';
 
+// Simple sanitizer to prevent basic XSS by removing HTML tags.
+function sanitize(text) {
+    if (!text) return '';
+    return text.replace(/<[^>]*>/g, '').trim();
+}
+
+async function getSubJurisdictionIds(jurisdictionId, sql) {
+    if (!jurisdictionId) return [];
+    const { rows } = await sql`
+        WITH RECURSIVE sub_jurisdictions AS (
+            SELECT id FROM jurisdictions WHERE id = ${jurisdictionId}
+            UNION
+            SELECT j.id FROM jurisdictions j
+            INNER JOIN sub_jurisdictions s ON s.id = j.parent_id
+        )
+        SELECT id FROM sub_jurisdictions;
+    `;
+    return rows.map(r => r.id);
+}
 
 export async function handleSaveData({ payload, user, sql, response }) {
-    if (['KEPALA_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(user.role)) {
-         return response.status(403).json({ error: 'Akun ini bersifat hanya-baca untuk data absensi.' });
+    const allowedWriteRoles = ['GURU', 'ADMIN_SEKOLAH', 'SUPER_ADMIN'];
+    if (!allowedWriteRoles.includes(user.role)) {
+        return response.status(403).json({ error: 'Anda tidak memiliki izin untuk menyimpan data absensi.' });
     }
-    const { studentsByClass, savedLogs, actingAsSchoolId } = payload;
-    const studentsByClassJson = JSON.stringify(studentsByClass);
-    const savedLogsJson = JSON.stringify(savedLogs);
+    const { type, payload: originalEventPayload, actingAsSchoolId } = payload;
+    let eventPayload = { ...originalEventPayload }; // Create a mutable copy
+
+    // --- NEW: Input Sanitization Logic ---
+    if (type === 'STUDENT_LIST_UPDATED' && eventPayload.students && Array.isArray(eventPayload.students)) {
+        const sanitizedStudents = eventPayload.students.map(student => ({
+            name: sanitize(student.name),
+            parentEmail: sanitize(student.parentEmail)
+        })).filter(student => student.name); // Ensure students with only whitespace names are removed
+
+        eventPayload.students = sanitizedStudents;
+    }
+    // No sanitization needed for ATTENDANCE_UPDATED as student names are keys
+    // derived from a previously sanitized list.
+    // --- END: Input Sanitization Logic ---
     
-    let targetEmail = user.email;
-    let finalSchoolId = user.school_id;
-    let savedAsTeacherName = null;
-
-    if ((user.role === 'SUPER_ADMIN' && actingAsSchoolId) || user.role === 'ADMIN_SEKOLAH') {
-        finalSchoolId = (user.role === 'ADMIN_SEKOLAH') ? user.school_id : actingAsSchoolId;
-        if (!finalSchoolId) {
-            return response.status(400).json({ error: 'Konteks sekolah diperlukan untuk admin.' });
-        }
-        
-        const className = Object.keys(studentsByClass)[0];
-        if (className) {
-            const { rows: teacherRows } = await sql`
-                SELECT email, name FROM users 
-                WHERE school_id = ${finalSchoolId} AND ${className} = ANY(assigned_classes);
-            `;
-            if (teacherRows.length > 1) {
-                return response.status(409).json({ error: `Konflik: Lebih dari satu guru ditugaskan untuk kelas ${className}.` });
-            } else if (teacherRows.length === 1) {
-                targetEmail = teacherRows[0].email;
-                savedAsTeacherName = teacherRows[0].name;
-            }
-        }
+    const actorEmail = user.email;
+    const actorName = user.name;
+    
+    let finalSchoolId;
+    if (user.role === 'SUPER_ADMIN') {
+        finalSchoolId = actingAsSchoolId;
+    } else {
+        finalSchoolId = user.school_id;
     }
 
-    await sql`
-        INSERT INTO absensi_data (user_email, school_id, students_by_class, saved_logs, last_updated)
-        VALUES (${targetEmail}, ${finalSchoolId}, ${studentsByClassJson}, ${savedLogsJson}, NOW())
-        ON CONFLICT (user_email)
-        DO UPDATE SET
-          school_id = EXCLUDED.school_id,
-          students_by_class = EXCLUDED.students_by_class,
-          saved_logs = EXCLUDED.saved_logs,
-          last_updated = NOW();
+    if (!finalSchoolId) {
+        return response.status(400).json({ error: 'Tidak dapat menentukan sekolah untuk menyimpan data. Pastikan akun Anda atau konteks admin Anda tertaut ke sekolah.' });
+    }
+    
+    const { rows } = await sql`
+        INSERT INTO change_log (school_id, user_email, event_type, payload)
+        VALUES (${finalSchoolId}, ${actorEmail}, ${type}, ${JSON.stringify(eventPayload)})
+        RETURNING id;
     `;
-    return response.status(200).json({ success: true, savedAsTeacherName });
+    const newVersion = rows[0].id;
+    
+    if (process.env.EDGE_CONFIG) {
+        try {
+            const edgeConfigClient = createClient(process.env.EDGE_CONFIG);
+            const key = `school_version_${finalSchoolId}`;
+            await edgeConfigClient.set(key, newVersion).flush();
+            console.log(`Update signal (v${newVersion}) sent for school ${finalSchoolId}`);
+        } catch (e) {
+             console.error("Failed to update Edge Config signal:", e);
+        }
+    }
+    
+    return response.status(200).json({ success: true, savedBy: actorName, newVersion });
+}
+
+export async function handleGetChangesSince({ payload, user, sql, response }) {
+    const { schoolId, lastVersion } = payload;
+    const effectiveSchoolId = schoolId || user.school_id;
+    if (!effectiveSchoolId) {
+        return response.status(400).json({ error: 'School ID is required' });
+    }
+    
+    const { rows: changes } = await sql`
+        SELECT id, event_type, payload
+        FROM change_log
+        WHERE school_id = ${effectiveSchoolId} AND id > ${lastVersion}
+        ORDER BY id ASC;
+    `;
+    
+    return response.status(200).json({ changes });
+}
+
+async function reconstructAttendanceState(schoolId, sql) {
+    if (!schoolId) return { logs: [], students: {} };
+    
+    const { rows: changes } = await sql`
+        SELECT event_type, payload FROM change_log WHERE school_id = ${schoolId} ORDER BY id ASC
+    `;
+
+    const studentsByClass = {};
+    const attendanceLogs = {};
+
+    changes.forEach(change => {
+        if (change.event_type === 'ATTENDANCE_UPDATED') {
+            const logKey = `${change.payload.class}-${change.payload.date}`;
+            attendanceLogs[logKey] = change.payload;
+        } else if (change.event_type === 'STUDENT_LIST_UPDATED') {
+            studentsByClass[change.payload.class] = { students: change.payload.students };
+        }
+    });
+
+    return { logs: Object.values(attendanceLogs), students: studentsByClass };
 }
 
 export async function handleGetHistoryData({ payload, user, sql, response }) {
-    const { schoolId, jurisdictionId, isClassSpecific, classFilter, isGlobalView } = payload;
+    let schoolIds = [];
+    const { isClassSpecific, classFilter, isGlobalView } = payload;
 
-    let query;
-    let params = [];
-    let whereClauses = [];
-
-    // --- Determine Data Scope ---
     if (user.role === 'GURU') {
-        whereClauses.push(`ad.user_email = $${params.push(user.email)}`);
+        if (user.school_id) schoolIds.push(user.school_id);
     } else if (isGlobalView && user.role === 'SUPER_ADMIN') {
-        // No extra school filter for global view
-    } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(user.role) || (user.role === 'SUPER_ADMIN' && jurisdictionId)) {
-        const effectiveJurisdictionId = jurisdictionId || user.jurisdiction_id;
-        if (!effectiveJurisdictionId) return response.status(200).json({ allLogs: [] });
-        
-        const { rows: schoolIdRows } = await sql`
-            WITH RECURSIVE jurisdiction_tree AS (
-                SELECT id FROM jurisdictions WHERE id = ${effectiveJurisdictionId}
-                UNION ALL
-                SELECT j.id FROM jurisdictions j
-                INNER JOIN jurisdiction_tree jt ON j.parent_id = jt.id
-            )
-            SELECT s.id FROM schools s WHERE s.jurisdiction_id IN (SELECT id FROM jurisdiction_tree);
-        `;
-        const schoolIds = schoolIdRows.map(r => r.id);
-        if (schoolIds.length === 0) return response.status(200).json({ allLogs: [] });
-
-        whereClauses.push(`ad.school_id = ANY($${params.push(schoolIds)})`);
-
-    } else { // KEPALA_SEKOLAH, ADMIN_SEKOLAH, or SUPER_ADMIN acting on a school
-        const effectiveSchoolId = (['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(user.role)) ? user.school_id : schoolId;
-        if (!effectiveSchoolId) return response.status(200).json({ allLogs: [] });
-        whereClauses.push(`ad.school_id = $${params.push(effectiveSchoolId)}`);
+        const { rows } = await sql`SELECT id FROM schools`;
+        schoolIds = rows.map(r => r.id);
+    } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(user.role)) {
+        if (user.jurisdiction_id) {
+            const accessibleJurisdictionIds = await getSubJurisdictionIds(user.jurisdiction_id, sql);
+            if (accessibleJurisdictionIds.length > 0) {
+                const { rows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
+                schoolIds = rows.map(r => r.id);
+            }
+        }
+    } else { // KEPALA_SEKOLAH, ADMIN_SEKOLAH, or SUPER_ADMIN in school context
+        const effectiveSchoolId = payload.schoolId || user.school_id;
+        if (effectiveSchoolId) schoolIds.push(effectiveSchoolId);
     }
 
-    query = `
-        SELECT
-            log_obj as log,
-            u.name as "teacherName"
-        FROM absensi_data ad
-        JOIN users u ON ad.user_email = u.email
-        CROSS JOIN jsonb_array_elements(ad.saved_logs) as log_obj
-        ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
+    if (schoolIds.length === 0) {
+        return response.status(200).json({ allLogs: [] });
+    }
+
+    const { rows } = await sql`
+        SELECT cl.payload, u.name as "teacherName"
+        FROM change_log cl
+        JOIN users u ON cl.user_email = u.email
+        WHERE cl.school_id = ANY(${schoolIds}) AND cl.event_type = 'ATTENDANCE_UPDATED'
     `;
     
-    const { rows } = await sql.query(query, params);
+    const allLogs = rows.map(row => ({ ...row.payload, teacherName: row.teacherName }));
 
-    // Initial server-side class filter if specified
-    const allLogs = rows.map(row => ({ ...row.log, teacherName: row.teacherName }));
     const filteredLogs = isClassSpecific && classFilter
         ? allLogs.filter(log => log.class === classFilter)
         : allLogs;
@@ -118,18 +172,15 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
     }
 
     const { rows } = await sql`
-        SELECT students_by_class FROM absensi_data WHERE school_id = ${schoolId};
+        SELECT DISTINCT ON (payload->>'class') payload
+        FROM change_log
+        WHERE school_id = ${schoolId} AND event_type = 'STUDENT_LIST_UPDATED'
+        ORDER BY payload->>'class', id DESC;
     `;
-
+    
     const aggregatedStudentsByClass = {};
     rows.forEach(row => {
-        if (row.students_by_class) {
-            for (const className in row.students_by_class) {
-                if (!aggregatedStudentsByClass[className]) {
-                    aggregatedStudentsByClass[className] = row.students_by_class[className];
-                }
-            }
-        }
+        aggregatedStudentsByClass[row.payload.class] = row.payload.students;
     });
 
     return response.status(200).json({ aggregatedStudentsByClass });
