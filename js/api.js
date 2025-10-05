@@ -46,9 +46,13 @@ async function _fetch(action, payload = {}) {
     
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            let errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
-            if (response.status >= 500) {
+            let errorMessage;
+            if (response.status === 503) {
+                 errorMessage = `Layanan tidak tersedia: ${errorData.error || 'Masalah konfigurasi server.'}`;
+            } else if (response.status >= 500) {
                 errorMessage = `Kesalahan Server (${response.status}): ${errorData.error || 'Gagal terhubung ke database.'}`;
+            } else {
+                errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
             }
             throw new Error(errorMessage);
         }
@@ -57,7 +61,7 @@ async function _fetch(action, payload = {}) {
     } catch (error) {
         console.error(`Panggilan API '${action}' gagal:`, error);
         
-        if (error.message.startsWith('Kesalahan Server') || error.message.startsWith('Error')) {
+        if (error.message.startsWith('Layanan tidak tersedia') || error.message.startsWith('Kesalahan Server') || error.message.startsWith('Error')) {
             throw error;
         }
         throw new Error('Gagal terhubung ke server. Periksa koneksi internet Anda.');
