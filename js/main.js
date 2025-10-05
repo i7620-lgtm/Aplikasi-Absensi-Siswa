@@ -68,6 +68,10 @@ export let state = {
             interval: 10000,
         },
     },
+    maintenanceMode: {
+        isActive: false,
+        statusChecked: false,
+    },
     connectionError: null,
     adminActingAsSchool: null, // Stores {id, name} for SUPER_ADMIN context
     adminActingAsJurisdiction: null, // NEW: Stores {id, name} for SUPER_ADMIN/DINAS context
@@ -105,7 +109,7 @@ export function render() {
 
 export function navigateTo(screen) {
     const schoolContextScreens = ['setup', 'dashboard', 'add-students', 'attendance', 'data', 'recap'];
-    const adminContextScreens = ['dashboard', 'jurisdictionPanel', 'adminPanel'];
+    const adminContextScreens = ['dashboard', 'jurisdictionPanel', 'adminPanel', 'migrationTool'];
     
     if (schoolContextScreens.includes(state.currentScreen) && !schoolContextScreens.includes(screen)) {
         if (state.adminActingAsSchool) {
@@ -404,6 +408,53 @@ export async function handleCreateSchool() {
     }
 }
 
+export async function handleMigrateLegacyData() {
+    const schoolIdEl = document.getElementById('migration-school-id');
+    const userEmailEl = document.getElementById('migration-user-email');
+    const legacyDataEl = document.getElementById('migration-legacy-data');
+    const resultEl = document.getElementById('migration-result');
+
+    const schoolId = schoolIdEl.value.trim();
+    const userEmail = userEmailEl.value.trim();
+    const legacyDataStr = legacyDataEl.value.trim();
+
+    resultEl.textContent = '';
+
+    if (!schoolId || !userEmail || !legacyDataStr) {
+        showNotification('Semua kolom harus diisi.', 'error');
+        return;
+    }
+
+    let legacyData;
+    try {
+        legacyData = JSON.parse(legacyDataStr);
+    } catch (e) {
+        showNotification('Data JSON tidak valid. Periksa formatnya.', 'error');
+        resultEl.textContent = `Error parsing JSON: ${e.message}`;
+        resultEl.classList.add('text-red-500');
+        return;
+    }
+
+    const confirmed = await showConfirmation(`Anda akan memigrasikan data untuk sekolah ID ${schoolId} atas nama ${userEmail}. Tindakan ini tidak dapat diurungkan. Lanjutkan?`);
+    if (!confirmed) return;
+
+    showLoader('Memigrasikan data...');
+    try {
+        const response = await apiService.migrateLegacyData({ schoolId, userEmail, legacyData });
+        showNotification(response.message, 'success');
+        resultEl.textContent = response.message;
+        resultEl.classList.remove('text-red-500');
+        resultEl.classList.add('text-green-600');
+        legacyDataEl.value = ''; // Clear on success
+    } catch (error) {
+        showNotification(`Migrasi gagal: ${error.message}`, 'error');
+        resultEl.textContent = `Error: ${error.message}`;
+        resultEl.classList.add('text-red-500');
+    } finally {
+        hideLoader();
+    }
+}
+
 
 export function handleDownloadTemplate() {
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -645,17 +696,20 @@ async function handleAuthenticationRedirect() {
         if (!response.ok) throw new Error(`Gagal mengambil profil: ${response.statusText}`);
         
         const profile = await response.json();
-        const { user, initialStudents, initialLogs, latestVersion } = await apiService.loginOrRegisterUser(profile);
+        const { user, initialStudents, initialLogs, latestVersion, maintenance } = await apiService.loginOrRegisterUser(profile);
 
-        await setState({
-            userProfile: user,
-            studentsByClass: initialStudents || {},
-            savedLogs: initialLogs || [],
-            localVersion: latestVersion || 0,
-        });
-        showNotification(`Selamat datang, ${user.name}!`);
-        navigateTo('multiRoleHome');
-
+        if (maintenance) {
+            navigateTo('maintenance');
+        } else {
+            await setState({
+                userProfile: user,
+                studentsByClass: initialStudents || {},
+                savedLogs: initialLogs || [],
+                localVersion: latestVersion || 0,
+            });
+            showNotification(`Selamat datang, ${user.name}!`);
+            navigateTo('multiRoleHome');
+        }
     } catch (error) {
         console.error("Gagal memproses login OAuth:", error);
         showNotification(`Gagal memproses login Anda: ${error.message}`, 'error');
@@ -677,19 +731,29 @@ async function initApp() {
     }
     
     try {
-        // Initial app load logic
-        await loadInitialData();
+        showLoader('Memeriksa status server...');
+        const { isMaintenance } = await apiService.getMaintenanceStatus();
+        state.maintenanceMode.isActive = isMaintenance;
+    } catch (e) {
+        console.error("Tidak dapat memeriksa status perbaikan:", e);
+        hideLoader();
+        await setState({ connectionError: e.message });
+        navigateTo('connectionFailed');
+        return;
+    } finally {
+        state.maintenanceMode.statusChecked = true;
+    }
+
+    await loadInitialData();
+    
+    if (state.maintenanceMode.isActive && state.userProfile?.primaryRole !== 'SUPER_ADMIN') {
+        navigateTo('maintenance');
+    } else {
         await initializeGsi();
         render();
         if (state.userProfile) {
             syncWithServer(); // Initial sync on load
         }
-    } catch (e) {
-        console.error("Gagal menginisialisasi aplikasi:", e);
-        hideLoader();
-        await setState({ connectionError: e.message });
-        navigateTo('connectionFailed');
-        return;
     }
 
     window.addEventListener('online', async () => {
