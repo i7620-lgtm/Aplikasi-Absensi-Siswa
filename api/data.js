@@ -1,4 +1,4 @@
-import { createPool } from '@vercel/postgres';
+import { sql } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 import { Redis } from '@upstash/redis';
 
@@ -26,15 +26,6 @@ import {
 // --- KONFIGURASI ---
 export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
 
-// --- KONEKSI DATABASE EKSPLISIT ---
-// Menghilangkan ambiguitas dengan secara paksa menggunakan POSTGRES_URL dari Vercel.
-let pool;
-if (process.env.POSTGRES_URL) {
-    pool = createPool({
-        connectionString: process.env.POSTGRES_URL,
-    });
-}
-
 
 // --- SETUP KLIEN EKSTERNAL ---
 let redis = null;
@@ -51,7 +42,7 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
 
 // --- SETUP DATABASE YANG EFISIEN ---
 let dbSetupPromise = null;
-async function setupDatabase(sql) {
+async function setupDatabase() {
     if (dbSetupPromise) return dbSetupPromise;
     dbSetupPromise = (async () => {
         try {
@@ -106,19 +97,8 @@ export default async function handler(request, response) {
         return response.status(405).json({ error: 'Method Not Allowed' });
     }
     
-    // Cek apakah pool koneksi berhasil dibuat.
-    if (!pool) {
-        const detailedError = 'Koneksi ke database gagal. Variabel lingkungan POSTGRES_URL tidak ditemukan di pengaturan proyek Vercel Anda. Pastikan integrasi Vercel Postgres telah ditambahkan.';
-        console.error("DATABASE CONNECTION FAILED: `pool` is not initialized.");
-        return response.status(500).json({
-            error: detailedError,
-        });
-    }
-
     try {
-        // Gunakan pool.sql untuk semua operasi.
-        const sql = pool.sql;
-        await setupDatabase(sql);
+        await setupDatabase();
 
         const { action, payload, userEmail } = request.body;
         if (!action) {
@@ -200,6 +180,9 @@ export default async function handler(request, response) {
 
     } catch (error) {
         console.error('API Logic Error:', error);
-        return response.status(500).json({ error: 'Terjadi kesalahan internal pada server.', details: error.message });
+        return response.status(500).json({ 
+            error: 'Terjadi kesalahan internal pada server.', 
+            details: error.message 
+        });
     }
 }
