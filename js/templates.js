@@ -1,3 +1,4 @@
+
 import { state, CLASSES } from './main.js';
 
 export function encodeHTML(str) {
@@ -38,6 +39,133 @@ function getWeekRange(date) {
 
 
 export const templates = {
+    landingPage: () => `
+        <div class="screen active">
+            <div class="max-w-5xl mx-auto text-center py-12 px-4 sm:px-6 lg:py-16 lg:px-8">
+                <h2 class="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+                    <span class="block">Selamat Datang di Aplikasi Absensi Siswa</span>
+                </h2>
+                <p class="mt-4 text-lg leading-6 text-slate-500">
+                    Solusi modern untuk manajemen kehadiran siswa yang efisien, transparan, dan cerdas.
+                </p>
+                <div class="mt-8 flex justify-center">
+                    <div class="inline-flex rounded-md shadow">
+                        <button id="loginBtn-landing" class="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                            <svg class="w-5 h-5 mr-2" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.222,0-9.519-3.108-11.127-7.481l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,35.17,44,30.023,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>
+                            Login dengan Google untuk Memulai
+                        </button>
+                    </div>
+                </div>
+                 <div id="auth-error-container" class="text-center text-sm mt-4"></div>
+            </div>
+            
+            <div class="mt-10 pb-12 bg-white">
+                <div class="relative">
+                    <div class="absolute inset-0 h-1/2 bg-slate-100"></div>
+                    <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="max-w-4xl mx-auto">
+                            <dl class="rounded-lg bg-white shadow-lg sm:grid sm:grid-cols-3">
+                                <div class="flex flex-col border-b border-slate-100 p-6 text-center sm:border-0 sm:border-r">
+                                    <dt class="order-2 mt-2 text-lg leading-6 font-medium text-slate-500">Efisien</dt>
+                                    <dd class="order-1 text-4xl font-extrabold text-blue-600">Cepat</dd>
+                                </div>
+                                <div class="flex flex-col border-t border-b border-slate-100 p-6 text-center sm:border-0 sm:border-l sm:border-r">
+                                    <dt class="order-2 mt-2 text-lg leading-6 font-medium text-slate-500">Informatif</dt>
+                                    <dd class="order-1 text-4xl font-extrabold text-blue-600">Akurat</dd>
+                                </div>
+                                <div class="flex flex-col border-t border-slate-100 p-6 text-center sm:border-0 sm:border-l">
+                                    <dt class="order-2 mt-2 text-lg leading-6 font-medium text-slate-500">Modern</dt>
+                                    <dd class="order-1 text-4xl font-extrabold text-blue-600">Cerdas</dd>
+                                </div>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="py-12 bg-slate-50">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="lg:text-center">
+                        <h2 class="text-base text-blue-600 font-semibold tracking-wide uppercase">Fitur Unggulan</h2>
+                        <p class="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 sm:text-4xl">
+                            Semua yang Anda Butuhkan untuk Manajemen Kehadiran
+                        </p>
+                    </div>
+
+                    <div class="mt-10">
+                        <dl class="space-y-10 md:space-y-0 md:grid md:grid-cols-2 md:gap-x-8 md:gap-y-10">
+                            <div class="relative">
+                                <dt>
+                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                                    </div>
+                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Pencatatan Cepat & Mudah</p>
+                                </dt>
+                                <dd class="mt-2 ml-16 text-base text-gray-500">
+                                    Catat kehadiran (Hadir, Sakit, Izin, Alpa) hanya dengan beberapa klik. Antarmuka intuitif mempercepat pekerjaan guru.
+                                </dd>
+                            </div>
+                            <div class="relative">
+                                <dt>
+                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" /></svg>
+                                    </div>
+                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Dasbor Analitik Visual</p>
+                                </dt>
+                                <dd class="mt-2 ml-16 text-base text-gray-500">
+                                    Pantau tren kehadiran sekolah atau regional secara real-time. Dapatkan wawasan mendalam dari data visual yang mudah dipahami.
+                                </dd>
+                            </div>
+                            <div class="relative">
+                                <dt>
+                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
+                                       <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                                    </div>
+                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Rekomendasi Cerdas AI</p>
+                                </dt>
+                                <dd class="mt-2 ml-16 text-base text-gray-500">
+                                    Manfaatkan kekuatan AI untuk mengidentifikasi pola absensi siswa yang memerlukan perhatian khusus dan dapatkan rekomendasi tindak lanjut.
+                                </dd>
+                            </div>
+                            <div class="relative">
+                                <dt>
+                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21v-1.5a2.5 2.5 0 00-5 0V21M3 21v-1.5a2.5 2.5 0 015 0V21" /></svg>
+                                    </div>
+                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Sistem Multi-Peran</p>
+                                </dt>
+                                <dd class="mt-2 ml-16 text-base text-gray-500">
+                                    Akses disesuaikan untuk Guru, Kepala Sekolah, Admin, hingga Orang Tua, memastikan setiap pihak mendapatkan informasi yang relevan.
+                                </dd>
+                            </div>
+                             <div class="relative">
+                                <dt>
+                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                    </div>
+                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Bekerja Secara Offline</p>
+                                </dt>
+                                <dd class="mt-2 ml-16 text-base text-gray-500">
+                                    Tetap produktif bahkan tanpa koneksi internet. Data akan disimpan secara lokal dan disinkronkan otomatis saat kembali online.
+                                </dd>
+                            </div>
+                             <div class="relative">
+                                <dt>
+                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                    </div>
+                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Laporan & Ekspor Data</p>
+                                </dt>
+                                <dd class="mt-2 ml-16 text-base text-gray-500">
+                                    Unduh rekapitulasi absensi dalam format Excel untuk keperluan arsip, pelaporan, atau analisis lebih lanjut.
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `,
     setup: () => {
         const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile?.primaryRole);
         const isTeacher = state.userProfile?.primaryRole === 'GURU';
@@ -49,50 +177,39 @@ export const templates = {
             ? `Absensi Sekolah`
             : "Absensi Online Siswa";
         
+        // The setup screen is now only for logged-in users.
+        // The login prompt is moved to the landing page.
+        if (!state.userProfile) {
+            return ``; // Should navigate to landing page instead.
+        }
+
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-xl font-bold text-slate-800">${encodeHTML(title)}</h1>
+                    <div>
+                        <button id="back-to-main-home-btn" class="text-slate-500 hover:text-blue-500 transition duration-300 p-2 rounded-full -mr-2" title="Kembali ke Beranda"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg></button>
+                        <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                ${isSuperAdminInContext ? `
+                <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6 text-sm text-indigo-800" role="alert">
+                    <p><span class="font-bold">Mode Konteks:</span> Anda bertindak sebagai admin untuk sekolah <strong class="font-semibold">${encodeHTML(state.adminActingAsSchool.name)}</strong>.</p>
+                </div>
+                ` : ''}
+                <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
+                    <img src="${encodeHTML(state.userProfile.picture)}" alt="User" class="w-12 h-12 rounded-full"/>
+                    <div>
+                        <p class="font-semibold text-slate-800">${encodeHTML(state.userProfile.name)}</p>
+                        <p class="text-sm text-slate-500">${encodeHTML(state.userProfile.email)}</p>
+                        <span class="px-2 py-0.5 mt-1 inline-block rounded-full text-xs font-semibold ${isAdmin ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}">${getRoleDisplayName(state.userProfile.primaryRole)}</span>
+                    </div>
+                </div>
                 ${
-                    state.userProfile
-                    ? `
-                        <div class="flex items-center justify-between mb-6">
-                            <h1 class="text-xl font-bold text-slate-800">${encodeHTML(title)}</h1>
-                            <div>
-                                <button id="back-to-main-home-btn" class="text-slate-500 hover:text-blue-500 transition duration-300 p-2 rounded-full -mr-2" title="Kembali ke Beranda"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg></button>
-                                <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
-                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                                </button>
-                            </div>
-                        </div>
-                        ${isSuperAdminInContext ? `
-                        <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6 text-sm text-indigo-800" role="alert">
-                            <p><span class="font-bold">Mode Konteks:</span> Anda bertindak sebagai admin untuk sekolah <strong class="font-semibold">${encodeHTML(state.adminActingAsSchool.name)}</strong>.</p>
-                        </div>
-                        ` : ''}
-                        <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
-                            <img src="${encodeHTML(state.userProfile.picture)}" alt="User" class="w-12 h-12 rounded-full"/>
-                            <div>
-                                <p class="font-semibold text-slate-800">${encodeHTML(state.userProfile.name)}</p>
-                                <p class="text-sm text-slate-500">${encodeHTML(state.userProfile.email)}</p>
-                                <span class="px-2 py-0.5 mt-1 inline-block rounded-full text-xs font-semibold ${isAdmin ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}">${getRoleDisplayName(state.userProfile.primaryRole)}</span>
-                            </div>
-                        </div>
-                    `
-                    : `
-                        <h1 class="text-xl font-bold text-slate-800 mb-4">Absensi Online Siswa</h1>
-                        <div id="backup-notice" class="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6 text-sm text-blue-800">
-                            <p class="font-semibold mb-2">Selamat Datang!</p>
-                            <p class="mb-3">Untuk memulai, silakan login dengan akun Google Anda. Semua data absensi akan disimpan dengan aman di cloud dan dapat diakses dari perangkat mana pun.</p>
-                            <button id="loginBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg w-full transition duration-300 flex items-center justify-center gap-2">
-                                <svg class="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.222,0-9.519-3.108-11.127-7.481l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,35.17,44,30.023,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>
-                                <span>Login & Mulai Absensi</span>
-                            </button>
-                            <div id="auth-error-container" class="text-left text-sm mt-4 hidden"></div>
-                        </div>
-                    `
-                }
-                ${
-                    (state.userProfile && ('Notification' in window) && Notification.permission === 'default' && !localStorage.getItem('notificationBannerDismissed'))
+                    (('Notification' in window) && Notification.permission === 'default' && !localStorage.getItem('notificationBannerDismissed'))
                     ? `
                         <div id="notification-permission-banner" class="bg-indigo-50 border border-indigo-200 p-4 rounded-lg my-6 text-sm text-indigo-800 flex items-start justify-between gap-4">
                             <div>
@@ -117,11 +234,11 @@ export const templates = {
                         </div>
                     </div>
                 ` : `
-                    <h2 class="text-lg font-semibold text-slate-700 mb-4 pt-4 ${state.userProfile ? 'border-t border-slate-200' : ''}">Pilih Kelas & Tanggal</h2>
+                    <h2 class="text-lg font-semibold text-slate-700 mb-4 pt-4 border-t border-slate-200">Pilih Kelas & Tanggal</h2>
                     <div class="space-y-4">
                         <div>
                             <label for="class-select" class="block text-sm font-medium text-slate-700 mb-1">Pilih Kelas</label>
-                            <select id="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${!state.userProfile || availableClasses.length === 0 ? 'disabled' : ''}>
+                            <select id="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${availableClasses.length === 0 ? 'disabled' : ''}>
                                 ${ availableClasses.length > 0 
                                     ? availableClasses.map(c => `<option value="${c}">${c}</option>`).join('')
                                     : `<option>Tidak ada kelas ditugaskan</option>`
@@ -130,24 +247,24 @@ export const templates = {
                         </div>
                         <div>
                             <label for="date-input" class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
-                            <input type="date" id="date-input" value="${state.selectedDate}" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${!state.userProfile ? 'disabled' : ''}/>
+                            <input type="date" id="date-input" value="${state.selectedDate}" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"/>
                         </div>
                     </div>
                     <div class="mt-6 space-y-3">
-                         <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Mulai Absensi</button>
-                         <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Lihat Riwayat Kelas Ini</button>
-                         <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Rekap Absensi Siswa</button>
-                         <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Tambah/Kurangi Data Siswa</button>
-                         <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${!state.userProfile || needsAssignment ? 'disabled' : ''}>Unduh Rekap Kelas (Excel)</button>
+                         <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Mulai Absensi</button>
+                         <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Lihat Riwayat Kelas Ini</button>
+                         <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Rekap Absensi Siswa</button>
+                         <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Tambah/Kurangi Data Siswa</button>
+                         <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Unduh Rekap Kelas (Excel)</button>
                     </div>
                 `}
-                <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">${state.userProfile ? 'Data disimpan secara otomatis di cloud.' : 'Silakan login untuk memulai.'}</p>
+                <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">Data disimpan secara otomatis di cloud.</p>
             </div>
         </div>`;
     },
     multiRoleHome: () => {
         if (!state.userProfile) return ``; // Should not happen, but a safeguard.
-        const { name, email, picture, primaryRole, isParent } = state.userProfile;
+        const { name, email, picture, primaryRole, isParent, jurisdiction_name } = state.userProfile;
         
         const roleMapping = {
             'SUPER_ADMIN': { color: 'bg-red-100 text-red-800', title: 'Super Admin' },
@@ -160,6 +277,8 @@ export const templates = {
         };
         
         const primaryRoleInfo = roleMapping[primaryRole] || { color: 'bg-slate-100 text-slate-800', title: primaryRole };
+        const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole);
+        const reportCardRoles = ['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN', 'SUPER_ADMIN'];
 
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
@@ -190,17 +309,50 @@ export const templates = {
                     <button id="go-to-attendance-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><div><p class="font-bold">Lakukan & Kelola Absensi</p><p class="text-sm font-normal opacity-90">Catat kehadiran, kelola siswa, dan lihat rekap.</p></div></button>
                     ` : ''}
 
-                    <!-- Dashboard Actions -->
-                     ${['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN', 'SUPER_ADMIN'].includes(primaryRole) ? `
+                    <!-- Dashboard Actions for Non-Super Admins -->
+                     ${['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
                     <button id="view-dashboard-btn" class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg><div><p class="font-bold">Lihat Dasbor Analitik</p><p class="text-sm font-normal opacity-90">Analisis data kehadiran, persentase, dan dapatkan rekomendasi AI.</p></div></button>
+                    ` : ''}
+
+                    <!-- Dashboard Actions for Super Admin -->
+                    ${primaryRole === 'SUPER_ADMIN' ? `
+                    <button id="view-school-dashboard-btn" class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg><div><p class="font-bold">Dasbor Analitik Sekolah</p><p class="text-sm font-normal opacity-90">Analisis data kehadiran mendalam per sekolah.</p></div></button>
+                    <button id="view-jurisdiction-dashboard-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg><div><p class="font-bold">Dasbor Analitik Regional</p><p class="text-sm font-normal opacity-90">Analisis data agregat untuk seluruh wilayah.</p></div></button>
                     ` : ''}
 
                     <!-- Parent Action -->
                     ${isParent ? `
                     <button id="view-parent-dashboard-btn" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg><div><p class="font-bold">Dasbor Orang Tua</p><p class="text-sm font-normal opacity-90">Lihat riwayat kehadiran anak Anda.</p></div></button>
                     ` : ''}
-
-                    <!-- Super Admin / Dinas Admin Actions -->
+                    
+                    <!-- NEW REPORTING CARD -->
+                    ${reportCardRoles.includes(primaryRole) && primaryRole !== 'SUPER_ADMIN' ? `
+                    <button id="download-scoped-report-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
+                        <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <div>
+                            <p class="font-bold">${isDinas ? 'Unduh Laporan Regional' : 'Unduh Laporan Sekolah'}</p>
+                            <p class="text-sm font-normal opacity-90">
+                                ${isDinas 
+                                    ? `Unduh rekap Excel untuk semua sekolah di ${encodeHTML(jurisdiction_name) || 'yurisdiksi Anda'}.`
+                                    : 'Unduh rekapitulasi absensi lengkap untuk sekolah Anda.'
+                                }
+                            </p>
+                        </div>
+                    </button>
+                    ` : ''}
+                    
+                    ${primaryRole === 'SUPER_ADMIN' ? `
+                    <button id="download-school-report-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
+                        <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <div><p class="font-bold">Unduh Laporan Sekolah Spesifik</p><p class="text-sm font-normal opacity-90">Pilih satu sekolah untuk mengunduh rekap Excel lengkap.</p></div>
+                    </button>
+                     <button id="download-jurisdiction-report-btn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
+                        <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                        <div><p class="font-bold">Unduh Laporan Regional</p><p class="text-sm font-normal opacity-90">Pilih yurisdiksi untuk mengunduh rekap gabungan.</p></div>
+                    </button>
+                    ` : ''}
+                    
+                    <!-- Admin Panels -->
                     ${['SUPER_ADMIN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
                     <button id="view-admin-panel-btn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21v-1.5a2.5 2.5 0 00-5 0V21M3 21v-1.5a2.5 2.5 0 015 0V21"></path></svg><div><p class="font-bold">Panel Manajemen Pengguna</p><p class="text-sm font-normal opacity-90">Kelola pengguna dan penetapan peran.</p></div></button>
                     ` : ''}
@@ -208,7 +360,6 @@ export const templates = {
                     ${primaryRole === 'SUPER_ADMIN' ? `
                     <button id="view-jurisdiction-panel-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg><div><p class="font-bold">Panel Manajemen Yurisdiksi</p><p class="text-sm font-normal opacity-90">Kelola hierarki wilayah dan sekolah.</p></div></button>
                     <button id="go-to-migration-tool-btn" class="w-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10m16-10v10M4 17h16M4 7h16M9 4v3m6-3v3m-3 14v-3"></path></svg><div><p class="font-bold">Alat Migrasi Data Lama</p><p class="text-sm font-normal opacity-90">Unggah data dari sistem lama ke format baru.</p></div></button>
-                    <button id="toggle-maintenance-btn" class="w-full bg-slate-600 hover:bg-slate-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><div id="maintenance-toggle-container" class="w-full flex items-center justify-between"><span class="flex items-center gap-4"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg><div><p class="font-bold">Mode Perbaikan</p><p class="text-sm font-normal opacity-90">Memuat status...</p></div></span></div></button>
                     ` : ''}
 
                 </div>
@@ -217,7 +368,7 @@ export const templates = {
         `;
     },
     dashboard: () => {
-        const { activeView, chartViewMode, selectedDate } = state.dashboard;
+        const { data, activeView, chartViewMode, selectedDate } = state.dashboard;
         const dateObj = new Date(selectedDate + 'T00:00:00');
         let displayDate;
         let isDatePickerVisible = true;
@@ -296,7 +447,7 @@ export const templates = {
 
                 <!-- Dashboard Navigation Tabs -->
                 <div class="mb-6 p-1 bg-slate-100 rounded-lg flex flex-col sm:flex-row gap-1">
-                    <button id="db-view-report" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${activeView === 'report' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}">Laporan Siswa Tidak Hadir</button>
+                    <button id="db-view-report" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${activeView === 'report' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}">Laporan Kehadiran Harian</button>
                     <button id="db-view-percentage" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${activeView === 'percentage' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}">Persentase Kehadiran</button>
                     <button id="db-view-ai" class="flex-1 py-2 px-4 rounded-md font-semibold text-sm transition ${activeView === 'ai' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}">Rekomendasi AI</button>
                 </div>
@@ -573,31 +724,6 @@ export const templates = {
                 </div>
                 <div id="recap-container" class="overflow-x-auto"></div>
              </div>
-        </div>`,
-    connectionFailed: (errorMessage) => `
-        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
-            <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-lg w-full animate-fade-in">
-                <svg class="mx-auto h-16 w-16 text-red-500 mb-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                </svg>
-                <h1 class="text-3xl font-bold text-slate-800 mb-3">Gagal Terhubung</h1>
-                <p class="text-slate-500 mb-6">Aplikasi tidak dapat terhubung ke server. Ini mungkin terjadi jika server atau database sedang dalam proses aktivasi setelah periode tidak aktif.</p>
-                <div class="text-xs text-slate-500 bg-slate-100 p-3 rounded-lg mb-8 text-left font-mono">
-                    <strong>Detail Error:</strong> ${encodeHTML(errorMessage) || 'Tidak ada detail error.'}
-                </div>
-                <button id="retry-connection-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300 text-lg">Coba Lagi</button>
-            </div>
-        </div>`,
-    maintenance: () => `
-        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 text-center">
-            <div class="bg-white p-8 md:p-12 rounded-2xl shadow-lg max-w-md w-full animate-fade-in">
-                <svg class="mx-auto h-16 w-16 text-amber-500 mb-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.471-2.471a1.286 1.286 0 00-1.82-1.82L11.42 15.17zm0 0L5.57 21a2.652 2.652 0 01-3.75-3.75l5.877-5.877m0 0l2.471 2.471" />
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                <h1 class="text-3xl font-bold text-slate-800 mb-3">Aplikasi dalam Perbaikan</h1>
-                <p class="text-slate-500">Kami sedang melakukan beberapa pembaruan untuk meningkatkan pengalaman Anda. Aplikasi akan segera kembali normal. Mohon coba lagi nanti.</p>
-            </div>
         </div>`,
     confirmation: (message) => `
         <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style="z-index: 10001;">
