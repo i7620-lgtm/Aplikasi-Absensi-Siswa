@@ -1,14 +1,15 @@
 
-import { sql } from '@vercel/postgres';
+import { createPool } from '@vercel/postgres';
 
 // --- SETUP DATABASE YANG EFISIEN ---
 export async function setupDatabase() {
-    // Get one client for the whole setup for robustness and efficiency
-    const client = await sql.connect();
+    // Gunakan createPool untuk memastikan koneksi menggunakan POSTGRES_URL secara eksplisit
+    const pool = createPool({ connectionString: process.env.POSTGRES_URL });
+    const client = await pool.connect();
     try {
         console.log("Menjalankan setup skema database untuk instans ini...");
         
-        // All CREATE TABLE statements in one go to reduce round trips.
+        // Semua pernyataan CREATE TABLE dalam satu query untuk mengurangi perjalanan bolak-balik.
         await client.query(`
             CREATE TABLE IF NOT EXISTS jurisdictions (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL, parent_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL, created_at TIMESTAMPTZ DEFAULT NOW());
             CREATE TABLE IF NOT EXISTS schools (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW());
@@ -23,13 +24,14 @@ export async function setupDatabase() {
             );
         `);
 
-        // ALTER statements need to be run separately with error handling for idempotency.
-        try { await client.sql`ALTER TABLE schools ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;`; } catch(e) { if(e.code !== '42701') throw e; }
-        try { await client.sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;`; } catch(e) { if(e.code !== '42701') throw e; }
-        try { await client.sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;`; } catch(e) { if(e.code !== '42701') throw e; }
+        // Pernyataan ALTER perlu dijalankan secara terpisah dengan penanganan error untuk idempotensi.
+        // FIX: Mengganti client.sql dengan client.query yang benar
+        try { await client.query('ALTER TABLE schools ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;'); } catch(e) { if(e.code !== '42701' && e.code !== '42P07') console.warn("Peringatan saat alter table schools:", e.message); }
+        try { await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;'); } catch(e) { if(e.code !== '42701' && e.code !== '42P07') console.warn("Peringatan saat alter table users (jurisdiction_id):", e.message); }
+        try { await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;'); } catch(e) { if(e.code !== '42701' && e.code !== '42P07') console.warn("Peringatan saat alter table users (last_login):", e.message); }
         
         console.log("Memeriksa dan membuat indeks database untuk optimasi...");
-         // All CREATE INDEX statements in one go.
+         // Semua pernyataan CREATE INDEX dalam satu query.
         await client.query(`
             CREATE INDEX IF NOT EXISTS idx_schools_jurisdiction_id ON schools (jurisdiction_id);
             CREATE INDEX IF NOT EXISTS idx_jurisdictions_parent_id ON jurisdictions (parent_id);
