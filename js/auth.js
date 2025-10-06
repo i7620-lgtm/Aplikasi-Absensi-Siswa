@@ -1,3 +1,4 @@
+
 import { setState, navigateTo } from './main.js';
 import { showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
@@ -32,12 +33,15 @@ export function handleSignIn() {
         return;
     }
 
-    // Panggilan proaktif untuk "membangunkan" DB telah dihapus karena tidak diperlukan lagi.
-    // Server sekarang cukup cepat untuk menangani permintaan login secara langsung.
-
     const oauth2Endpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
 
-    const redirectUri = `${window.location.origin}/`;
+    // --- FIX: Dynamically adjust redirect URI to exactly match Google Console ---
+    let redirectUri = window.location.origin;
+    // This logic ensures the URI matches the Google Cloud Console entry for both environments.
+    if (redirectUri === 'https://aplikasi-absensi-siswa.vercel.app') {
+        redirectUri += '/';
+    }
+    // For localhost, window.location.origin is 'http://localhost:3000', which is correct.
 
     const params = {
         'client_id': googleClientId,
