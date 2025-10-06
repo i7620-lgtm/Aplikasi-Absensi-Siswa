@@ -1,5 +1,5 @@
 
-import { sql } from '@vercel/postgres';
+import { sql, db } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 import { Redis } from '@upstash/redis';
 
@@ -29,7 +29,6 @@ import {
 
 // --- KONFIGURASI ---
 export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
-
 
 // --- SETUP KLIEN EKSTERNAL ---
 let redis = null;
@@ -64,7 +63,7 @@ async function runApiLogic(request, response, context) {
         return response.status(401).json({ error: 'Unauthorized: userEmail is required' });
     }
     
-    const { rows: userRows } = await sql`
+    const { rows: userRows } = await context.sql`
         SELECT u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes, j.name as jurisdiction_name 
         FROM users u
         LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
@@ -72,7 +71,7 @@ async function runApiLogic(request, response, context) {
     
     if (userRows.length === 0) {
         // Cek apakah pengguna adalah orang tua
-        const { rows: parentCheck } = await sql`
+        const { rows: parentCheck } = await context.sql`
             SELECT 1 FROM change_log
             WHERE event_type = 'STUDENT_LIST_UPDATED'
             AND EXISTS (
@@ -137,7 +136,8 @@ export default async function handler(request, response) {
         SUPER_ADMIN_EMAILS, 
         GoogleGenAI, 
         redis, 
-        sql 
+        sql, // Use the imported zero-config sql object
+        db   // Pass db for potential transaction needs (like setup)
     };
 
     try {
@@ -147,7 +147,7 @@ export default async function handler(request, response) {
         if (error.message.includes('relation') && error.message.includes('does not exist')) {
             console.warn(`Database schema not found. Attempting Just-In-Time setup... Error: ${error.message}`);
             try {
-                await setupDatabase();
+                await setupDatabase(db); // Pass db object to setup
                 console.log('JIT setup successful. Retrying original request...');
                 // Retry the original request after setup
                 return await runApiLogic(request, response, context);
