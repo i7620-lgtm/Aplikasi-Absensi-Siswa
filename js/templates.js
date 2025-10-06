@@ -1,4 +1,3 @@
-
 import { state, CLASSES } from './main.js';
 
 export function encodeHTML(str) {
@@ -984,7 +983,7 @@ export const templates = {
                     </div>
                     <div>
                         <label for="migration-legacy-data" class="block text-sm font-medium text-slate-700 mb-1">Data Lama (JSON)</label>
-                        <textarea id="migration-legacy-data" rows="10" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition font-mono text-xs" placeholder='Tempelkan konten JSON lama di sini (termasuk "students_by_class" dan "saved_logs")...'></textarea>
+                        <textarea id="migration-legacy-data" rows="10" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition font-mono text-xs" placeholder='Tempelkan seluruh konten JSON, contoh lengkap:\n{\n  "students_by_class": {\n    "1A": { "students": ["Siswa A", "Siswa B"] }\n  },\n  "saved_logs": [\n    {\n      "date": "2025-10-06",\n      "class": "1A",\n      "attendance": { "Siswa A": "H", "Siswa B": "S" }\n    }\n  ]\n}\n\natau hanya data kelas:\n{\n  "1A": { "students": ["Siswa A", "Siswa B"] },\n  "1B": { "students": ["Siswa C", "Siswa D"] }\n}'></textarea>
                     </div>
                 </div>
                  <div class="mt-6 flex flex-col sm:flex-row justify-end items-center gap-4">
