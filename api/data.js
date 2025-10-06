@@ -116,7 +116,11 @@ export default async function handler(request, response) {
         if (!userEmail) {
             return response.status(401).json({ error: 'Unauthorized: userEmail is required' });
         }
-        const { rows: userRows } = await sql`SELECT email, role, school_id, jurisdiction_id, assigned_classes, name, picture FROM users WHERE email = ${userEmail}`;
+        const { rows: userRows } = await sql`
+            SELECT u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes, j.name as jurisdiction_name 
+            FROM users u
+            LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
+            WHERE u.email = ${userEmail}`;
         
         if (userRows.length === 0) {
             // Cek apakah pengguna adalah orang tua
