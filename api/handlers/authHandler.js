@@ -1,10 +1,12 @@
-import { createClient } from '@vercel/edge-config';
-
 async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
     const { email, name, picture } = profile;
     
     // 1. Check for a primary role in the main users table
-    const { rows: userRows } = await sql`SELECT email, name, picture, role, school_id, jurisdiction_id, assigned_classes FROM users WHERE email = ${email}`;
+    const { rows: userRows } = await sql`
+        SELECT u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes, j.name as jurisdiction_name 
+        FROM users u
+        LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
+        WHERE u.email = ${email}`;
     let primaryUser = userRows[0];
     let primaryRole = null;
 
@@ -54,7 +56,7 @@ async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
                 VALUES (${email}, ${name}, ${picture}, ${primaryRole}, NOW(), '{}')
                 RETURNING email, name, picture, role as "primaryRole", school_id, jurisdiction_id, assigned_classes;
             `;
-            finalUser = { ...newRows[0], isParent };
+            finalUser = { ...newRows[0], isParent, jurisdiction_name: null };
         } else {
             // This is a parent-only login, create a temporary user object for this session.
             finalUser = {
@@ -65,6 +67,7 @@ async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
                 isParent: true,
                 school_id: null,
                 jurisdiction_id: null,
+                jurisdiction_name: null,
                 assigned_classes: [],
             };
         }
@@ -73,19 +76,6 @@ async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
     // Ensure assigned_classes is an array
     if (finalUser.assigned_classes === null || finalUser.assigned_classes === undefined) {
         finalUser.assigned_classes = [];
-    }
-
-    // 4. Check maintenance mode
-    if (process.env.EDGE_CONFIG) {
-        try {
-            const edgeConfigClient = createClient(process.env.EDGE_CONFIG);
-            const isMaintenance = await edgeConfigClient.get('maintenance_mode');
-            if (isMaintenance && finalUser.primaryRole !== 'SUPER_ADMIN') {
-                return { maintenance: true };
-            }
-        } catch (e) {
-            console.error("Auth handler failed to read Edge Config, proceeding without maintenance check:", e);
-        }
     }
     
     return { user: finalUser };
@@ -131,11 +121,6 @@ export default async function handleLoginOrRegister({ payload, sql, response, SU
     if (!payload || !payload.profile) return response.status(400).json({ error: 'Profile payload is required' });
     
     const loginResult = await loginOrRegisterUser(payload.profile, sql, SUPER_ADMIN_EMAILS);
-                    
-    if (loginResult.maintenance) {
-        return response.status(200).json({ maintenance: true });
-    }
-
     const { user } = loginResult;
 
     // For roles that require initial school data, bootstrap it.
