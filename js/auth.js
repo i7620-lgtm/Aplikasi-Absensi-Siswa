@@ -1,4 +1,6 @@
-import { setState, navigateTo, state } from './main.js';
+
+
+import { setState, navigateTo } from './main.js';
 import { showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
 
@@ -8,7 +10,7 @@ let authInitStarted = false;
 // --- GOOGLE SIGN-IN LOGIC ---
 
 export async function initializeGsi() {
-    if (state.userProfile || authInitStarted) return;
+    if (authInitStarted) return;
     authInitStarted = true;
 
     try {
@@ -51,6 +53,49 @@ export function handleSignIn() {
     window.location.href = url;
 }
 
+export async function handleAuthenticationRedirect() {
+    if (!window.location.hash.includes('access_token')) {
+        return false;
+    }
+
+    const fragment = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = fragment.get('access_token');
+    
+    if (!accessToken) return false;
+
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    
+    showLoader('Memverifikasi...');
+    try {
+        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        if (!response.ok) throw new Error(`Gagal mengambil profil: ${response.statusText}`);
+        
+        const profile = await response.json();
+        const { user, initialStudents, initialLogs, latestVersion } = await apiService.loginOrRegisterUser(profile);
+
+        await setState({
+            userProfile: user,
+            studentsByClass: initialStudents || {},
+            savedLogs: initialLogs || [],
+            localVersion: latestVersion || 0,
+        });
+        showNotification(`Selamat datang, ${user.name}!`);
+        navigateTo('multiRoleHome');
+
+    } catch (error) {
+        console.error("Gagal memproses login OAuth:", error);
+        showNotification(`Gagal memproses login Anda: ${error.message}`, 'error');
+        navigateTo('landingPage');
+    } finally {
+        hideLoader();
+    }
+    return true;
+}
+
+
 export async function handleSignOut() {
     await setState({
         userProfile: null,
@@ -60,6 +105,6 @@ export async function handleSignOut() {
         adminActingAsSchool: null,
         adminActingAsJurisdiction: null,
     });
-    navigateTo('setup');
+    navigateTo('landingPage');
     showNotification('Anda telah berhasil logout.', 'info');
 }
