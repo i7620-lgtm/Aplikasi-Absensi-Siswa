@@ -1,4 +1,3 @@
-
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport } from './main.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -10,13 +9,19 @@ const notificationEl = document.getElementById('notification');
 const offlineIndicator = document.getElementById('offline-indicator');
 
 // --- POLLING & PAGINATION CONFIGURATION ---
-const INITIAL_POLLING_INTERVAL = 10000; // 10 seconds
-const MAX_POLLING_INTERVAL = 300000; // 5 minutes (300 seconds)
+// New: Exponential backoff sequence for polling intervals as requested.
+const POLLING_BACKOFF_SEQUENCE = [10000, 20000, 40000, 80000, 150000, 300000];
+const INITIAL_POLLING_INTERVAL = POLLING_BACKOFF_SEQUENCE[0]; // Start with 10 seconds
 const USERS_PER_PAGE = 10;
 
 function getNextInterval(currentInterval) {
-    const next = currentInterval * 2;
-    return Math.min(next, MAX_POLLING_INTERVAL);
+    const currentIndex = POLLING_BACKOFF_SEQUENCE.indexOf(currentInterval);
+    // If the current interval isn't found, or if it's already the last one, stay at the max interval.
+    if (currentIndex === -1 || currentIndex >= POLLING_BACKOFF_SEQUENCE.length - 1) {
+        return POLLING_BACKOFF_SEQUENCE[POLLING_BACKOFF_SEQUENCE.length - 1];
+    }
+    // Return the next interval in the sequence.
+    return POLLING_BACKOFF_SEQUENCE[currentIndex + 1];
 }
 
 
@@ -217,6 +222,37 @@ export function displayAuthError(message, error = null) {
     errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${encodeHTML(message)}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
 }
 
+// --- NEW: Extracted teacher profile poller for reusability ---
+async function teacherProfilePoller() {
+    if (state.currentScreen !== 'setup' || state.userProfile?.primaryRole !== 'GURU') return;
+    console.log(`Teacher profile polling...`);
+    
+    if (state.setup.polling.timeoutId) clearTimeout(state.setup.polling.timeoutId);
+    let nextInterval = getNextInterval(state.setup.polling.interval);
+
+    try {
+        const { userProfile: latestProfile } = await apiService.getUserProfile();
+        if (JSON.stringify(latestProfile.assigned_classes) !== JSON.stringify(state.userProfile.assigned_classes)) {
+            await setState({ 
+                userProfile: latestProfile,
+                setup: { ...state.setup, polling: { ...state.setup.polling, interval: INITIAL_POLLING_INTERVAL } }
+            });
+            showNotification('Hak akses kelas Anda telah diperbarui oleh admin.', 'info');
+            renderScreen('setup'); // This re-render will re-trigger the poller.
+            return; 
+        }
+    } catch (error) {
+        console.error("Failed to poll teacher profile:", error);
+    }
+
+    const newTimeoutId = setTimeout(teacherProfilePoller, state.setup.polling.interval);
+    // Use direct state mutation here for simplicity as setState would be overly complex
+    // and this is an internal-only state update for the poller's own management.
+    state.setup.polling.timeoutId = newTimeoutId;
+    state.setup.polling.interval = nextInterval;
+}
+
+
 function renderLandingPageScreen() {
     appContainer.innerHTML = templates.landingPage();
     document.getElementById('loginBtn-landing').addEventListener('click', handleSignIn);
@@ -225,8 +261,6 @@ function renderLandingPageScreen() {
 function renderSetupScreen() {
     appContainer.innerHTML = templates.setup();
     if (!state.userProfile) {
-        // This case should ideally not happen as logic routes to landing page
-        // but as a fallback, we ensure nothing interactive is rendered.
         return;
     }
 
@@ -269,25 +303,6 @@ function renderSetupScreen() {
     }
     
     if (isTeacher) {
-        const teacherProfilePoller = async () => {
-            if (state.currentScreen !== 'setup') return;
-            console.log(`Teacher profile polling...`);
-            if (state.setup.polling.timeoutId) clearTimeout(state.setup.polling.timeoutId);
-            
-            try {
-                const { userProfile: latestProfile } = await apiService.getUserProfile();
-                if (JSON.stringify(latestProfile.assigned_classes) !== JSON.stringify(state.userProfile.assigned_classes)) {
-                    await setState({ userProfile: latestProfile });
-                    showNotification('Hak akses kelas Anda telah diperbarui oleh admin.', 'info');
-                    renderScreen('setup');
-                    return;
-                }
-            } catch (error) {
-                console.error("Failed to poll teacher profile:", error);
-            }
-            const newTimeoutId = setTimeout(teacherProfilePoller, state.setup.polling.interval);
-            await setState({ setup: { ...state.setup, polling: { timeoutId: newTimeoutId, interval: getNextInterval(state.setup.polling.interval) } } });
-        };
         teacherProfilePoller();
     }
 }
@@ -306,7 +321,12 @@ async function renderMultiRoleHomeScreen() {
         if (isSuperAdmin) {
             const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Absensi');
             if (selectedSchool) {
-                await setState({ adminActingAsSchool: selectedSchool, adminActingAsJurisdiction: null });
+                // --- FIX: Ensure dashboard context is reset when entering a new context ---
+                await setState({ 
+                    adminActingAsSchool: selectedSchool, 
+                    adminActingAsJurisdiction: null,
+                    dashboard: { ...state.dashboard, data: null, isLoading: true }  
+                });
                 navigateTo('setup');
             }
         } else {
@@ -317,14 +337,20 @@ async function renderMultiRoleHomeScreen() {
     // Dashboard button for non-Super Admin roles
     document.getElementById('view-dashboard-btn')?.addEventListener('click', () => {
         navigateTo('dashboard');
+        dashboardPoller();
     });
 
     // Super Admin: School-context dashboard button
     document.getElementById('view-school-dashboard-btn')?.addEventListener('click', async () => {
         const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Dasbor');
         if (selectedSchool) {
-            await setState({ adminActingAsSchool: selectedSchool, adminActingAsJurisdiction: null, dashboard: { ...state.dashboard, data: null, isLoading: true } });
+            await setState({ 
+                adminActingAsSchool: selectedSchool, 
+                adminActingAsJurisdiction: null,
+                dashboard: { ...state.dashboard, data: null, isLoading: true } 
+            });
             navigateTo('dashboard');
+            dashboardPoller();
         }
     });
 
@@ -332,8 +358,13 @@ async function renderMultiRoleHomeScreen() {
     document.getElementById('view-jurisdiction-dashboard-btn')?.addEventListener('click', async () => {
         const selectedJurisdiction = await showJurisdictionSelectorModal('Pilih Yurisdiksi untuk Dasbor');
         if (selectedJurisdiction) {
-            await setState({ adminActingAsJurisdiction: selectedJurisdiction, adminActingAsSchool: null, dashboard: { ...state.dashboard, data: null, isLoading: true } });
+            await setState({ 
+                adminActingAsJurisdiction: selectedJurisdiction, 
+                adminActingAsSchool: null,
+                dashboard: { ...state.dashboard, data: null, isLoading: true } 
+            });
             navigateTo('dashboard');
+            dashboardPoller();
         }
     });
     
@@ -499,7 +530,8 @@ function createCustomDatePicker(wrapper, initialDateStr, mode) {
                         const newDateStr = currentDate.toISOString().split('T')[0];
                         popup.classList.add('hidden');
                         await setState({ dashboard: { ...state.dashboard, selectedDate: newDateStr, isLoading: true } });
-                        renderScreen('dashboard');
+                        renderDashboardScreen();
+                        dashboardPoller(); // Trigger poll after date change
                     };
                     cell.appendChild(dayButton);
                     date++;
@@ -520,7 +552,8 @@ function createCustomDatePicker(wrapper, initialDateStr, mode) {
     document.addEventListener('click', (e) => { if (!wrapper.contains(e.target)) popup.classList.add('hidden'); });
 }
 
-function calculatePercentageData(logs, viewMode, classFilter, schoolInfo, selectedDate) {
+// --- NEW: Refactored calculation function for both school and regional views ---
+function calculatePercentageData(logs, viewMode, filterValue, schoolInfo, selectedDate, isRegional) {
     if (!logs || !schoolInfo) return { finalCounts: { H: 0, S: 0, I: 0, A: 0 }, totalAttendanceOpportunities: 0 };
     
     const d = new Date(selectedDate + 'T00:00:00');
@@ -566,8 +599,14 @@ function calculatePercentageData(logs, viewMode, classFilter, schoolInfo, select
     const relevantLogs = logs.filter(log => {
         const logDate = new Date(log.date + 'T00:00:00');
         const isInDateRange = logDate >= startDate && logDate <= endDate;
-        const isInClassFilter = classFilter === 'all' || log.class === classFilter;
-        return isInDateRange && isInClassFilter;
+        
+        let isInFilter = false;
+        if (isRegional) {
+            isInFilter = filterValue === 'all' || log.school_id.toString() === filterValue;
+        } else {
+            isInFilter = filterValue === 'all' || log.class === filterValue;
+        }
+        return isInDateRange && isInFilter;
     });
 
     const periodAbsenceCounts = { S: 0, I: 0, A: 0 };
@@ -582,10 +621,14 @@ function calculatePercentageData(logs, viewMode, classFilter, schoolInfo, select
     const uniqueSchoolDays = new Set(relevantLogs.map(log => log.date)).size;
     
     let numStudentsInScope = 0;
-    if (classFilter === 'all') {
+    if (filterValue === 'all') {
         numStudentsInScope = schoolInfo.totalStudents || 0;
     } else {
-        numStudentsInScope = schoolInfo.studentsPerClass[classFilter] || 0;
+        if (isRegional) {
+            numStudentsInScope = schoolInfo.studentsPerSchool[filterValue] || 0;
+        } else {
+            numStudentsInScope = schoolInfo.studentsPerClass[filterValue] || 0;
+        }
     }
 
     const totalAttendanceOpportunities = uniqueSchoolDays * numStudentsInScope;
@@ -598,206 +641,186 @@ function calculatePercentageData(logs, viewMode, classFilter, schoolInfo, select
     };
 }
 
-async function renderDashboardScreen() {
-    appContainer.innerHTML = templates.dashboard();
-
-    const { isLoading, data, selectedDate, activeView, aiRecommendation, chartViewMode, chartClassFilter } = state.dashboard;
+// --- NEW: Completely refactored function to handle both regional and school views ---
+function updateDashboardContent(data) {
+    const { activeView, selectedDate, aiRecommendation, chartViewMode, chartClassFilter, chartSchoolFilter } = state.dashboard;
     
     const reportContent = document.getElementById('dashboard-content-report');
     const percentageContent = document.getElementById('dashboard-content-percentage');
     const aiContent = document.getElementById('dashboard-content-ai');
+
     if (!reportContent || !percentageContent || !aiContent) return;
 
-    if (isLoading) {
-        const loaderHtml = `<p class="text-center text-slate-500 py-8">Memuat data dasbor...</p>`;
-        reportContent.innerHTML = loaderHtml;
-        percentageContent.innerHTML = loaderHtml;
-        aiContent.innerHTML = loaderHtml;
-    } else if (data) {
-        const emptyStateHtml = `
-            <div class="text-center p-8 bg-slate-50 rounded-lg border-2 border-dashed">
-                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <h3 class="mt-4 text-xl font-semibold text-slate-700">Data Sekolah Masih Kosong</h3>
-                <p class="mt-2 text-sm text-slate-500">
-                    Sepertinya belum ada data siswa atau absensi untuk sekolah/wilayah ini. 
-                    Mulai dengan menambahkan daftar siswa untuk dapat melihat analitik di dasbor ini.
-                </p>
-            </div>`;
-
-        if (data.isUnassigned) {
-            const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.primaryRole);
-            
-            const title = isDinas ? "Menunggu Penugasan Yurisdiksi" : "Menunggu Penugasan Sekolah";
-            const message1 = isDinas 
-                ? "Akun Anda aktif tetapi belum ditugaskan ke wilayah yurisdiksi mana pun." 
-                : "Akun Anda aktif tetapi belum ditugaskan ke sekolah mana pun.";
-            const message2 = "Silakan hubungi Super Admin untuk mendapatkan akses ke data.";
-            
-            const unassignedMessage = `
-                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded-r-lg">
-                    <div class="flex">
-                        <div class="py-1"><svg class="w-8 h-8 text-yellow-500 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
-                        <div>
-                            <p class="font-bold text-yellow-800 text-lg">${title}</p>
-                            <p class="text-sm text-yellow-700 mt-2">${message1} Data dasbor tidak dapat ditampilkan.</p>
-                            <p class="text-sm text-yellow-700 mt-1">${message2}</p>
-                        </div>
-                    </div>
-                </div>
-            `;
-            reportContent.innerHTML = unassignedMessage;
-            percentageContent.innerHTML = unassignedMessage;
-            aiContent.innerHTML = unassignedMessage;
-        } else if (data.schoolInfo && data.schoolInfo.totalStudents === 0) {
-            reportContent.innerHTML = emptyStateHtml;
-            percentageContent.innerHTML = emptyStateHtml;
-            aiContent.innerHTML = emptyStateHtml;
-        } else {
-            // Render Report View
-            if (activeView === 'report' && data.reportData && data.classCompletionStatus) {
-                const { summaryStats } = data.reportData;
-                const { classCompletionStatus } = data; // The new unified array
-                
-                const summaryStatsHtml = `
-                    <div id="dashboard-summary-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-                        ${Object.entries({
-                            'Total Siswa': { count: summaryStats.totalStudents, color: 'slate' },
-                            'Hadir': { count: summaryStats.totalPresent, color: 'green' },
-                            'Sakit': { count: summaryStats.S, color: 'yellow' },
-                            'Izin': { count: summaryStats.I, color: 'blue' },
-                            'Alpa': { count: summaryStats.A, color: 'red' }
-                        }).map(([label, { count, color }]) => `
-                            <div class="bg-${color}-100 p-4 rounded-xl text-center">
-                                <p class="text-sm font-semibold text-${color}-700">${label}</p>
-                                <p class="text-3xl font-bold text-${color}-800">${count}</p>
-                            </div>
-                        `).join('')}
-                    </div>`;
-
-                let detailedReportHtml = '';
-                if (classCompletionStatus.length === 0) {
-                    detailedReportHtml = `<div class="p-4 bg-slate-50 rounded-lg"><p class="text-center text-slate-500 py-4">Tidak ada data kelas yang ditemukan untuk sekolah ini.</p></div>`;
-                } else {
-                    const reportList = classCompletionStatus.map(item => {
-                        if (!item.isSubmitted) {
-                            return `<div class="bg-slate-100 p-4 rounded-lg border border-slate-200">
-                                       <div class="flex justify-between items-center">
-                                            <h3 class="font-bold text-slate-600">Kelas ${encodeHTML(item.className)}</h3>
-                                            <span class="px-2 py-1 text-xs font-semibold bg-slate-200 text-slate-600 rounded-full">Belum Diisi</span>
-                                       </div>
-                                       <p class="text-sm text-slate-500 mt-2">Guru belum melakukan absensi untuk kelas ini.</p>
-                                    </div>`;
-                        } else if (item.allPresent) {
-                            return `<div class="bg-green-50 p-4 rounded-lg border border-green-200">
-                                       <div class="flex justify-between items-center">
-                                            <h3 class="font-bold text-green-700">Kelas ${encodeHTML(item.className)}</h3>
-                                            <p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(item.teacherName)}</p>
-                                       </div>
-                                       <p class="text-sm text-green-600 mt-2 flex items-center gap-2">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
-                                            Semua siswa hadir.
-                                       </p>
-                                    </div>`;
-                        } else { // Has absences
-                            return `<div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-                                       <div class="flex justify-between items-center mb-2">
-                                           <h3 class="font-bold text-blue-600">Kelas ${encodeHTML(item.className)}</h3>
-                                           <p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(item.teacherName)}</p>
-                                       </div>
-                                       <div class="overflow-x-auto"><table class="w-full text-sm">
-                                           <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
-                                           <tbody>${item.absentStudents.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${encodeHTML(s.name)}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
-                                       </table></div>
-                                    </div>`;
-                        }
-                    }).join('');
-                    detailedReportHtml = `<h2 class="text-lg font-bold text-slate-700 mb-4">Laporan Kehadiran Harian</h2><div class="space-y-4">${reportList}</div>`;
+    const emptyStateHtml = (isRegional) => `
+        <div class="text-center p-8 bg-slate-50 rounded-lg border-2 border-dashed">
+            <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <h3 class="mt-4 text-xl font-semibold text-slate-700">${isRegional ? 'Data Wilayah Masih Kosong' : 'Data Sekolah Masih Kosong'}</h3>
+            <p class="mt-2 text-sm text-slate-500">
+                ${isRegional 
+                    ? 'Sepertinya belum ada data sekolah, siswa, atau absensi di wilayah yurisdiksi ini.'
+                    : 'Sepertinya belum ada data siswa atau absensi untuk sekolah ini. Mulai dengan menambahkan daftar siswa.'
                 }
-                reportContent.innerHTML = summaryStatsHtml + detailedReportHtml;
-            }
+            </p>
+        </div>`;
+    
+    const unassignedMessage = (isDinas) => {
+        const title = isDinas ? "Menunggu Penugasan Yurisdiksi" : "Menunggu Penugasan Sekolah";
+        const message1 = isDinas ? "Akun Anda aktif tetapi belum ditugaskan ke wilayah yurisdiksi." : "Akun Anda aktif tetapi belum ditugaskan ke sekolah.";
+        return `<div class="bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded-r-lg"><div class="flex"><div class="py-1"><svg class="w-8 h-8 text-yellow-500 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div><div><p class="font-bold text-yellow-800 text-lg">${title}</p><p class="text-sm text-yellow-700 mt-2">${message1} Data dasbor tidak dapat ditampilkan.</p><p class="text-sm text-yellow-700 mt-1">Silakan hubungi Super Admin untuk mendapatkan akses.</p></div></div></div>`;
+    };
 
-            // Render Percentage View
-            if (activeView === 'percentage' && data.allLogsForYear && data.schoolInfo) {
-                const { finalCounts, totalAttendanceOpportunities } = calculatePercentageData(data.allLogsForYear, chartViewMode, chartClassFilter, data.schoolInfo, selectedDate);
-                const { allClasses } = data.schoolInfo;
-                
-                const timeFilters = [
-                    { id: 'daily', text: 'Harian' }, { id: 'weekly', text: 'Mingguan' },
-                    { id: 'monthly', text: 'Bulanan' }, { id: 'semester1', text: 'Semester I' },
-                    { id: 'semester2', text: 'Semester II' }, { id: 'yearly', text: 'Tahun Ajaran' },
-                ];
-
-                percentageContent.innerHTML = `
-                    <div class="flex flex-col md:flex-row gap-4 mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200">
-                        <div class="flex-1"><p class="block text-sm font-medium text-slate-700 mb-2">Periode Waktu</p><div id="chart-time-filter" class="flex flex-wrap gap-2">${timeFilters.map(f => `<button data-mode="${f.id}" class="chart-time-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${state.dashboard.chartViewMode === f.id ? 'bg-blue-600 text-white' : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'}">${f.text}</button>`).join('')}</div></div>
-                        <div class="flex-1 md:max-w-xs"><label for="chart-class-filter" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Kelas</label><select id="chart-class-filter" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"><option value="all">Seluruh Sekolah</option>${allClasses.map(c => `<option value="${c}" ${state.dashboard.chartClassFilter === c ? 'selected' : ''}>Kelas ${c}</option>`).join('')}</select></div>
-                    </div>
-                    <div class="flex flex-col md:flex-row items-center justify-center gap-8 p-4">
-                        <div id="chart-container" class="relative w-full md:w-1/2" style="max-width: 400px; max-height: 400px;"><canvas id="dashboard-pie-chart"></canvas><div id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center"><p class="text-slate-500 bg-white p-4 rounded-lg">Tidak ada data absensi untuk filter yang dipilih.</p></div></div>
-                        <div id="custom-legend-container" class="w-full md:w-1/2 max-w-xs"></div>
-                    </div>`;
-
-                document.querySelectorAll('.chart-time-btn').forEach(btn => btn.onclick = async (e) => { await setState({ dashboard: { ...state.dashboard, chartViewMode: e.currentTarget.dataset.mode } }); renderScreen('dashboard'); });
-                document.getElementById('chart-class-filter').onchange = async (e) => { await setState({ dashboard: { ...state.dashboard, chartClassFilter: e.target.value } }); renderScreen('dashboard'); };
-                
-                const chartData = [
-                    { label: 'Hadir', value: finalCounts.H, color: '#22c55e' },
-                    { label: 'Sakit', value: finalCounts.S, color: '#fbbf24' },
-                    { label: 'Izin', value: finalCounts.I, color: '#3b82f6' },
-                    { label: 'Alpa', value: finalCounts.A, color: '#ef4444' }
-                ];
-
-                const chartCanvas = document.getElementById('dashboard-pie-chart');
-                if (window.dashboardPieChart instanceof Chart) window.dashboardPieChart.destroy();
-                
-                if (totalAttendanceOpportunities > 0 && chartCanvas) {
-                    document.getElementById('custom-legend-container').innerHTML = chartData.map(item => `<div class="flex items-center justify-between p-3 rounded-lg"><div class="flex items-center gap-3"><span class="w-4 h-4 rounded-full" style="background-color: ${item.color};"></span><span class="font-semibold text-slate-700">${item.label}</span></div><div class="text-right"><span class="font-bold text-slate-800">${item.value}</span><span class="text-sm text-slate-500 ml-2">(${(totalAttendanceOpportunities > 0 ? ((item.value / totalAttendanceOpportunities) * 100).toFixed(2) : 0)}%)</span></div></div>`).join('');
-                    window.dashboardPieChart = new Chart(chartCanvas.getContext('2d'), { type: 'pie', data: { labels: chartData.map(d => d.label), datasets: [{ data: chartData.map(d => d.value), backgroundColor: chartData.map(d => d.color), borderColor: '#ffffff', borderWidth: 3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
-                } else {
-                    chartCanvas.style.display = 'none';
-                    document.getElementById('chart-no-data').classList.remove('hidden');
-                    document.getElementById('custom-legend-container').innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada data untuk legenda.</p>`;
-                }
-            }
-
-            // Render AI View
-            if (activeView === 'ai') {
-                const { isLoading: isAiLoading, result, error, selectedRange } = aiRecommendation;
-                const aiRanges = [{ id: 'last30days', text: '30 Hari Terakhir' }, { id: 'semester', text: 'Semester Ini' }, { id: 'year', text: 'Tahun Ajaran Ini' }];
-                const getAiBtnClass = (rangeId) => selectedRange === rangeId ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-300';
-                
-                let contentHtml = `<div class="mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200"><p class="block text-sm font-medium text-slate-700 mb-2">Pilih Periode Analisis</p><div id="ai-range-filter" class="flex flex-wrap gap-2">${aiRanges.map(r => `<button data-range="${r.id}" class="ai-range-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${getAiBtnClass(r.id)}">${r.text}</button>`).join('')}</div></div>`;
-
-                if (isAiLoading) contentHtml += `<div class="text-center py-8"><div class="loader mx-auto"></div><p class="loader-text">Menganalisis data absensi...</p></div>`;
-                else if (error) contentHtml += `<div class="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200"><p class="font-bold">Terjadi Kesalahan</p><p>${encodeHTML(error)}</p><button id="retry-ai-btn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Coba Lagi</button></div>`;
-                else if (result) contentHtml += renderStructuredAiResponse(result);
-                else contentHtml += `<div class="text-center p-8 bg-slate-50 rounded-lg"><h3 class="text-lg font-bold text-slate-800">Dapatkan Wawasan dengan AI</h3><p class="text-slate-500 my-4">Pilih periode di atas, lalu klik tombol di bawah untuk meminta Gemini menganalisis data absensi.</p><button id="generate-ai-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition">Buat Rekomendasi Sekarang</button></div>`;
-                
-                aiContent.innerHTML = contentHtml;
-                document.querySelectorAll('.ai-range-btn').forEach(btn => btn.addEventListener('click', async (e) => { await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, selectedRange: e.currentTarget.dataset.range, result: null, error: null } } }); renderScreen('dashboard'); }));
-                document.getElementById('generate-ai-btn')?.addEventListener('click', handleGenerateAiRecommendation);
-                document.getElementById('retry-ai-btn')?.addEventListener('click', handleGenerateAiRecommendation);
-            }
-        }
-    } else {
+    if (!data) {
         const errorHtml = `<p class="text-center text-red-500 py-8">Gagal memuat data dasbor.</p>`;
         reportContent.innerHTML = errorHtml;
         percentageContent.innerHTML = errorHtml;
         aiContent.innerHTML = errorHtml;
+        return;
     }
+
+    if (data.isUnassigned) {
+        const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.primaryRole);
+        const unassignedHtml = unassignedMessage(isDinas);
+        reportContent.innerHTML = unassignedHtml;
+        percentageContent.innerHTML = unassignedHtml;
+        aiContent.innerHTML = unassignedHtml;
+        return;
+    }
+    
+    const isRegionalView = data.isRegionalView;
+
+    if (data.schoolInfo && data.schoolInfo.totalStudents === 0) {
+        const emptyHtml = emptyStateHtml(isRegionalView);
+        reportContent.innerHTML = emptyHtml;
+        percentageContent.innerHTML = emptyHtml;
+        aiContent.innerHTML = emptyHtml;
+        return;
+    }
+
+    // Render Report View
+    if (activeView === 'report' && data.schoolInfo && data.allLogsForYear) {
+        // --- NEW: Calculate summary stats on the frontend for consistency ---
+        const dailyStats = calculatePercentageData(data.allLogsForYear, 'daily', 'all', data.schoolInfo, selectedDate, isRegionalView);
+        const summaryStats = {
+            totalStudents: data.schoolInfo.totalStudents || 0,
+            totalPresent: dailyStats.finalCounts.H,
+            S: dailyStats.finalCounts.S,
+            I: dailyStats.finalCounts.I,
+            A: dailyStats.finalCounts.A,
+        };
+        // --- END of new logic ---
+
+        const summaryStatsHtml = `<div id="dashboard-summary-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">${Object.entries({'Total Siswa':{count:summaryStats.totalStudents,color:'slate'},Hadir:{count:summaryStats.totalPresent,color:'green'},Sakit:{count:summaryStats.S,color:'yellow'},Izin:{count:summaryStats.I,color:'blue'},Alpa:{count:summaryStats.A,color:'red'}}).map(([label,{count,color}])=>`<div class="bg-${color}-100 p-4 rounded-xl text-center"><p class="text-sm font-semibold text-${color}-700">${label}</p><p class="text-3xl font-bold text-${color}-800">${count}</p></div>`).join('')}</div>`;
+        
+        let detailedReportHtml = '';
+        if (isRegionalView) {
+            const { schoolCompletionStatus } = data.reportData;
+            if (!schoolCompletionStatus || schoolCompletionStatus.length === 0) {
+                 detailedReportHtml = `<div class="p-4 bg-slate-50 rounded-lg"><p class="text-center text-slate-500 py-4">Tidak ada data sekolah yang ditemukan di yurisdiksi ini.</p></div>`;
+            } else {
+                 detailedReportHtml = `<h2 class="text-lg font-bold text-slate-700 mb-4">Laporan Penyelesaian Absensi Harian</h2><div class="space-y-4">${schoolCompletionStatus.map(item => {
+                    const completionRate = item.totalClasses > 0 ? (item.submittedClasses / item.totalClasses) * 100 : 0;
+                    const isComplete = completionRate === 100;
+                    const color = isComplete ? 'green' : (item.submittedClasses > 0 ? 'yellow' : 'slate');
+                    return `<div class="bg-${color}-50 p-4 rounded-lg border border-${color}-200"><div class="flex justify-between items-center"><h3 class="font-bold text-${color}-700">${encodeHTML(item.schoolName)}</h3><span class="px-2 py-1 text-xs font-semibold bg-${color}-200 text-${color}-800 rounded-full">Selesai ${item.submittedClasses}/${item.totalClasses || '?'} kelas</span></div><p class="text-sm text-${color}-600 mt-2">${isComplete ? 'Semua kelas telah melakukan absensi.' : 'Beberapa kelas belum melakukan absensi.'}</p></div>`;
+                }).join('')}</div>`;
+            }
+        } else { // School View
+            const { classCompletionStatus } = data;
+            if (!classCompletionStatus || classCompletionStatus.length === 0) {
+                detailedReportHtml = `<div class="p-4 bg-slate-50 rounded-lg"><p class="text-center text-slate-500 py-4">Tidak ada data kelas yang ditemukan.</p></div>`;
+            } else {
+                detailedReportHtml = `<h2 class="text-lg font-bold text-slate-700 mb-4">Laporan Kehadiran Harian</h2><div class="space-y-4">${classCompletionStatus.map(item=>item.isSubmitted?item.allPresent?`<div class="bg-green-50 p-4 rounded-lg border border-green-200"><div class="flex justify-between items-center"><h3 class="font-bold text-green-700">Kelas ${encodeHTML(item.className)}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(item.teacherName)}</p></div><p class="text-sm text-green-600 mt-2 flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg> Semua siswa hadir.</p></div>`:`<div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm"><div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${encodeHTML(item.className)}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(item.teacherName)}</p></div><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead><tbody>${item.absentStudents.map(s=>`<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${encodeHTML(s.name)}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status==='S'?'bg-yellow-100 text-yellow-800':s.status==='I'?'bg-blue-100 text-blue-800':'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody></table></div></div>`:`<div class="bg-slate-100 p-4 rounded-lg border border-slate-200"><div class="flex justify-between items-center"><h3 class="font-bold text-slate-600">Kelas ${encodeHTML(item.className)}</h3><span class="px-2 py-1 text-xs font-semibold bg-slate-200 text-slate-600 rounded-full">Belum Diisi</span></div><p class="text-sm text-slate-500 mt-2">Guru belum melakukan absensi.</p></div>`).join('')}</div>`;
+            }
+        }
+        reportContent.innerHTML = summaryStatsHtml + detailedReportHtml;
+    }
+
+    // Render Percentage View
+    if (activeView === 'percentage' && data.allLogsForYear && data.schoolInfo) {
+        const filterValue = isRegionalView ? chartSchoolFilter : chartClassFilter;
+        const { finalCounts, totalAttendanceOpportunities } = calculatePercentageData(data.allLogsForYear, chartViewMode, filterValue, data.schoolInfo, selectedDate, isRegionalView);
+
+        const timeFilters = [{id:'daily',text:'Harian'},{id:'weekly',text:'Mingguan'},{id:'monthly',text:'Bulanan'},{id:'semester1',text:'Semester I'},{id:'semester2',text:'Semester II'},{id:'yearly',text:'Tahun Ajaran'}];
+        
+        let filterHtml;
+        if (isRegionalView) {
+            const { allSchools = [] } = data.schoolInfo;
+            filterHtml = `<div class="flex-1 md:max-w-xs"><label for="chart-school-filter" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Sekolah</label><select id="chart-school-filter" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"><option value="all">Seluruh Wilayah</option>${allSchools.map(s=>`<option value="${s.id}" ${state.dashboard.chartSchoolFilter === s.id.toString() ? 'selected':''}>${encodeHTML(s.name)}</option>`).join('')}</select></div>`;
+        } else {
+            const { allClasses = [] } = data.schoolInfo;
+            filterHtml = `<div class="flex-1 md:max-w-xs"><label for="chart-class-filter" class="block text-sm font-medium text-slate-700 mb-2">Lingkup Kelas</label><select id="chart-class-filter" class="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"><option value="all">Seluruh Sekolah</option>${allClasses.map(c=>`<option value="${c}" ${state.dashboard.chartClassFilter===c?'selected':''}>Kelas ${c}</option>`).join('')}</select></div>`;
+        }
+        
+        percentageContent.innerHTML = `<div class="flex flex-col md:flex-row gap-4 mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200"><div class="flex-1"><p class="block text-sm font-medium text-slate-700 mb-2">Periode Waktu</p><div id="chart-time-filter" class="flex flex-wrap gap-2">${timeFilters.map(f=>`<button data-mode="${f.id}" class="chart-time-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${state.dashboard.chartViewMode===f.id?'bg-blue-600 text-white':'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'}">${f.text}</button>`).join('')}</div></div>${filterHtml}</div><div class="flex flex-col md:flex-row items-center justify-center gap-8 p-4"><div id="chart-container" class="relative w-full md:w-1/2" style="max-width: 400px; max-height: 400px;"><canvas id="dashboard-pie-chart"></canvas><div id="chart-no-data" class="hidden absolute inset-0 flex items-center justify-center"><p class="text-slate-500 bg-white p-4 rounded-lg">Tidak ada data untuk filter ini.</p></div></div><div id="custom-legend-container" class="w-full md:w-1/2 max-w-xs"></div></div>`;
+        
+        document.querySelectorAll('.chart-time-btn').forEach(btn => btn.onclick = async (e) => { await setState({ dashboard: { ...state.dashboard, chartViewMode: e.currentTarget.dataset.mode } }); updateDashboardContent(state.dashboard.data); });
+        
+        if (isRegionalView) {
+             document.getElementById('chart-school-filter').onchange = async (e) => { await setState({ dashboard: { ...state.dashboard, chartSchoolFilter: e.target.value } }); updateDashboardContent(state.dashboard.data); };
+        } else {
+             document.getElementById('chart-class-filter').onchange = async (e) => { await setState({ dashboard: { ...state.dashboard, chartClassFilter: e.target.value } }); updateDashboardContent(state.dashboard.data); };
+        }
+
+        const chartData=[{label:'Hadir',value:finalCounts.H,color:'#22c55e'},{label:'Sakit',value:finalCounts.S,color:'#fbbf24'},{label:'Izin',value:finalCounts.I,color:'#3b82f6'},{label:'Alpa',value:finalCounts.A,color:'#ef4444'}];
+        const chartCanvas = document.getElementById('dashboard-pie-chart');
+        if (window.dashboardPieChart instanceof Chart) window.dashboardPieChart.destroy();
+
+        if (totalAttendanceOpportunities > 0 && chartCanvas) {
+            chartCanvas.style.display = 'block';
+            document.getElementById('chart-no-data').classList.add('hidden');
+            document.getElementById('custom-legend-container').innerHTML = chartData.map(item=>`<div class="flex items-center justify-between p-3 rounded-lg"><div class="flex items-center gap-3"><span class="w-4 h-4 rounded-full" style="background-color: ${item.color};"></span><span class="font-semibold text-slate-700">${item.label}</span></div><div class="text-right"><span class="font-bold text-slate-800">${item.value}</span><span class="text-sm text-slate-500 ml-2">(${(totalAttendanceOpportunities>0?((item.value/totalAttendanceOpportunities)*100).toFixed(2):0)}%)</span></div></div>`).join('');
+            window.dashboardPieChart=new Chart(chartCanvas.getContext('2d'),{type:'pie',data:{labels:chartData.map(d=>d.label),datasets:[{data:chartData.map(d=>d.value),backgroundColor:chartData.map(d=>d.color),borderColor:'#ffffff',borderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+        } else {
+            chartCanvas.style.display = 'none';
+            document.getElementById('chart-no-data').classList.remove('hidden');
+            document.getElementById('custom-legend-container').innerHTML = `<p class="text-center text-slate-500 py-8">Tidak ada data untuk legenda.</p>`;
+        }
+    }
+
+    // Render AI View
+    if (activeView === 'ai') {
+        const { isLoading: isAiLoading, result, error, selectedRange } = aiRecommendation;
+        const aiRanges = [{id:'last30days',text:'30 Hari Terakhir'},{id:'semester',text:'Semester Ini'},{id:'year',text:'Tahun Ajaran Ini'}];
+        const getAiBtnClass = (rangeId) => selectedRange === rangeId ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-300';
+        let contentHtml = `<div class="mb-6 p-4 bg-slate-100 rounded-lg border border-slate-200"><p class="block text-sm font-medium text-slate-700 mb-2">Pilih Periode Analisis</p><div id="ai-range-filter" class="flex flex-wrap gap-2">${aiRanges.map(r=>`<button data-range="${r.id}" class="ai-range-btn flex-grow sm:flex-grow-0 text-sm font-semibold py-2 px-4 rounded-lg transition ${getAiBtnClass(r.id)}">${r.text}</button>`).join('')}</div></div>`;
+        if (isAiLoading) contentHtml += `<div class="text-center py-8"><div class="loader mx-auto"></div><p class="loader-text">Menganalisis data...</p></div>`;
+        else if (error) contentHtml += `<div class="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200"><p class="font-bold">Terjadi Kesalahan</p><p>${encodeHTML(error)}</p><button id="retry-ai-btn" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Coba Lagi</button></div>`;
+        else if (result) contentHtml += renderStructuredAiResponse(result);
+        else contentHtml += `<div class="text-center p-8 bg-slate-50 rounded-lg"><h3 class="text-lg font-bold text-slate-800">Dapatkan Wawasan dengan AI</h3><p class="text-slate-500 my-4">Pilih periode, lalu klik untuk meminta Gemini menganalisis data.</p><button id="generate-ai-btn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg transition">Buat Rekomendasi</button></div>`;
+        aiContent.innerHTML = contentHtml;
+        document.querySelectorAll('.ai-range-btn').forEach(btn => btn.addEventListener('click', async (e) => { await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, selectedRange: e.currentTarget.dataset.range, result: null, error: null } } }); updateDashboardContent(state.dashboard.data); }));
+        document.getElementById('generate-ai-btn')?.addEventListener('click', handleGenerateAiRecommendation);
+        document.getElementById('retry-ai-btn')?.addEventListener('click', handleGenerateAiRecommendation);
+    }
+}
+
+
+async function renderDashboardScreen() {
+    appContainer.innerHTML = templates.dashboard();
+    updateDashboardContent(state.dashboard.data);
 
     document.getElementById('logoutBtn-ks').addEventListener('click', handleSignOut);
     const backBtn = document.getElementById('dashboard-back-btn');
     if (backBtn) backBtn.addEventListener('click', () => navigateTo(backBtn.dataset.target));
     
-    ['report', 'percentage', 'ai'].forEach(view => document.getElementById(`db-view-${view}`).addEventListener('click', async () => { await setState({ dashboard: { ...state.dashboard, activeView: view } }); renderScreen('dashboard'); }));
+    // --- UI ENHANCEMENT: Re-render the whole screen on tab click ---
+    ['report', 'percentage', 'ai'].forEach(view => {
+        document.getElementById(`db-view-${view}`).addEventListener('click', async () => {
+            await setState({ dashboard: { ...state.dashboard, activeView: view } });
+            // By re-rendering the whole screen, the tab styles are guaranteed to update,
+            // making the UI feel responsive even if data loading fails.
+            renderDashboardScreen();
+        });
+    });
     
     const datePickerWrapper = document.getElementById('ks-datepicker-wrapper');
     if (datePickerWrapper) {
-        let mode = (activeView === 'percentage' && (state.dashboard.chartViewMode === 'weekly' || state.dashboard.chartViewMode === 'monthly')) ? state.dashboard.chartViewMode : 'daily';
-        createCustomDatePicker(datePickerWrapper, selectedDate, mode);
+        let mode = (state.dashboard.activeView === 'percentage' && (state.dashboard.chartViewMode === 'weekly' || state.dashboard.chartViewMode === 'monthly')) 
+            ? state.dashboard.chartViewMode 
+            : 'daily';
+        createCustomDatePicker(datePickerWrapper, state.dashboard.selectedDate, mode);
     }
 }
 
@@ -805,6 +828,8 @@ async function renderDashboardScreen() {
 async function dashboardPoller() {
     if (state.currentScreen !== 'dashboard') return;
     if (state.dashboard.polling.timeoutId) clearTimeout(state.dashboard.polling.timeoutId);
+
+    let nextInterval = getNextInterval(state.dashboard.polling.interval); // Default to backoff
 
     try {
         let schoolId = null;
@@ -819,21 +844,12 @@ async function dashboardPoller() {
             jurisdictionId = state.userProfile.jurisdiction_id;
         }
         
-        // Don't fetch if context is missing for roles that need it.
-        const requiresSchoolContext = ['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole) && !schoolId;
-        const requiresDinasContext = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.primaryRole) && !jurisdictionId;
-        
-        if (requiresSchoolContext || requiresDinasContext) {
-             await setState({ dashboard: { ...state.dashboard, isLoading: false, data: { isUnassigned: true } } });
-             renderScreen('dashboard');
-             return;
-        }
-
         const dashboardData = await apiService.getDashboardData({ schoolId, jurisdictionId, selectedDate: state.dashboard.selectedDate });
         
         if (JSON.stringify(dashboardData) !== JSON.stringify(state.dashboard.data) || state.dashboard.isLoading) {
             await setState({ dashboard: { ...state.dashboard, data: dashboardData, isLoading: false } });
-            renderScreen('dashboard');
+            updateDashboardContent(dashboardData);
+            nextInterval = INITIAL_POLLING_INTERVAL; // Reset interval on change or initial load
         }
 
     } catch (error) {
@@ -841,12 +857,12 @@ async function dashboardPoller() {
         showNotification('Gagal memperbarui data dasbor: ' + error.message, 'error');
         if (state.dashboard.isLoading) {
             await setState({ dashboard: { ...state.dashboard, isLoading: false, data: state.dashboard.data || null } });
-            renderScreen('dashboard');
+            updateDashboardContent(state.dashboard.data);
         }
     }
     
     const newTimeoutId = setTimeout(dashboardPoller, state.dashboard.polling.interval);
-    await setState({ dashboard: { ...state.dashboard, polling: { timeoutId: newTimeoutId, interval: getNextInterval(state.dashboard.polling.interval) } } });
+    await setState({ dashboard: { ...state.dashboard, polling: { timeoutId: newTimeoutId, interval: nextInterval } } });
 }
 
 
@@ -925,7 +941,9 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
             }
             const newBadge = user.is_unmanaged ? `<span class="ml-2 px-2 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded-full">BARU</span>` : '';
             const assignment = encodeHTML(user.school_name || user.jurisdiction_name) || '<span class="italic text-slate-400">Belum Ditugaskan</span>';
-            tableHtml += `<tr class="border-b hover:bg-slate-50 transition"><td class="p-3 text-center"><input type="checkbox" class="user-select-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="${user.email}" ${selectedUsers.includes(user.email) ? 'checked' : ''} /></td><td class="p-3"><div class="flex items-center gap-3"><img src="${encodeHTML(user.picture)}" alt="${encodeHTML(user.name)}" class="w-10 h-10 rounded-full"/><div><p class="font-medium text-slate-800">${encodeHTML(user.name)}${newBadge}</p><p class="text-xs text-slate-500">${encodeHTML(user.email)}</p></div></div></td><td class="p-3 text-sm text-slate-600">${getRoleDisplayName(user.role)}</td><td class="p-3 text-sm text-slate-600">${assignment}</td><td class="p-3 text-center"><button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" data-user='${JSON.stringify(user)}'>Kelola</button></td></tr>`;
+            const userImage = user.picture ? `<img src="${encodeHTML(user.picture)}" alt="${encodeHTML(user.name)}" class="w-10 h-10 rounded-full" onerror="this.replaceWith(generateAvatar('${encodeHTML(user.name)}'))"/>` : generateAvatar(user.name);
+            
+            tableHtml += `<tr class="border-b hover:bg-slate-50 transition"><td class="p-3 text-center"><input type="checkbox" class="user-select-checkbox h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" value="${user.email}" ${selectedUsers.includes(user.email) ? 'checked' : ''} /></td><td class="p-3"><div class="flex items-center gap-3">${userImage}<div><p class="font-medium text-slate-800">${encodeHTML(user.name)}${newBadge}</p><p class="text-xs text-slate-500">${encodeHTML(user.email)}</p></div></div></td><td class="p-3 text-sm text-slate-600">${getRoleDisplayName(user.role)}</td><td class="p-3 text-sm text-slate-600">${assignment}</td><td class="p-3 text-center"><button class="manage-user-btn bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-3 rounded-lg text-sm transition" data-user='${JSON.stringify(user)}'>Kelola</button></td></tr>`;
         });
     }
     tableHtml += `</tbody></table>`;
@@ -939,6 +957,46 @@ function renderAdminPanelTable(container, allUsers, allSchools) {
     } else if (paginationContainer) {
         paginationContainer.innerHTML = '';
     }
+}
+
+
+async function adminPanelPoller() {
+    if(state.currentScreen !== 'adminPanel') return;
+    console.log(`Admin panel polling...`);
+    if (state.adminPanel.polling.timeoutId) clearTimeout(state.adminPanel.polling.timeoutId);
+
+    let nextInterval = getNextInterval(state.adminPanel.polling.interval);
+
+    try {
+        const [usersRes, schoolsRes] = await Promise.all([
+            apiService.getAllUsers(),
+            state.userProfile.primaryRole === 'SUPER_ADMIN' ? apiService.getAllSchools() : Promise.resolve({ allSchools: state.adminPanel.schools })
+        ]);
+        
+        const newData = { users: usersRes.allUsers, schools: schoolsRes.allSchools };
+        const container = document.getElementById('admin-panel-container');
+        if (JSON.stringify({ u: state.adminPanel.users, s: state.adminPanel.schools }) !== JSON.stringify({ u: newData.users, s: newData.schools }) || state.adminPanel.isLoading) {
+            const totalPages = Math.ceil(newData.users.length / USERS_PER_PAGE);
+            const newCurrentPage = Math.min(state.adminPanel.currentPage, totalPages) || 1;
+            await setState({ adminPanel: { ...state.adminPanel, ...newData, isLoading: false, currentPage: newCurrentPage } });
+            if (container) {
+                renderAdminPanelTable(container, newData.users, newData.schools);
+                renderBulkActionsBar();
+            }
+            nextInterval = INITIAL_POLLING_INTERVAL; // Reset on change or initial load
+        }
+    } catch(error) {
+        const container = document.getElementById('admin-panel-container');
+        if (state.adminPanel.isLoading && container) {
+            container.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
+        }
+        await setState({ adminPanel: { ...state.adminPanel, isLoading: false } }); // Prevent infinite loop on error
+    }
+    
+    const newTimeoutId = setTimeout(adminPanelPoller, nextInterval);
+    // Use direct mutation for simplicity, as this is an internal state of the poller loop.
+    state.adminPanel.polling.timeoutId = newTimeoutId;
+    state.adminPanel.polling.interval = nextInterval;
 }
 
 
@@ -981,40 +1039,7 @@ async function renderAdminPanelScreen() {
 
     await setState({ adminPanel: { ...state.adminPanel, isLoading: true } });
     container.innerHTML = `<p class="text-center text-slate-500 py-8">Memuat daftar pengguna...</p>`;
-
-    const adminPanelPoller = async () => {
-        if(state.currentScreen !== 'adminPanel') return;
-        console.log(`Admin panel polling...`);
-        if (state.adminPanel.polling.timeoutId) clearTimeout(state.adminPanel.polling.timeoutId);
-
-        try {
-            const [usersRes, schoolsRes] = await Promise.all([
-                apiService.getAllUsers(),
-                state.userProfile.primaryRole === 'SUPER_ADMIN' ? apiService.getAllSchools() : Promise.resolve({ allSchools: state.adminPanel.schools })
-            ]);
-            
-            const newData = { users: usersRes.allUsers, schools: schoolsRes.allSchools };
-            if (JSON.stringify({ u: state.adminPanel.users, s: state.adminPanel.schools }) !== JSON.stringify({ u: newData.users, s: newData.schools })) {
-                const totalPages = Math.ceil(newData.users.length / USERS_PER_PAGE);
-                const newCurrentPage = Math.min(state.adminPanel.currentPage, totalPages) || 1;
-                await setState({ adminPanel: { ...state.adminPanel, ...newData, isLoading: false, currentPage: newCurrentPage } });
-                renderAdminPanelTable(container, newData.users, newData.schools);
-                renderBulkActionsBar();
-            } else if (state.adminPanel.isLoading) {
-                 await setState({ adminPanel: { ...state.adminPanel, ...newData, isLoading: false } });
-                renderAdminPanelTable(container, newData.users, newData.schools);
-                renderBulkActionsBar();
-            }
-        } catch(error) {
-            if (state.adminPanel.isLoading && container) {
-                container.innerHTML = `<p class="text-center text-red-500 py-8">Gagal memuat data: ${error.message}</p>`;
-                await setState({ adminPanel: { ...state.adminPanel, isLoading: false } }); // Prevent infinite loop
-            }
-        }
-        
-        const newTimeoutId = setTimeout(adminPanelPoller, state.adminPanel.polling.interval);
-        await setState({ adminPanel: { ...state.adminPanel, polling: { timeoutId: newTimeoutId, interval: getNextInterval(state.adminPanel.polling.interval) } } });
-    };
+    
     adminPanelPoller();
 }
 
@@ -1488,7 +1513,7 @@ export function renderScreen(screen) {
         'landingPage': renderLandingPageScreen,
         'setup': renderSetupScreen,
         'multiRoleHome': renderMultiRoleHomeScreen,
-        'dashboard': () => { renderDashboardScreen(); dashboardPoller(); },
+        'dashboard': renderDashboardScreen,
         'parentDashboard': renderParentDashboardScreen,
         'adminPanel': renderAdminPanelScreen,
         'jurisdictionPanel': renderJurisdictionPanelScreen,
@@ -1512,4 +1537,51 @@ export function renderScreen(screen) {
 
     (screenRenderers[screen] || renderLandingPageScreen)();
     hideLoader();
+}
+
+// --- NEW: Centralized polling control functions ---
+
+export function stopAllPollers() {
+    if (state.dashboard.polling.timeoutId) {
+        clearTimeout(state.dashboard.polling.timeoutId);
+        setState({ dashboard: { ...state.dashboard, polling: { ...state.dashboard.polling, timeoutId: null } } });
+        console.log('Dashboard polling stopped.');
+    }
+    if (state.adminPanel.polling.timeoutId) {
+        clearTimeout(state.adminPanel.polling.timeoutId);
+        setState({ adminPanel: { ...state.adminPanel, polling: { ...state.adminPanel.polling, timeoutId: null } } });
+        console.log('Admin Panel polling stopped.');
+    }
+    if (state.setup.polling.timeoutId) {
+        clearTimeout(state.setup.polling.timeoutId);
+        setState({ setup: { ...state.setup, polling: { ...state.setup.polling, timeoutId: null } } });
+        console.log('Setup Screen (Teacher) polling stopped.');
+    }
+}
+
+export function resumePollingForCurrentScreen() {
+    if (!state.userProfile) return; // Don't poll if not logged in
+
+    console.log(`Page is visible again. Resuming polling for screen: ${state.currentScreen}`);
+    
+    switch (state.currentScreen) {
+        case 'dashboard':
+            // Reset interval to the fastest and start the poller immediately
+            setState({ dashboard: { ...state.dashboard, polling: { ...state.dashboard.polling, interval: INITIAL_POLLING_INTERVAL } } });
+            dashboardPoller();
+            break;
+        case 'adminPanel':
+            setState({ adminPanel: { ...state.adminPanel, polling: { ...state.adminPanel.polling, interval: INITIAL_POLLING_INTERVAL } } });
+            adminPanelPoller();
+            break;
+        case 'setup':
+             if (state.userProfile.primaryRole === 'GURU') {
+                setState({ setup: { ...state.setup, polling: { ...state.setup.polling, interval: INITIAL_POLLING_INTERVAL } } });
+                teacherProfilePoller();
+             }
+            break;
+        default:
+            // No polling on other screens
+            break;
+    }
 }
