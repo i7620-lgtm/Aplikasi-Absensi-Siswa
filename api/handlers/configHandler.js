@@ -1,11 +1,3 @@
-export async function handleGetAuthConfig({ response }) {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) {
-        console.error("SERVER_CONFIGURATION_ERROR: GOOGLE_CLIENT_ID is not set in environment variables.");
-        return response.status(503).json({ error: 'Konfigurasi otentikasi server tidak lengkap.' });
-    }
-    return response.status(200).json({ clientId });
-}
 
 export async function handleGetUpdateSignal({ payload, user, sql, response, redis }) {
     const schoolId = payload.schoolId || user.school_id;
