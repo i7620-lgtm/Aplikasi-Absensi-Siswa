@@ -1,4 +1,4 @@
-export default async function handleMigrateLegacyData({ payload, user, sql, response }) {
+export default async function handleMigrateLegacyData({ payload, user, sql, response, redis }) {
     if (user.role !== 'SUPER_ADMIN') {
         return response.status(403).json({ error: 'Forbidden: Only Super Admins can migrate data.' });
     }
@@ -51,15 +51,19 @@ export default async function handleMigrateLegacyData({ payload, user, sql, resp
     }
 
     const client = await sql.connect();
+    let latestId = 0;
     try {
         await client.query('BEGIN');
 
         for (const event of eventsToInsert) {
-            await client.query(
+            const res = await client.query(
                 `INSERT INTO change_log (school_id, user_email, event_type, payload, created_at)
-                 VALUES ($1, $2, $3, $4, $5)`,
+                 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
                 [schoolId, userEmail, event.type, JSON.stringify(event.payload), event.createdAt]
             );
+            if (res.rows[0].id > latestId) {
+                latestId = res.rows[0].id;
+            }
         }
 
         await client.query('COMMIT');
@@ -69,6 +73,17 @@ export default async function handleMigrateLegacyData({ payload, user, sql, resp
         return response.status(500).json({ error: 'Database transaction failed during migration.', details: error.message });
     } finally {
         client.release();
+    }
+    
+    // After successful migration, update the Redis signal
+    if (redis && latestId > 0) {
+        try {
+            const key = `school_version:${schoolId}`;
+            await redis.set(key, latestId, { ex: 90000 });
+            console.log(`Update signal (v${latestId}) sent to Redis after migration for school ${schoolId}`);
+        } catch(e) {
+            console.error("Failed to update Redis signal after migration:", e);
+        }
     }
     
     return response.status(200).json({ 
