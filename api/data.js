@@ -3,6 +3,9 @@ import { sql } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 import { Redis } from '@upstash/redis';
 
+// --- NEW: Import setupDatabase for Just-In-Time initialization ---
+import { setupDatabase } from './setup.js';
+
 // Import Handlers
 import handleLoginOrRegister from './handlers/authHandler.js';
 import { handleGetUpdateSignal } from './handlers/configHandler.js';
@@ -41,103 +44,124 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
 }
 
 
-// --- LOGIKA UTAMA HANDLER ---
+// --- NEW: API Logic wrapped in a function for retries ---
+async function runApiLogic(request, response, context) {
+    const { action, payload, userEmail } = request.body;
+    if (!action) {
+        return response.status(400).json({ error: 'Action is required' });
+    }
+    
+    // --- Tindakan Publik ---
+    const publicActions = {
+        'loginOrRegister': () => handleLoginOrRegister(context),
+    };
+    if (publicActions[action]) {
+        return await publicActions[action]();
+    }
+    
+    // --- Tindakan Terotentikasi ---
+    if (!userEmail) {
+        return response.status(401).json({ error: 'Unauthorized: userEmail is required' });
+    }
+    
+    const { rows: userRows } = await sql`
+        SELECT u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes, j.name as jurisdiction_name 
+        FROM users u
+        LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
+        WHERE u.email = ${userEmail}`;
+    
+    if (userRows.length === 0) {
+        // Cek apakah pengguna adalah orang tua
+        const { rows: parentCheck } = await sql`
+            SELECT 1 FROM change_log
+            WHERE event_type = 'STUDENT_LIST_UPDATED'
+            AND EXISTS (
+                SELECT 1 FROM jsonb_array_elements(payload->'students') as s
+                WHERE s->>'parentEmail' = ${userEmail}
+            )
+            LIMIT 1;
+        `;
+        if (parentCheck.length > 0) {
+             context.user = { email: userEmail, role: 'ORANG_TUA' };
+        } else {
+             return response.status(403).json({ error: 'Forbidden: User not found' });
+        }
+    } else {
+        context.user = userRows[0];
+    }
+
+
+    const authenticatedActions = {
+        'getUserProfile': () => response.status(200).json({ userProfile: context.user }),
+        'getFullUserData': () => handleGetFullUserData(context),
+        'getUpdateSignal': () => handleGetUpdateSignal(context),
+        'getChangesSince': () => handleGetChangesSince(context),
+        'getAllUsers': () => handleGetAllUsers(context),
+        'updateUserConfiguration': () => handleUpdateUserConfiguration(context),
+        'updateUsersBulk': () => handleUpdateUsersBulk(context),
+        'getAllSchools': () => handleGetAllSchools(context),
+        'createSchool': () => handleCreateSchool(context),
+        'saveData': () => handleSaveData(context),
+        'getHistoryData': () => handleGetHistoryData(context),
+        'getDashboardData': () => handleGetDashboardData(context),
+        'getRecapData': () => handleGetRecapData(context),
+        'generateAiRecommendation': () => handleAiRecommendation(context),
+        'getSchoolStudentData': () => handleGetSchoolStudentData(context),
+        'getParentData': () => handleGetParentData(context),
+        'migrateLegacyData': () => handleMigrateLegacyData(context),
+        'getJurisdictionTree': () => handleGetJurisdictionTree(context),
+        'createJurisdiction': () => handleCreateJurisdiction(context),
+        'updateJurisdiction': () => handleUpdateJurisdiction(context),
+        'deleteJurisdiction': () => handleDeleteJurisdiction(context),
+        'getSchoolsForJurisdiction': () => handleGetSchoolsForJurisdiction(context),
+        'assignSchoolToJurisdiction': () => handleAssignSchoolToJurisdiction(context),
+    };
+
+    if (authenticatedActions[action]) {
+        return await authenticatedActions[action]();
+    }
+
+    return response.status(400).json({ error: 'Invalid action' });
+}
+
+
+// --- LOGIKA UTAMA HANDLER dengan JIT Setup ---
 export default async function handler(request, response) {
     if (request.method !== 'POST') {
         return response.status(405).json({ error: 'Method Not Allowed' });
     }
     
+    const context = { 
+        payload: request.body.payload, 
+        response, 
+        SUPER_ADMIN_EMAILS, 
+        GoogleGenAI, 
+        redis, 
+        sql 
+    };
+
     try {
-        // KRUSIAL: Panggilan setupDatabase() DIHAPUS dari sini untuk mempercepat semua permintaan.
-        // Asumsikan database sudah di-setup melalui endpoint /api/setup.
-
-        const { action, payload, userEmail } = request.body;
-        if (!action) {
-            return response.status(400).json({ error: 'Action is required' });
-        }
-        
-        let context = { payload, response, SUPER_ADMIN_EMAILS, GoogleGenAI, redis, sql };
-        
-        // --- Tindakan Publik ---
-        const publicActions = {
-            'loginOrRegister': () => handleLoginOrRegister(context),
-        };
-        if (publicActions[action]) {
-            return await publicActions[action]();
-        }
-        
-        // --- Tindakan Terotentikasi ---
-        if (!userEmail) {
-            return response.status(401).json({ error: 'Unauthorized: userEmail is required' });
-        }
-        const { rows: userRows } = await sql`
-            SELECT u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes, j.name as jurisdiction_name 
-            FROM users u
-            LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
-            WHERE u.email = ${userEmail}`;
-        
-        if (userRows.length === 0) {
-            // Cek apakah pengguna adalah orang tua
-            const { rows: parentCheck } = await sql`
-                SELECT 1 FROM change_log
-                WHERE event_type = 'STUDENT_LIST_UPDATED'
-                AND EXISTS (
-                    SELECT 1 FROM jsonb_array_elements(payload->'students') as s
-                    WHERE s->>'parentEmail' = ${userEmail}
-                )
-                LIMIT 1;
-            `;
-            if (parentCheck.length > 0) {
-                 context.user = { email: userEmail, role: 'ORANG_TUA' };
-            } else {
-                 return response.status(403).json({ error: 'Forbidden: User not found' });
-            }
-        } else {
-            context.user = userRows[0];
-        }
-
-
-        const authenticatedActions = {
-            'getUserProfile': () => response.status(200).json({ userProfile: context.user }),
-            'getFullUserData': () => handleGetFullUserData(context),
-            'getUpdateSignal': () => handleGetUpdateSignal(context),
-            'getChangesSince': () => handleGetChangesSince(context),
-            'getAllUsers': () => handleGetAllUsers(context),
-            'updateUserConfiguration': () => handleUpdateUserConfiguration(context),
-            'updateUsersBulk': () => handleUpdateUsersBulk(context),
-            'getAllSchools': () => handleGetAllSchools(context),
-            'createSchool': () => handleCreateSchool(context),
-            'saveData': () => handleSaveData(context),
-            'getHistoryData': () => handleGetHistoryData(context),
-            'getDashboardData': () => handleGetDashboardData(context),
-            'getRecapData': () => handleGetRecapData(context),
-            'generateAiRecommendation': () => handleAiRecommendation(context),
-            'getSchoolStudentData': () => handleGetSchoolStudentData(context),
-            'getParentData': () => handleGetParentData(context),
-            'migrateLegacyData': () => handleMigrateLegacyData(context),
-            'getJurisdictionTree': () => handleGetJurisdictionTree(context),
-            'createJurisdiction': () => handleCreateJurisdiction(context),
-            'updateJurisdiction': () => handleUpdateJurisdiction(context),
-            'deleteJurisdiction': () => handleDeleteJurisdiction(context),
-            'getSchoolsForJurisdiction': () => handleGetSchoolsForJurisdiction(context),
-            'assignSchoolToJurisdiction': () => handleAssignSchoolToJurisdiction(context),
-        };
-
-        if (authenticatedActions[action]) {
-            return await authenticatedActions[action]();
-        }
-
-        return response.status(400).json({ error: 'Invalid action' });
-
+        return await runApiLogic(request, response, context);
     } catch (error) {
-        console.error('API Logic Error:', error);
-        // Periksa apakah error terkait koneksi database yang belum siap
+        // Check for the specific "table does not exist" error
         if (error.message.includes('relation') && error.message.includes('does not exist')) {
-             return response.status(503).json({ 
-                error: 'Layanan belum siap.', 
-                details: 'Skema database belum diinisialisasi. Jalankan endpoint setup.' 
-            });
+            console.warn(`Database schema not found. Attempting Just-In-Time setup... Error: ${error.message}`);
+            try {
+                await setupDatabase();
+                console.log('JIT setup successful. Retrying original request...');
+                // Retry the original request after setup
+                return await runApiLogic(request, response, context);
+            } catch (setupError) {
+                console.error('FATAL: JIT database setup failed.', setupError);
+                return response.status(503).json({
+                    error: 'Gagal menginisialisasi layanan database.',
+                    details: setupError.message
+                });
+            }
         }
+
+        // For all other errors, return a generic 500
+        console.error('API Logic Error (unhandled):', error);
         return response.status(500).json({ 
             error: 'Terjadi kesalahan internal pada server.', 
             details: error.message 
