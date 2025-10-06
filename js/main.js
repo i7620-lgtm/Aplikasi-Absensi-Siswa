@@ -1,5 +1,3 @@
-
-
 import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal } from './ui.js';
@@ -675,6 +673,12 @@ async function loadInitialData() {
 }
 
 async function initApp() {
+    // Clean up old localStorage data if it exists
+    if (localStorage.getItem('attendanceApp')) {
+        localStorage.removeItem('attendanceApp');
+        console.log('Data lama dari localStorage telah dihapus.');
+    }
+
     if (await handleAuthenticationRedirect()) {
         return;
     }
@@ -683,7 +687,6 @@ async function initApp() {
     
     await loadInitialData();
     
-    // Change loader text before the potentially blocking GSI initialization
     const loaderTextEl = document.querySelector('#loader-wrapper .loader-text');
     if (loaderTextEl) {
         loaderTextEl.textContent = 'Menyiapkan Autentikasi...';
