@@ -1,3 +1,4 @@
+
 import { sql } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 import { Redis } from '@upstash/redis';
@@ -40,57 +41,6 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
 }
 
 
-// --- SETUP DATABASE YANG EFISIEN ---
-let dbSetupPromise = null;
-async function setupDatabase() {
-    if (dbSetupPromise) return dbSetupPromise;
-    dbSetupPromise = (async () => {
-        try {
-            console.log("Menjalankan setup skema database untuk instans ini...");
-            // Tabel Inti
-            await sql`CREATE TABLE IF NOT EXISTS jurisdictions (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL, parent_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL, created_at TIMESTAMPTZ DEFAULT NOW());`;
-            await sql`CREATE TABLE IF NOT EXISTS schools (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW());`;
-            await sql`CREATE TABLE IF NOT EXISTS users (email VARCHAR(255) PRIMARY KEY, name VARCHAR(255), picture TEXT, role VARCHAR(50) DEFAULT 'GURU', school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL, assigned_classes TEXT[] DEFAULT '{}', created_at TIMESTAMPTZ DEFAULT NOW());`;
-            
-            // Tabel Data Utama (Delta Sync)
-            await sql`CREATE TABLE IF NOT EXISTS change_log (
-                id BIGSERIAL PRIMARY KEY,
-                school_id INTEGER NOT NULL,
-                user_email VARCHAR(255) NOT NULL,
-                event_type VARCHAR(50) NOT NULL,
-                payload JSONB NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT NOW()
-            );`;
-
-            // Migrasi Skema / Alter Table (dijalankan secara aman)
-            try { await sql`ALTER TABLE schools ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;`; } catch(e) { if(e.code !== '42701') throw e; }
-            try { await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;`; } catch(e) { if(e.code !== '42701') throw e; }
-            try { await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;`; } catch(e) { if(e.code !== '42701') throw e; }
-            
-            console.log("Memeriksa dan membuat indeks database untuk optimasi...");
-            // Indeks untuk foreign keys yang sering di-join/filter
-            await sql`CREATE INDEX IF NOT EXISTS idx_schools_jurisdiction_id ON schools (jurisdiction_id);`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_jurisdictions_parent_id ON jurisdictions (parent_id);`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_users_school_id ON users (school_id);`;
-            await sql`CREATE INDEX IF NOT EXISTS idx_users_jurisdiction_id ON users (jurisdiction_id);`;
-            
-            // Indeks utama untuk change_log yang mencakup filter paling umum
-            await sql`CREATE INDEX IF NOT EXISTS idx_changelog_main_query ON change_log (school_id, event_type, ((payload->>'date')::date));`;
-            
-            // Indeks spesifik untuk mempercepat pencarian daftar siswa terbaru per kelas
-            await sql`CREATE INDEX IF NOT EXISTS idx_changelog_latest_student_list ON change_log (school_id, (payload->>'class'), id DESC) WHERE event_type = 'STUDENT_LIST_UPDATED';`;
-            
-            console.log("Setup skema database dan indeks berhasil.");
-        } catch (error) {
-            console.error("Gagal melakukan setup database:", error);
-            dbSetupPromise = null; 
-            throw error;
-        }
-    })();
-    return dbSetupPromise;
-}
-
-
 // --- LOGIKA UTAMA HANDLER ---
 export default async function handler(request, response) {
     if (request.method !== 'POST') {
@@ -98,7 +48,8 @@ export default async function handler(request, response) {
     }
     
     try {
-        await setupDatabase();
+        // KRUSIAL: Panggilan setupDatabase() DIHAPUS dari sini untuk mempercepat semua permintaan.
+        // Asumsikan database sudah di-setup melalui endpoint /api/setup.
 
         const { action, payload, userEmail } = request.body;
         if (!action) {
@@ -180,6 +131,13 @@ export default async function handler(request, response) {
 
     } catch (error) {
         console.error('API Logic Error:', error);
+        // Periksa apakah error terkait koneksi database yang belum siap
+        if (error.message.includes('relation') && error.message.includes('does not exist')) {
+             return response.status(503).json({ 
+                error: 'Layanan belum siap.', 
+                details: 'Skema database belum diinisialisasi. Jalankan endpoint setup.' 
+            });
+        }
         return response.status(500).json({ 
             error: 'Terjadi kesalahan internal pada server.', 
             details: error.message 
