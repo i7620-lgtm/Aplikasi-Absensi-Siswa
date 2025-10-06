@@ -26,6 +26,13 @@ export function showLoader(message) {
     setTimeout(() => loaderWrapper.style.opacity = '1', 10);
 }
 
+export function updateLoaderText(message) {
+    const loaderText = loaderWrapper.querySelector('.loader-text');
+    if (loaderText) {
+        loaderText.textContent = message;
+    }
+}
+
 export function hideLoader() {
     loaderWrapper.style.opacity = '0';
     setTimeout(() => {
