@@ -1,4 +1,3 @@
-
 import { setState, navigateTo } from './main.js';
 import { showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
@@ -33,20 +32,8 @@ export function handleSignIn() {
         return;
     }
 
-    // --- STRATEGI BARU: PANGGILAN PROAKTIF UNTUK MEMBANGUNKAN DB ---
-    // Kirim permintaan "tembak dan lupakan" untuk membangunkan server/database
-    // sementara pengguna sedang dialihkan ke Google.
-    fetch('/api/wakeup', { method: 'POST' })
-        .then(res => {
-            if(res.ok) console.log("Proactive DB wakeup signal sent successfully.");
-            else console.warn("Proactive DB wakeup signal failed, relying on retry mechanism.");
-        })
-        .catch(err => {
-            // Kita tidak menghentikan alur login jika ini gagal.
-            // Browser mungkin membatalkan permintaan saat navigasi terjadi.
-            console.warn('Proactive DB wakeup call failed but proceeding with login:', err);
-        });
-    // --- AKHIR STRATEGI BARU ---
+    // Panggilan proaktif untuk "membangunkan" DB telah dihapus karena tidak diperlukan lagi.
+    // Server sekarang cukup cepat untuk menangani permintaan login secara langsung.
 
     const oauth2Endpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
 
@@ -86,8 +73,8 @@ export async function handleAuthenticationRedirect() {
         
         const profile = await response.json();
         
-        // Menggunakan fungsi login yang lebih tangguh dengan mekanisme coba-lagi
-        const { user, initialStudents, initialLogs, latestVersion } = await apiService.robustLoginOrRegister(profile);
+        // Menggunakan fungsi login yang sederhana dan langsung.
+        const { user, initialStudents, initialLogs, latestVersion } = await apiService.loginOrRegisterUser(profile);
 
         await setState({
             userProfile: user,
@@ -121,4 +108,3 @@ export async function handleSignOut() {
     navigateTo('landingPage');
     showNotification('Anda telah berhasil logout.', 'info');
 }
-      
