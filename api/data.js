@@ -1,5 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
+import { Redis } from '@upstash/redis';
 
 // Import Handlers
 import handleLoginOrRegister from './handlers/authHandler.js';
@@ -24,6 +25,20 @@ import {
 
 // --- KONFIGURASI ---
 export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
+
+// --- SETUP KLIEN EKSTERNAL ---
+let redis = null;
+// Memperbarui untuk menggunakan variabel Vercel KV yang benar
+if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    redis = new Redis({
+        url: process.env.KV_REST_API_URL,
+        token: process.env.KV_REST_API_TOKEN,
+    });
+    console.log("Klien Upstash Redis (via Vercel KV) berhasil diinisialisasi.");
+} else {
+    console.warn("Variabel lingkungan Vercel KV (KV_REST_API_URL, KV_REST_API_TOKEN) tidak diatur. Fitur sinyal pembaruan cepat akan dinonaktifkan dan akan kembali menggunakan DB.");
+}
+
 
 // --- SETUP DATABASE ---
 let dbSetupPromise = null;
@@ -78,7 +93,7 @@ export default async function handler(request, response) {
             return response.status(400).json({ error: 'Action is required' });
         }
         
-        const context = { payload, sql, response, SUPER_ADMIN_EMAILS, GoogleGenAI };
+        const context = { payload, sql, response, SUPER_ADMIN_EMAILS, GoogleGenAI, redis };
 
         // Aksi 'getAuthConfig' adalah satu-satunya yang tidak memerlukan koneksi DB.
         if (action === 'getAuthConfig') {
