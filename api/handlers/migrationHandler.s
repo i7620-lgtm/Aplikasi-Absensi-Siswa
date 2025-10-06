@@ -11,20 +11,27 @@ export default async function handleMigrateLegacyData({ payload, user, sql, resp
 
     const eventsToInsert = [];
 
+    // --- NEW: Robust data detection logic ---
+    // It first looks for the specific key. If not found, it checks if the provided data
+    // itself is an object that looks like a class list (i.e., not an array and not containing saved_logs).
+    const studentData = legacyData.students_by_class || (typeof legacyData === 'object' && !Array.isArray(legacyData) && !legacyData.saved_logs ? legacyData : null);
+    const logData = legacyData.saved_logs || (Array.isArray(legacyData) ? legacyData : null);
+    // --- END: Robust data detection logic ---
+
     // 1. Process student lists
-    if (legacyData.students_by_class) {
-        for (const className in legacyData.students_by_class) {
-            const classData = legacyData.students_by_class[className];
-            if (classData.students && Array.isArray(classData.students)) {
+    if (studentData) {
+        for (const className in studentData) {
+            const classData = studentData[className];
+            if (classData && classData.students && Array.isArray(classData.students)) {
                 
                 const newStudentFormat = classData.students.map(studentName => ({
-                    name: studentName,
+                    name: String(studentName).trim(), // Ensure it's a string
                     parentEmail: "" 
-                }));
+                })).filter(s => s.name);
 
                 eventsToInsert.push({
                     type: 'STUDENT_LIST_UPDATED',
-                    createdAt: classData.lastModified,
+                    createdAt: classData.lastModified || new Date().toISOString(),
                     payload: {
                         class: className,
                         students: newStudentFormat
@@ -35,20 +42,27 @@ export default async function handleMigrateLegacyData({ payload, user, sql, resp
     }
 
     // 2. Process attendance logs
-    if (legacyData.saved_logs && Array.isArray(legacyData.saved_logs)) {
-        legacyData.saved_logs.forEach(log => {
-            const { lastModified, ...attendancePayload } = log;
-            eventsToInsert.push({
-                type: 'ATTENDANCE_UPDATED',
-                createdAt: lastModified,
-                payload: attendancePayload
-            });
+    if (logData && Array.isArray(logData)) {
+        logData.forEach(log => {
+            // Basic validation to ensure it looks like a log entry
+            if (log && log.date && log.class && log.attendance) {
+                const { lastModified, ...attendancePayload } = log;
+                eventsToInsert.push({
+                    type: 'ATTENDANCE_UPDATED',
+                    createdAt: lastModified || new Date(log.date).toISOString(),
+                    payload: attendancePayload
+                });
+            }
         });
     }
 
     if (eventsToInsert.length === 0) {
-        return response.status(200).json({ success: true, message: "No data to migrate." });
+        return response.status(200).json({ 
+            success: false, 
+            message: "No data to migrate. Format JSON tidak dikenali atau tidak ada data yang valid untuk dimigrasikan. Pastikan data mengandung 'students_by_class' atau 'saved_logs', atau merupakan objek daftar kelas." 
+        });
     }
+
 
     const client = await sql.connect();
     let latestId = 0;
