@@ -47,12 +47,14 @@ async function _fetch(action, payload = {}) {
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             let errorMessage;
+            const serverDetails = errorData.details ? ` Detail: ${errorData.details}` : '';
+
             if (response.status === 503) {
                  errorMessage = `Layanan tidak tersedia: ${errorData.error || 'Konfigurasi otentikasi server tidak lengkap. Hubungi administrator.'}`;
             } else if (response.status >= 500) {
-                errorMessage = `Kesalahan Server (${response.status}): ${errorData.error || 'Gagal terhubung ke database.'}`;
+                errorMessage = `Kesalahan Server (${response.status}): ${errorData.error || 'Gagal terhubung ke database.'}${serverDetails}`;
             } else {
-                errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
+                errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}${serverDetails}`;
             }
             throw new Error(errorMessage);
         }
