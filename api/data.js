@@ -1,4 +1,3 @@
-import { sql } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 import { Redis } from '@upstash/redis';
 
@@ -42,7 +41,7 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
 
 // --- SETUP DATABASE ---
 let dbSetupPromise = null;
-async function setupDatabase() {
+async function setupDatabase(sql) {
     if (dbSetupPromise) return dbSetupPromise;
     dbSetupPromise = (async () => {
         try {
@@ -93,7 +92,7 @@ export default async function handler(request, response) {
             return response.status(400).json({ error: 'Action is required' });
         }
         
-        const context = { payload, sql, response, SUPER_ADMIN_EMAILS, GoogleGenAI, redis };
+        let context = { payload, response, SUPER_ADMIN_EMAILS, GoogleGenAI, redis };
 
         // Aksi 'getAuthConfig' adalah satu-satunya yang tidak memerlukan koneksi DB.
         if (action === 'getAuthConfig') {
@@ -101,7 +100,9 @@ export default async function handler(request, response) {
         }
         
         // Semua aksi lain memerlukan koneksi DB, jadi inisialisasi sekarang.
-        await setupDatabase();
+        const { sql } = await import('@vercel/postgres');
+        context.sql = sql;
+        await setupDatabase(sql);
         
         // Aksi publik yang memerlukan koneksi DB
         const publicActions = {
