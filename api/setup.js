@@ -2,7 +2,7 @@
 import { sql } from '@vercel/postgres';
 
 // --- SETUP DATABASE YANG EFISIEN ---
-async function setupDatabase() {
+export async function setupDatabase() {
     // Get one client for the whole setup for robustness and efficiency
     const client = await sql.connect();
     try {
