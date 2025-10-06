@@ -1,5 +1,3 @@
-import { createClient } from '@vercel/edge-config';
-
 export async function handleGetAuthConfig({ response }) {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) {
@@ -9,68 +7,31 @@ export async function handleGetAuthConfig({ response }) {
     return response.status(200).json({ clientId });
 }
 
-export async function handleGetMaintenanceStatus({ response }) {
-    if (!process.env.EDGE_CONFIG) {
-        console.warn("EDGE_CONFIG env var not set. Maintenance mode check disabled, returning false.");
-        return response.status(200).json({ isMaintenance: false });
-    }
-
-    try {
-        const edgeConfigClient = createClient(process.env.EDGE_CONFIG);
-        const isMaintenance = await edgeConfigClient.get('maintenance_mode');
-        // Jika nilai belum pernah diatur, `get` akan mengembalikan `undefined`. `!!` mengubahnya menjadi `false`.
-        return response.status(200).json({ isMaintenance: !!isMaintenance });
-    } catch (error) {
-        console.error("Edge Config read error:", error);
-        // Jika Edge Config gagal diakses, kembalikan error agar frontend tahu ada masalah koneksi
-        return response.status(500).json({ error: 'Failed to read server configuration.' });
-    }
-}
-
-export async function handleSetMaintenanceStatus({ payload, user, response }) {
-    if (user.role !== 'SUPER_ADMIN') {
-        return response.status(403).json({ error: 'Forbidden: Access denied' });
-    }
-    
-    if (!process.env.EDGE_CONFIG) {
-        console.error("Cannot set maintenance status: EDGE_CONFIG env var is not defined.");
-        return response.status(500).json({ error: 'Server is not configured for this feature.' });
-    }
-    
-    try {
-        const edgeConfigClient = createClient(process.env.EDGE_CONFIG);
-        const { enabled } = payload;
-        await edgeConfigClient.set('maintenance_mode', enabled).flush();
-        return response.status(200).json({ success: true, newState: enabled });
-    } catch (error) {
-        console.error("Edge Config write error:", error);
-        return response.status(500).json({ 
-            error: 'Gagal memperbarui status. Pastikan Vercel project memiliki izin tulis ke Edge Config.',
-            details: error.message 
-        });
-    }
-}
-
-export async function handleGetUpdateSignal({ payload, user, sql, response }) {
+export async function handleGetUpdateSignal({ payload, user, sql, response, redis }) {
     const schoolId = payload.schoolId || user.school_id;
     if (!schoolId) {
         return response.status(400).json({ error: 'School ID is required for update signal.' });
     }
 
-    // Prioritize Edge Config for speed
-    if (process.env.EDGE_CONFIG) {
+    // --- NEW LOGIC: Try Redis first ---
+    if (redis) {
         try {
-            const edgeConfigClient = createClient(process.env.EDGE_CONFIG);
-            const key = `school_version_${schoolId}`;
-            const latestVersion = await edgeConfigClient.get(key);
-            return response.status(200).json({ latestVersion: latestVersion || 0 });
-        } catch (error) {
-            console.warn("Edge Config read error for update signal, falling back to DB:", error);
+            const key = `school_version:${schoolId}`;
+            const latestVersion = await redis.get(key);
+            
+            // If we get a valid number from Redis, return it immediately.
+            if (typeof latestVersion === 'number') {
+                console.log(`Update signal hit from Redis for school ${schoolId}: v${latestVersion}`);
+                return response.status(200).json({ latestVersion });
+            }
+        } catch (e) {
+            console.error("Failed to read from Redis, falling back to DB:", e);
         }
     }
 
-    // Fallback to database if Edge Config is not available or fails
+    // --- FALLBACK LOGIC: Query DB if Redis fails or is not configured ---
     try {
+        console.log(`Update signal fallback to DB for school ${schoolId}`);
         const { rows } = await sql`SELECT MAX(id) as max_id FROM change_log WHERE school_id = ${schoolId}`;
         const latestVersion = rows[0]?.max_id || 0;
         return response.status(200).json({ latestVersion });
