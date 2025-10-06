@@ -1,6 +1,6 @@
 
 import { setState, navigateTo } from './main.js';
-import { showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
+import { showLoader, hideLoader, showNotification, displayAuthError, updateLoaderText } from './ui.js';
 import { apiService } from './api.js';
 
 let googleClientId = null;
@@ -12,6 +12,8 @@ export async function initializeGsi() {
     if (authInitStarted) return;
     authInitStarted = true;
 
+    updateLoaderText('Menyiapkan Autentikasi...');
+
     try {
         const { clientId } = await apiService.getAuthConfig();
 
@@ -20,9 +22,15 @@ export async function initializeGsi() {
         }
         googleClientId = clientId;
 
+        // --- Enable the button now that config is ready ---
+        const loginButton = document.getElementById('loginBtn-landing');
+        if (loginButton) {
+            loginButton.disabled = false;
+        }
+
     } catch (error) {
         console.error("Google Auth initialization failed:", error);
-        displayAuthError('Konfigurasi otentikasi server tidak lengkap. Hubungi administrator.', error);
+        displayAuthError('Konfigurasi otentikasi belum siap. Coba lagi sesaat.', error);
     }
 }
 
