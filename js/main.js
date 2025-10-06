@@ -1,3 +1,4 @@
+
 import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal, stopAllPollers, resumePollingForCurrentScreen } from './ui.js';
@@ -680,11 +681,6 @@ async function initApp() {
     
     await loadInitialData();
     
-    const loaderTextEl = document.querySelector('#loader-wrapper .loader-text');
-    if (loaderTextEl) {
-        loaderTextEl.textContent = 'Menyiapkan Autentikasi...';
-    }
-
     await initializeGsi();
     render();
     if (state.userProfile) {
