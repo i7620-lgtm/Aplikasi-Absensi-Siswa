@@ -18,17 +18,23 @@ export default async function handleGetRecapData({ payload, user, sql, response 
         return response.status(403).json({ error: 'Forbidden: Access denied' });
     }
 
-    const { schoolId, classFilter: payloadClassFilter } = payload;
+    const { schoolId, classFilter: payloadClassFilter, jurisdictionId } = payload;
     let schoolIdsInScope = [];
     let classFilter = payloadClassFilter;
 
-    // Determine scope based on user role
-    if (user.role === 'SUPER_ADMIN') {
+    // Determine scope based on user role and payload
+    if (jurisdictionId) {
+        // Highest priority: if a jurisdictionId is provided, use it.
+        const accessibleJurisdictionIds = await getSubJurisdictionIds(jurisdictionId, sql);
+        if (accessibleJurisdictionIds.length > 0) {
+            const { rows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
+            schoolIdsInScope = rows.map(r => r.id);
+        }
+    } else if (user.role === 'SUPER_ADMIN') {
         if (schoolId) {
             schoolIdsInScope.push(schoolId);
         } else {
-            // If no specific school, Super Admin can see all, but this is a heavy query.
-            // Let's assume for recap they must select a school or view is scoped by classFilter if provided.
+            // Super Admin without context defaults to ALL schools (can be heavy)
             const { rows } = await sql`SELECT id FROM schools`;
             schoolIdsInScope = rows.map(r => r.id);
         }
@@ -41,8 +47,9 @@ export default async function handleGetRecapData({ payload, user, sql, response 
              }
         }
     } else { // GURU, KEPALA_SEKOLAH, ADMIN_SEKOLAH
-        if (user.school_id) {
-            schoolIdsInScope.push(user.school_id);
+        const effectiveSchoolId = schoolId || user.school_id;
+        if (effectiveSchoolId) {
+            schoolIdsInScope.push(effectiveSchoolId);
         }
     }
     
