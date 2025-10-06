@@ -681,8 +681,8 @@ async function initApp() {
     
     await loadInitialData();
     
-    await initializeGsi();
-    render();
+    render(); // Render UI first to ensure login button exists
+    await initializeGsi(); // Then initialize auth to enable it
     if (state.userProfile) {
         syncWithServer(); // Initial sync on load
     }
