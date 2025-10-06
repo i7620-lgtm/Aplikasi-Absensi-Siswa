@@ -1,4 +1,3 @@
-
 import { setState, navigateTo } from './main.js';
 import { showLoader, hideLoader, showNotification, displayAuthError, updateLoaderText } from './ui.js';
 import { apiService } from './api.js';
@@ -43,13 +42,12 @@ export function handleSignIn() {
 
     const oauth2Endpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
 
-    // --- FIX: Dynamically adjust redirect URI to exactly match Google Console ---
-    let redirectUri = window.location.origin;
-    // This logic ensures the URI matches the Google Cloud Console entry for both environments.
-    if (redirectUri === 'https://aplikasi-absensi-siswa.vercel.app') {
-        redirectUri += '/';
-    }
-    // For localhost, window.location.origin is 'http://localhost:3000', which is correct.
+    // --- FIX: Construct a robust redirect URI using the current origin and path. ---
+    // This avoids hardcoded domain checks and works for both localhost and Vercel.
+    // The user must ensure this exact URI is registered in their Google Cloud Console.
+    const currentUrl = new URL(window.location.href);
+    // For a root deploy, pathname is '/', resulting in e.g. "https://domain.com/"
+    const redirectUri = `${currentUrl.origin}${currentUrl.pathname}`;
 
     const params = {
         'client_id': googleClientId,
