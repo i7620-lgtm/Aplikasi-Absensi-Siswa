@@ -1,5 +1,4 @@
 
-
 import { setState, navigateTo } from './main.js';
 import { showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
@@ -34,11 +33,23 @@ export function handleSignIn() {
         return;
     }
 
+    // --- STRATEGI BARU: PANGGILAN PROAKTIF UNTUK MEMBANGUNKAN DB ---
+    // Kirim permintaan "tembak dan lupakan" untuk membangunkan server/database
+    // sementara pengguna sedang dialihkan ke Google.
+    fetch('/api/wakeup', { method: 'POST' })
+        .then(res => {
+            if(res.ok) console.log("Proactive DB wakeup signal sent successfully.");
+            else console.warn("Proactive DB wakeup signal failed, relying on retry mechanism.");
+        })
+        .catch(err => {
+            // Kita tidak menghentikan alur login jika ini gagal.
+            // Browser mungkin membatalkan permintaan saat navigasi terjadi.
+            console.warn('Proactive DB wakeup call failed but proceeding with login:', err);
+        });
+    // --- AKHIR STRATEGI BARU ---
+
     const oauth2Endpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
 
-    // Create a static, canonical redirect URI pointing to the application's root.
-    // This removes inconsistencies from accessing '/index.html' vs '/' or '/path' vs '/path/'.
-    // The URI in the Google Cloud Console MUST exactly match this value (e.g., https://your-domain.com/).
     const redirectUri = `${window.location.origin}/`;
 
     const params = {
@@ -74,7 +85,9 @@ export async function handleAuthenticationRedirect() {
         if (!response.ok) throw new Error(`Gagal mengambil profil: ${response.statusText}`);
         
         const profile = await response.json();
-        const { user, initialStudents, initialLogs, latestVersion } = await apiService.loginOrRegisterUser(profile);
+        
+        // Menggunakan fungsi login yang lebih tangguh dengan mekanisme coba-lagi
+        const { user, initialStudents, initialLogs, latestVersion } = await apiService.robustLoginOrRegister(profile);
 
         await setState({
             userProfile: user,
@@ -108,3 +121,4 @@ export async function handleSignOut() {
     navigateTo('landingPage');
     showNotification('Anda telah berhasil logout.', 'info');
 }
+      
