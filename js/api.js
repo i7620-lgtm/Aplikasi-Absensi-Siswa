@@ -144,14 +144,6 @@ export const apiService = {
         return await _fetch('updateUsersBulk', { targetEmails, newRole, newSchoolId });
     },
 
-    async getMaintenanceStatus() {
-        return await _fetch('getMaintenanceStatus');
-    },
-
-    async setMaintenanceStatus(enabled) {
-        return await _fetch('setMaintenanceStatus', { enabled });
-    },
-
     async generateAiRecommendation(params) {
         return await _fetch('generateAiRecommendation', params);
     },
