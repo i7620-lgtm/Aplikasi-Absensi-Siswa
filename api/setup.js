@@ -1,14 +1,16 @@
 
-import { createPool } from '@vercel/postgres';
+import { db } from '@vercel/postgres';
 
 // --- SETUP DATABASE YANG EFISIEN ---
 export async function setupDatabase() {
-    // Gunakan createPool untuk memastikan koneksi menggunakan POSTGRES_URL secara eksplisit
-    const pool = createPool({ connectionString: process.env.POSTGRES_URL });
-    const client = await pool.connect();
+    // Gunakan db.connect() untuk mendapatkan client koneksi untuk transaksi
+    const client = await db.connect();
     try {
         console.log("Menjalankan setup skema database untuk instans ini...");
         
+        // Memulai transaksi
+        await client.query('BEGIN');
+
         // Semua pernyataan CREATE TABLE dalam satu query untuk mengurangi perjalanan bolak-balik.
         await client.query(`
             CREATE TABLE IF NOT EXISTS jurisdictions (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL, parent_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL, created_at TIMESTAMPTZ DEFAULT NOW());
@@ -25,10 +27,9 @@ export async function setupDatabase() {
         `);
 
         // Pernyataan ALTER perlu dijalankan secara terpisah dengan penanganan error untuk idempotensi.
-        // FIX: Mengganti client.sql dengan client.query yang benar
-        try { await client.query('ALTER TABLE schools ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;'); } catch(e) { if(e.code !== '42701' && e.code !== '42P07') console.warn("Peringatan saat alter table schools:", e.message); }
-        try { await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;'); } catch(e) { if(e.code !== '42701' && e.code !== '42P07') console.warn("Peringatan saat alter table users (jurisdiction_id):", e.message); }
-        try { await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;'); } catch(e) { if(e.code !== '42701' && e.code !== '42P07') console.warn("Peringatan saat alter table users (last_login):", e.message); }
+        await client.query('ALTER TABLE schools ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;');
+        await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;');
         
         console.log("Memeriksa dan membuat indeks database untuk optimasi...");
          // Semua pernyataan CREATE INDEX dalam satu query.
@@ -40,9 +41,14 @@ export async function setupDatabase() {
             CREATE INDEX IF NOT EXISTS idx_changelog_main_query ON change_log (school_id, event_type, ((payload->>'date')::date));
             CREATE INDEX IF NOT EXISTS idx_changelog_latest_student_list ON change_log (school_id, (payload->>'class'), id DESC) WHERE event_type = 'STUDENT_LIST_UPDATED';
         `);
+
+        // Menyelesaikan transaksi
+        await client.query('COMMIT');
         
         console.log("Setup skema database dan indeks berhasil.");
     } catch (error) {
+        // Membatalkan transaksi jika terjadi error
+        await client.query('ROLLBACK');
         console.error("Gagal melakukan setup database:", error);
         throw error;
     } finally {
