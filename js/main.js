@@ -1,6 +1,6 @@
 import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
-import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal } from './ui.js';
+import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal, stopAllPollers, resumePollingForCurrentScreen } from './ui.js';
 import { apiService } from './api.js';
 import { idb } from './db.js';
 
@@ -51,6 +51,7 @@ export let state = {
         activeView: 'report', // 'report', 'percentage', 'ai'
         chartViewMode: 'daily', // 'daily', 'weekly', 'monthly', 'yearly'
         chartClassFilter: 'all', // 'all' or specific class name
+        chartSchoolFilter: 'all', // NEW: 'all' or specific school ID for regional dashboard
         aiRecommendation: {
             isLoading: false,
             result: null,
@@ -134,21 +135,9 @@ export function navigateTo(screen) {
         }
     }
 
-    if (state.dashboard.polling.timeoutId) {
-        clearTimeout(state.dashboard.polling.timeoutId);
-        setState({ dashboard: { ...state.dashboard, polling: { timeoutId: null, interval: 10000 } } });
-        console.log('Dashboard polling stopped.');
-    }
-    if (state.adminPanel.polling.timeoutId) {
-        clearTimeout(state.adminPanel.polling.timeoutId);
-        setState({ adminPanel: { ...state.adminPanel, polling: { timeoutId: null, interval: 10000 } } });
-        console.log('Admin Panel polling stopped.');
-    }
-    if (state.setup.polling.timeoutId) {
-        clearTimeout(state.setup.polling.timeoutId);
-        setState({ setup: { ...state.setup, polling: { timeoutId: null, interval: 10000 } } });
-        console.log('Setup Screen (Teacher/Admin) polling stopped.');
-    }
+    // Stop any active polling when navigating away from a screen.
+    // This is now the primary mechanism for stopping pollers.
+    stopAllPollers();
     
     state.currentScreen = screen;
     render();
@@ -362,20 +351,24 @@ export async function handleGenerateAiRecommendation() {
     await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: true, result: null, error: null } } });
     render();
 
-    // Determine the correct schoolId for the current context.
+    // Determine the correct context for the current dashboard view.
     const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' 
         ? state.adminActingAsSchool?.id 
         : state.userProfile.school_id;
     
-    if (!schoolId) {
-        const errorMessage = 'Konteks sekolah tidak dapat ditentukan. Pastikan sekolah telah dipilih.';
+    const jurisdictionId = (state.userProfile.primaryRole === 'SUPER_ADMIN' && state.adminActingAsJurisdiction)
+        ? state.adminActingAsJurisdiction.id
+        : (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.primaryRole) ? state.userProfile.jurisdiction_id : null);
+    
+    if (!schoolId && !jurisdictionId) {
+        const errorMessage = 'Konteks sekolah atau yurisdiksi tidak dapat ditentukan.';
         await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: null, error: errorMessage } } });
         render();
         return;
     }
 
     try {
-        const { recommendation } = await apiService.generateAiRecommendation({ aiRange, schoolId });
+        const { recommendation } = await apiService.generateAiRecommendation({ aiRange, schoolId, jurisdictionId });
         await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: recommendation, error: null } } });
     
     } catch(error) {
@@ -711,6 +704,17 @@ async function initApp() {
     window.addEventListener('offline', () => updateOnlineStatus(false));
     
     updateOnlineStatus(navigator.onLine);
+
+    // --- NEW: Page Visibility API handler ---
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            // Stop all pollers when the page is not visible
+            stopAllPollers();
+        } else if (document.visibilityState === 'visible') {
+            // Resume polling for the current screen when the page becomes visible
+            resumePollingForCurrentScreen();
+        }
+    });
 }
 
 initApp();
