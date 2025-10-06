@@ -1,5 +1,10 @@
 import { state } from './main.js';
 import { idb } from './db.js';
+import { updateLoaderText } from './ui.js';
+
+// --- KONFIGURASI UNTUK PERCOBAAN ULANG LOGIN ---
+const MAX_RETRIES = 3; // Jumlah maksimal percobaan ulang
+const RETRY_DELAY_MS = 2500; // Waktu tunggu antara percobaan (dalam milidetik)
 
 async function _fetch(action, payload = {}) {
     // Logic to queue 'saveData' action when offline
@@ -32,7 +37,7 @@ async function _fetch(action, payload = {}) {
         }
     }
 
-    // Original online logic
+    // Original online logic for data actions
     try {
         const response = await fetch('/api/data', {
             method: 'POST',
@@ -70,11 +75,49 @@ async function _fetch(action, payload = {}) {
 
 export const apiService = {
     async getAuthConfig() {
-        return await _fetch('getAuthConfig');
+        // Panggil endpoint baru yang terisolasi, bukan _fetch
+        try {
+            const response = await fetch('/api/auth-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
+                throw new Error(errorMessage);
+            }
+            return response.json();
+        } catch (error) {
+            console.error("Panggilan API 'getAuthConfig' gagal:", error);
+            throw new Error('Gagal mendapatkan konfigurasi autentikasi dari server.');
+        }
     },
-
-    async loginOrRegisterUser(profile) {
-        return await _fetch('loginOrRegister', { profile });
+    
+    async robustLoginOrRegister(profile) {
+        for (let i = 0; i < MAX_RETRIES; i++) {
+            try {
+                // Percobaan pertama tidak mengubah teks loader
+                if (i > 0) {
+                    updateLoaderText(`Menghubungkan ke server... (Percobaan ${i + 1})`);
+                }
+                const result = await _fetch('loginOrRegister', { profile });
+                return result; // Jika berhasil, keluar dari loop dan kembalikan hasil
+            } catch (error) {
+                // Periksa apakah ini error koneksi DB yang bisa dicoba lagi
+                const isRetryableError = error.message.includes('Gagal terhubung ke database.');
+                
+                if (isRetryableError && i < MAX_RETRIES - 1) {
+                    console.warn(`Login gagal, mencoba lagi dalam ${RETRY_DELAY_MS}ms... (Percobaan ${i + 1})`);
+                    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+                    continue; // Lanjutkan ke iterasi berikutnya
+                } else {
+                    // Jika bukan error yang bisa dicoba lagi atau sudah mencapai batas percobaan
+                    throw error; // Lemparkan error terakhir untuk ditangani oleh auth.js
+                }
+            }
+        }
+        // Ini seharusnya tidak akan tercapai, tapi sebagai fallback
+        throw new Error('Gagal login setelah beberapa kali percobaan.');
     },
 
     async getUserProfile() {
