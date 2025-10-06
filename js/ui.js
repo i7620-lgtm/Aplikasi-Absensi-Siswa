@@ -1,4 +1,5 @@
-import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData } from './main.js';
+
+import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport } from './main.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
 import { apiService } from './api.js';
@@ -209,40 +210,47 @@ export function displayAuthError(message, error = null) {
     errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${encodeHTML(message)}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
 }
 
+function renderLandingPageScreen() {
+    appContainer.innerHTML = templates.landingPage();
+    document.getElementById('loginBtn-landing').addEventListener('click', handleSignIn);
+}
+
 function renderSetupScreen() {
     appContainer.innerHTML = templates.setup();
+    if (!state.userProfile) {
+        // This case should ideally not happen as logic routes to landing page
+        // but as a fallback, we ensure nothing interactive is rendered.
+        return;
+    }
+
     const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile?.primaryRole);
     const isTeacher = state.userProfile?.primaryRole === 'GURU';
     const needsAssignment = isTeacher && (!state.userProfile.assigned_classes || state.userProfile.assigned_classes.length === 0);
 
-    if (state.userProfile) {
-        document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
-        document.getElementById('back-to-main-home-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
-        
-        const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
-        if (enableNotificationsBtn) {
-            enableNotificationsBtn.addEventListener('click', () => {
-                Notification.requestPermission().then(permission => {
-                    const banner = document.getElementById('notification-permission-banner');
-                    if (banner) banner.remove();
-                    if (permission === 'granted') showNotification('Notifikasi diaktifkan!', 'success');
-                    else localStorage.setItem('notificationBannerDismissed', 'true');
-                });
+    document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
+    document.getElementById('back-to-main-home-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
+    
+    const enableNotificationsBtn = document.getElementById('enable-notifications-btn');
+    if (enableNotificationsBtn) {
+        enableNotificationsBtn.addEventListener('click', () => {
+            Notification.requestPermission().then(permission => {
+                const banner = document.getElementById('notification-permission-banner');
+                if (banner) banner.remove();
+                if (permission === 'granted') showNotification('Notifikasi diaktifkan!', 'success');
+                else localStorage.setItem('notificationBannerDismissed', 'true');
             });
-        }
+        });
+    }
 
-        const dismissBannerBtn = document.getElementById('dismiss-notification-banner-btn');
-        if (dismissBannerBtn) {
-            dismissBannerBtn.addEventListener('click', () => {
-                localStorage.setItem('notificationBannerDismissed', 'true');
-                document.getElementById('notification-permission-banner')?.remove();
-            });
-        }
-    } else {
-        document.getElementById('loginBtn').addEventListener('click', handleSignIn);
+    const dismissBannerBtn = document.getElementById('dismiss-notification-banner-btn');
+    if (dismissBannerBtn) {
+        dismissBannerBtn.addEventListener('click', () => {
+            localStorage.setItem('notificationBannerDismissed', 'true');
+            document.getElementById('notification-permission-banner')?.remove();
+        });
     }
     
-    if (!needsAssignment && state.userProfile) {
+    if (!needsAssignment) {
         document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
         document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(true));
         document.getElementById('recapBtn').addEventListener('click', handleViewRecap);
@@ -278,51 +286,15 @@ function renderSetupScreen() {
 }
 
 
-function renderMaintenanceToggle(container, isMaintenance) {
-    const statusText = isMaintenance ? 'Aktif' : 'Tidak Aktif';
-    const statusColor = isMaintenance ? 'text-red-600' : 'text-green-600';
-    const buttonText = isMaintenance ? 'Nonaktifkan Mode Perbaikan' : 'Aktifkan Mode Perbaikan';
-    
-    container.querySelector('p:last-child').innerHTML = `Status: <span class="font-bold ${statusColor}">${statusText}</span>`;
-    
-    const button = document.createElement('button');
-    button.id = 'maintenance-action-btn';
-    button.className = `ml-auto text-sm font-semibold py-2 px-3 rounded-lg transition ${isMaintenance ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'}`;
-    button.textContent = isMaintenance ? 'Nonaktifkan' : 'Aktifkan';
-
-    const existingBtn = container.querySelector('#maintenance-action-btn');
-    if(existingBtn) existingBtn.remove();
-    container.appendChild(button);
-
-    button.addEventListener('click', async () => {
-        const enable = !isMaintenance;
-        const actionVerb = enable ? "mengaktifkan" : "menonaktifkan";
-        const confirmed = await showConfirmation(`Anda yakin ingin ${actionVerb} mode perbaikan? Pengguna lain tidak akan bisa mengakses aplikasi.`);
-
-        if (confirmed) {
-            showLoader('Mengubah status...');
-            try {
-                const { newState } = await apiService.setMaintenanceStatus(enable);
-                showNotification(`Mode perbaikan berhasil di${actionVerb}.`);
-                renderMaintenanceToggle(container, newState);
-            } catch (error) {
-                showNotification(error.message, 'error');
-            } finally {
-                hideLoader();
-            }
-        }
-    });
-}
-
-
 async function renderMultiRoleHomeScreen() {
     appContainer.innerHTML = templates.multiRoleHome();
     document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
 
-    const { primaryRole, isParent } = state.userProfile;
+    const { primaryRole } = state.userProfile;
     const isSuperAdmin = primaryRole === 'SUPER_ADMIN';
+    const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole);
 
-    // Event listeners are added only if the button exists in the template
+    // Event listeners for action cards
     document.getElementById('go-to-attendance-btn')?.addEventListener('click', async () => {
         if (isSuperAdmin) {
             const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Absensi');
@@ -335,28 +307,52 @@ async function renderMultiRoleHomeScreen() {
         }
     });
 
-    document.getElementById('view-dashboard-btn')?.addEventListener('click', async () => {
-        if (isSuperAdmin) {
-            const viewBy = await showConfirmation('Lihat dasbor berdasarkan Sekolah (Ya) atau Yurisdiksi (Tidak)?');
-            if (viewBy === null) return; 
+    // Dashboard button for non-Super Admin roles
+    document.getElementById('view-dashboard-btn')?.addEventListener('click', () => {
+        navigateTo('dashboard');
+    });
 
-            if (viewBy) { 
-                 const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Dasbor');
-                 if (selectedSchool) {
-                    await setState({ adminActingAsSchool: selectedSchool, adminActingAsJurisdiction: null, dashboard: { ...state.dashboard, data: null, isLoading: true } });
-                    navigateTo('dashboard');
-                 }
-            } else {
-                const selectedJurisdiction = await showJurisdictionSelectorModal('Pilih Yurisdiksi untuk Dasbor');
-                if (selectedJurisdiction) {
-                    await setState({ adminActingAsJurisdiction: selectedJurisdiction, adminActingAsSchool: null, dashboard: { ...state.dashboard, data: null, isLoading: true } });
-                    navigateTo('dashboard');
-                }
-            }
-        } else {
+    // Super Admin: School-context dashboard button
+    document.getElementById('view-school-dashboard-btn')?.addEventListener('click', async () => {
+        const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Dasbor');
+        if (selectedSchool) {
+            await setState({ adminActingAsSchool: selectedSchool, adminActingAsJurisdiction: null, dashboard: { ...state.dashboard, data: null, isLoading: true } });
             navigateTo('dashboard');
         }
     });
+
+    // Super Admin: Jurisdiction-context dashboard button
+    document.getElementById('view-jurisdiction-dashboard-btn')?.addEventListener('click', async () => {
+        const selectedJurisdiction = await showJurisdictionSelectorModal('Pilih Yurisdiksi untuk Dasbor');
+        if (selectedJurisdiction) {
+            await setState({ adminActingAsJurisdiction: selectedJurisdiction, adminActingAsSchool: null, dashboard: { ...state.dashboard, data: null, isLoading: true } });
+            navigateTo('dashboard');
+        }
+    });
+    
+    // Scoped Report Download Button (for non-Super Admins)
+    document.getElementById('download-scoped-report-btn')?.addEventListener('click', () => {
+        if (isDinas) {
+            handleDownloadJurisdictionReport(state.userProfile.jurisdiction_id, state.userProfile.jurisdiction_name);
+        } else { // Kepala Sekolah, Admin Sekolah
+            handleDownloadFullSchoolReport();
+        }
+    });
+
+    // Super Admin Report Download Buttons
+    document.getElementById('download-school-report-btn')?.addEventListener('click', async () => {
+        const school = await showSchoolSelectorModal('Pilih Sekolah untuk Laporan');
+        if (school) {
+            handleDownloadFullSchoolReport(school.id, school.name);
+        }
+    });
+    document.getElementById('download-jurisdiction-report-btn')?.addEventListener('click', async () => {
+        const jurisdiction = await showJurisdictionSelectorModal('Pilih Yurisdiksi untuk Laporan');
+        if (jurisdiction) {
+            handleDownloadJurisdictionReport(jurisdiction.id, jurisdiction.name);
+        }
+    });
+
 
     document.getElementById('view-parent-dashboard-btn')?.addEventListener('click', () => navigateTo('parentDashboard'));
     document.getElementById('view-admin-panel-btn')?.addEventListener('click', () => navigateTo('adminPanel'));
@@ -364,15 +360,6 @@ async function renderMultiRoleHomeScreen() {
 
     if (isSuperAdmin) {
         document.getElementById('go-to-migration-tool-btn')?.addEventListener('click', () => navigateTo('migrationTool'));
-        const maintenanceContainer = document.getElementById('maintenance-toggle-container');
-        if (maintenanceContainer) {
-            try {
-                const { isMaintenance } = await apiService.getMaintenanceStatus();
-                renderMaintenanceToggle(maintenanceContainer.parentElement, isMaintenance);
-            } catch (e) {
-                maintenanceContainer.innerHTML = `<p class="text-sm text-red-500">Gagal memuat status.</p>`;
-            }
-        }
     }
 }
 
@@ -620,9 +607,20 @@ async function renderDashboardScreen() {
         percentageContent.innerHTML = loaderHtml;
         aiContent.innerHTML = loaderHtml;
     } else if (data) {
+        const emptyStateHtml = `
+            <div class="text-center p-8 bg-slate-50 rounded-lg border-2 border-dashed">
+                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <h3 class="mt-4 text-xl font-semibold text-slate-700">Data Sekolah Masih Kosong</h3>
+                <p class="mt-2 text-sm text-slate-500">
+                    Sepertinya belum ada data siswa atau absensi untuk sekolah/wilayah ini. 
+                    Mulai dengan menambahkan daftar siswa untuk dapat melihat analitik di dasbor ini.
+                </p>
+            </div>`;
+
         if (data.isUnassigned) {
             const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.primaryRole);
-            const isSchoolAdmin = ['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole);
             
             const title = isDinas ? "Menunggu Penugasan Yurisdiksi" : "Menunggu Penugasan Sekolah";
             const message1 = isDinas 
@@ -645,10 +643,16 @@ async function renderDashboardScreen() {
             reportContent.innerHTML = unassignedMessage;
             percentageContent.innerHTML = unassignedMessage;
             aiContent.innerHTML = unassignedMessage;
+        } else if (data.schoolInfo && data.schoolInfo.totalStudents === 0) {
+            reportContent.innerHTML = emptyStateHtml;
+            percentageContent.innerHTML = emptyStateHtml;
+            aiContent.innerHTML = emptyStateHtml;
         } else {
             // Render Report View
-            if (activeView === 'report' && data.reportData) {
-                const { summaryStats, absentStudentsByClass } = data.reportData;
+            if (activeView === 'report' && data.reportData && data.classCompletionStatus) {
+                const { summaryStats } = data.reportData;
+                const { classCompletionStatus } = data; // The new unified array
+                
                 const summaryStatsHtml = `
                     <div id="dashboard-summary-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
                         ${Object.entries({
@@ -665,21 +669,44 @@ async function renderDashboardScreen() {
                         `).join('')}
                     </div>`;
 
-                const classNames = Object.keys(absentStudentsByClass).sort();
                 let detailedReportHtml = '';
-                if (classNames.length === 0) {
-                    detailedReportHtml = `<div class="p-4 bg-slate-50 rounded-lg"><p class="text-center text-slate-500 py-4">Tidak ada siswa yang tercatat absen pada tanggal yang dipilih.</p></div>`;
+                if (classCompletionStatus.length === 0) {
+                    detailedReportHtml = `<div class="p-4 bg-slate-50 rounded-lg"><p class="text-center text-slate-500 py-4">Tidak ada data kelas yang ditemukan untuk sekolah ini.</p></div>`;
                 } else {
-                    const reportList = classNames.map(className => {
-                        const classData = absentStudentsByClass[className];
-                        return `<div class="bg-slate-50 p-4 rounded-lg">
-                            <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${encodeHTML(className)}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(classData.teacherName)}</p></div>
-                            <div class="overflow-x-auto"><table class="w-full text-sm">
-                                <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
-                                <tbody>${classData.students.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${encodeHTML(s.name)}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
-                            </table></div></div>`;
+                    const reportList = classCompletionStatus.map(item => {
+                        if (!item.isSubmitted) {
+                            return `<div class="bg-slate-100 p-4 rounded-lg border border-slate-200">
+                                       <div class="flex justify-between items-center">
+                                            <h3 class="font-bold text-slate-600">Kelas ${encodeHTML(item.className)}</h3>
+                                            <span class="px-2 py-1 text-xs font-semibold bg-slate-200 text-slate-600 rounded-full">Belum Diisi</span>
+                                       </div>
+                                       <p class="text-sm text-slate-500 mt-2">Guru belum melakukan absensi untuk kelas ini.</p>
+                                    </div>`;
+                        } else if (item.allPresent) {
+                            return `<div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                                       <div class="flex justify-between items-center">
+                                            <h3 class="font-bold text-green-700">Kelas ${encodeHTML(item.className)}</h3>
+                                            <p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(item.teacherName)}</p>
+                                       </div>
+                                       <p class="text-sm text-green-600 mt-2 flex items-center gap-2">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
+                                            Semua siswa hadir.
+                                       </p>
+                                    </div>`;
+                        } else { // Has absences
+                            return `<div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                                       <div class="flex justify-between items-center mb-2">
+                                           <h3 class="font-bold text-blue-600">Kelas ${encodeHTML(item.className)}</h3>
+                                           <p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(item.teacherName)}</p>
+                                       </div>
+                                       <div class="overflow-x-auto"><table class="w-full text-sm">
+                                           <thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead>
+                                           <tbody>${item.absentStudents.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${encodeHTML(s.name)}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody>
+                                       </table></div>
+                                    </div>`;
+                        }
                     }).join('');
-                    detailedReportHtml = `<h2 class="text-lg font-bold text-slate-700 mb-4">Detail Siswa Tidak Hadir</h2><div class="space-y-4">${reportList}</div>`;
+                    detailedReportHtml = `<h2 class="text-lg font-bold text-slate-700 mb-4">Laporan Kehadiran Harian</h2><div class="space-y-4">${reportList}</div>`;
                 }
                 reportContent.innerHTML = summaryStatsHtml + detailedReportHtml;
             }
@@ -1451,6 +1478,7 @@ export function renderScreen(screen) {
     appContainer.innerHTML = '';
     
     const screenRenderers = {
+        'landingPage': renderLandingPageScreen,
         'setup': renderSetupScreen,
         'multiRoleHome': renderMultiRoleHomeScreen,
         'dashboard': () => { renderDashboardScreen(); dashboardPoller(); },
@@ -1473,10 +1501,8 @@ export function renderScreen(screen) {
         },
         'data': renderDataScreen,
         'recap': renderRecapScreen,
-        'connectionFailed': () => appContainer.innerHTML = templates.connectionFailed(state.connectionError),
-        'maintenance': () => appContainer.innerHTML = templates.maintenance(),
     };
 
-    (screenRenderers[screen] || renderSetupScreen)();
+    (screenRenderers[screen] || renderLandingPageScreen)();
     hideLoader();
 }
