@@ -1,3 +1,4 @@
+
 import { sql } from '@vercel/postgres';
 
 export default async function handleGetDashboardData({ payload, user, sql, response }) {
@@ -13,9 +14,10 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
     if (['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(user.role) && !user.school_id) {
          return response.status(200).json({
             isUnassigned: true, // Flag for the frontend
-            reportData: { summaryStats: { totalStudents: 0, totalPresent: 0, S: 0, I: 0, A: 0 }, absentStudentsByClass: {} },
+            reportData: { summaryStats: { totalStudents: 0, totalPresent: 0, S: 0, I: 0, A: 0 } },
             schoolInfo: { totalStudents: 0, allClasses: [], studentsPerClass: {} },
             allLogsForYear: [],
+            classCompletionStatus: [],
         });
     }
     // --- END NEW LOGIC ---
@@ -35,9 +37,10 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
         if (!effectiveJurisdictionId) {
             return response.status(200).json({
                 isUnassigned: true, // Flag for the frontend
-                reportData: { summaryStats: { totalStudents: 0, totalPresent: 0, S: 0, I: 0, A: 0 }, absentStudentsByClass: {} },
+                reportData: { summaryStats: { totalStudents: 0, totalPresent: 0, S: 0, I: 0, A: 0 } },
                 schoolInfo: { totalStudents: 0, allClasses: [], studentsPerClass: {} },
                 allLogsForYear: [],
+                classCompletionStatus: [],
             });
         }
         
@@ -59,9 +62,10 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
     if (schoolIdList.length === 0) {
         // Return empty but valid structure if no schools are in scope
         return response.status(200).json({
-            reportData: { summaryStats: { totalStudents: 0, totalPresent: 0, S: 0, I: 0, A: 0 }, absentStudentsByClass: {} },
+            reportData: { summaryStats: { totalStudents: 0, totalPresent: 0, S: 0, I: 0, A: 0 } },
             schoolInfo: { totalStudents: 0, allClasses: [], studentsPerClass: {} },
             allLogsForYear: [],
+            classCompletionStatus: [],
         });
     }
     
@@ -105,7 +109,10 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
             WHERE att.value <> 'H'
         )
         SELECT
-            (SELECT to_jsonb(s) FROM SchoolInfo s) as "schoolInfo",
+            COALESCE(
+                (SELECT to_jsonb(s) FROM SchoolInfo s),
+                '{"totalStudents": 0, "allClasses": [], "studentsPerClass": {}}'::jsonb
+            ) as "schoolInfo",
             COALESCE(
                 (SELECT jsonb_agg(t) FROM (
                     SELECT
@@ -124,18 +131,43 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
     const { totalStudents = 0, allClasses = [], studentsPerClass = {} } = schoolInfo;
 
     const absenceCounts = { S: 0, I: 0, A: 0 };
-    const absentStudentsByClass = {};
+    const submittedClassData = new Map();
+
     dailyAbsentRows.forEach(row => {
-        absentStudentsByClass[row.class] = { students: row.students, teacherName: row.teacherName };
+        submittedClassData.set(row.class, { teacherName: row.teacherName, students: row.students });
         row.students.forEach(student => {
             if (absenceCounts[student.status] !== undefined) {
                 absenceCounts[student.status]++;
             }
         });
     });
+
+    // Create the unified, comprehensive status list for every class
+    const classCompletionStatus = allClasses.map(className => {
+        const submission = submittedClassData.get(className);
+        if (submission) {
+            const hasAbsences = submission.students.length > 0;
+            return {
+                className,
+                isSubmitted: true,
+                teacherName: submission.teacherName,
+                absentStudents: submission.students,
+                allPresent: !hasAbsences,
+            };
+        } else {
+            return {
+                className,
+                isSubmitted: false,
+                teacherName: null,
+                absentStudents: [],
+                allPresent: false,
+            };
+        }
+    });
+
     const totalAbsent = absenceCounts.S + absenceCounts.I + absenceCounts.A;
     const totalPresent = Math.max(0, totalStudents - totalAbsent);
-    
+
     const todayForYear = new Date(selectedDate + 'T00:00:00');
     let yearStart = new Date(todayForYear.getFullYear(), 6, 1); // 1 Juli
     if (todayForYear.getMonth() < 6) { yearStart.setFullYear(todayForYear.getFullYear() - 1); }
@@ -153,9 +185,9 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
     return response.status(200).json({
         reportData: {
             summaryStats: { totalStudents, totalPresent, ...absenceCounts },
-            absentStudentsByClass
         },
         schoolInfo: { totalStudents, allClasses, studentsPerClass },
         allLogsForYear,
+        classCompletionStatus,
     });
 }
