@@ -147,7 +147,7 @@ export default async function handler(request, response) {
         if (error.message.includes('relation') && error.message.includes('does not exist')) {
             console.warn(`Database schema not found. Attempting Just-In-Time setup... Error: ${error.message}`);
             try {
-                await setupDatabase(db); // Pass db object to setup
+                await setupDatabase(); // Call setup
                 console.log('JIT setup successful. Retrying original request...');
                 // Retry the original request after setup
                 return await runApiLogic(request, response, context);
