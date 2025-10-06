@@ -1,5 +1,3 @@
-import { createClient } from '@vercel/edge-config';
-
 // Simple sanitizer to prevent basic XSS by removing HTML tags.
 function sanitize(text) {
     if (!text) return '';
@@ -20,7 +18,7 @@ async function getSubJurisdictionIds(jurisdictionId, sql) {
     return rows.map(r => r.id);
 }
 
-export async function handleSaveData({ payload, user, sql, response }) {
+export async function handleSaveData({ payload, user, sql, response, redis }) {
     const allowedWriteRoles = ['GURU', 'ADMIN_SEKOLAH', 'SUPER_ADMIN'];
     if (!allowedWriteRoles.includes(user.role)) {
         return response.status(403).json({ error: 'Anda tidak memiliki izin untuk menyimpan data absensi.' });
@@ -62,14 +60,15 @@ export async function handleSaveData({ payload, user, sql, response }) {
     `;
     const newVersion = rows[0].id;
     
-    if (process.env.EDGE_CONFIG) {
+    if (redis) {
         try {
-            const edgeConfigClient = createClient(process.env.EDGE_CONFIG);
-            const key = `school_version_${finalSchoolId}`;
-            await edgeConfigClient.set(key, newVersion).flush();
-            console.log(`Update signal (v${newVersion}) sent for school ${finalSchoolId}`);
+            const key = `school_version:${finalSchoolId}`;
+            // Set with expiration (e.g., 25 hours) to handle potential stale signals
+            await redis.set(key, newVersion, { ex: 90000 }); // ex: 90000 detik = 25 jam
+            console.log(`Update signal (v${newVersion}) sent to Redis for school ${finalSchoolId}`);
         } catch (e) {
-             console.error("Failed to update Edge Config signal:", e);
+             console.error("Failed to update Redis signal:", e);
+             // Do not fail the request, just log the error.
         }
     }
     
