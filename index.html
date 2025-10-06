@@ -16,11 +16,33 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Aplikasi Absensi Siswa",
+      "applicationCategory": "EducationalApplication",
+      "operatingSystem": "Web",
+      "description": "Aplikasi web progresif untuk mencatat absensi siswa secara online, dengan fitur multi-peran untuk guru, kepala sekolah, dan admin.",
+      "url": "https://ggneon-5-absensi-siswa.edge-app.dev/"
+    }
+    </script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         .screen { display: none; }
         .screen.active { display: block; }
         .hidden { display: none; }
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
         #loader-wrapper {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
@@ -155,13 +177,25 @@
   "imports": {
     "@vercel/postgres": "https://aistudiocdn.com/@vercel/postgres@^0.10.0",
     "@google/genai": "https://esm.run/@google/genai",
-    "@vercel/edge-config": "https://aistudiocdn.com/@vercel/edge-config@^1.4.0"
+    "@vercel/edge-config": "https://aistudiocdn.com/@vercel/edge-config@^1.4.0",
+    "@upstash/redis": "https://aistudiocdn.com/@upstash/redis@^1.35.4"
   }
 }
 </script>
 </head>
 <body class="bg-slate-100 flex flex-col min-h-screen">
+
+    <div class="visually-hidden">
+        <h1>Absensi Online Siswa</h1>
+        <p>Selamat datang di Aplikasi Absensi Siswa. Login untuk mulai mencatat kehadiran, mengelola data siswa, dan melihat laporan analitik. Aplikasi ini mendukung peran guru, kepala sekolah, dan admin.</p>
+    </div>
     
+    <noscript>
+        <div style="background-color: #fef2f2; color: #991b1b; padding: 1rem; text-align: center; border-bottom: 2px solid #ef4444;">
+            <strong>Perhatian:</strong> Aplikasi Absensi Siswa ini memerlukan JavaScript untuk berfungsi. Harap aktifkan JavaScript di browser Anda untuk melanjutkan.
+        </div>
+    </noscript>
+
     <div id="root" class="flex-grow">
         <!-- Custom Notification element -->
         <div id="notification"></div>
