@@ -1,4 +1,6 @@
-import { initializeGsi, handleSignIn, handleSignOut } from './auth.js';
+
+
+import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal } from './ui.js';
 import { apiService } from './api.js';
@@ -10,7 +12,7 @@ export const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5
 // --- APPLICATION STATE ---
 export let state = {
     userProfile: null, // will contain { name, email, picture, primaryRole, isParent, school_id, ... }
-    currentScreen: 'setup',
+    currentScreen: 'landingPage',
     selectedClass: '',
     selectedDate: new Date().toISOString().split('T')[0],
     students: [], 
@@ -68,11 +70,6 @@ export let state = {
             interval: 10000,
         },
     },
-    maintenanceMode: {
-        isActive: false,
-        statusChecked: false,
-    },
-    connectionError: null,
     adminActingAsSchool: null, // Stores {id, name} for SUPER_ADMIN context
     adminActingAsJurisdiction: null, // NEW: Stores {id, name} for SUPER_ADMIN/DINAS context
     lastSaveContext: null, // Stores { savedBy, className } for success message
@@ -515,10 +512,10 @@ export function handleExcelImport(event) {
     event.target.value = '';
 }
 
-async function downloadRecapData(classFilter, schoolId, fileName) {
+async function downloadRecapData(params) {
     showLoader('Menyiapkan data untuk diunduh...');
     try {
-        const { recapArray } = await apiService.getRecapData({ schoolId, classFilter });
+        const { recapArray } = await apiService.getRecapData(params);
 
         if (!recapArray || recapArray.length === 0) {
             hideLoader();
@@ -540,6 +537,7 @@ async function downloadRecapData(classFilter, schoolId, fileName) {
         }));
         worksheet['!cols'] = columnWidths;
 
+        const fileName = params.fileName || 'Laporan_Absensi.xlsx';
         XLSX.writeFile(workbook, fileName);
         
         hideLoader();
@@ -555,32 +553,36 @@ export async function handleDownloadData() {
     state.selectedClass = document.getElementById('class-select').value;
     const schoolId = state.adminActingAsSchool?.id || state.userProfile.school_id;
     const fileName = `Rekap_Absensi_Kelas_${state.selectedClass}.xlsx`;
-    await downloadRecapData(state.selectedClass, schoolId, fileName);
+    await downloadRecapData({ classFilter: state.selectedClass, schoolId, fileName });
 }
 
-export async function handleDownloadFullSchoolReport() {
-    const isSuperAdmin = state.userProfile.primaryRole === 'SUPER_ADMIN';
-    let schoolId = isSuperAdmin ? null : state.userProfile.school_id;
-    let schoolName = 'Sekolah';
-
-    if (isSuperAdmin) {
-        const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Laporan');
-        if (!selectedSchool) return; // User cancelled
-        schoolId = selectedSchool.id;
-        schoolName = selectedSchool.name.replace(/\s+/g, '_'); // Sanitize name for filename
-    } else {
-        const schoolInfo = state.adminPanel.schools.find(s => s.id === schoolId);
-        if (schoolInfo) schoolName = schoolInfo.name.replace(/\s+/g, '_');
-    }
-    
-    if (!schoolId) {
+export async function handleDownloadFullSchoolReport(schoolId, schoolName) {
+    const finalSchoolId = schoolId || state.userProfile.school_id;
+    if (!finalSchoolId) {
         showNotification('Tidak dapat menentukan sekolah untuk diunduh.', 'error');
         return;
     }
-
-    const fileName = `Laporan_Absensi_${schoolName}.xlsx`;
-    await downloadRecapData(null, schoolId, fileName);
+    
+    let finalSchoolName = schoolName;
+    if (!finalSchoolName) {
+        const schoolInfo = state.adminPanel.schools.find(s => s.id === finalSchoolId);
+        finalSchoolName = schoolInfo ? schoolInfo.name : `Sekolah_ID_${finalSchoolId}`;
+    }
+    
+    const fileName = `Laporan_Absensi_Lengkap_${finalSchoolName.replace(/\s+/g, '_')}.xlsx`;
+    await downloadRecapData({ schoolId: finalSchoolId, fileName });
 }
+
+export async function handleDownloadJurisdictionReport(jurisdictionId, jurisdictionName) {
+    if (!jurisdictionId) {
+        showNotification('Tidak dapat menentukan yurisdiksi untuk diunduh.', 'error');
+        return;
+    }
+    const finalJurisdictionName = jurisdictionName || `Yurisdiksi_ID_${jurisdictionId}`;
+    const fileName = `Laporan_Absensi_Regional_${finalJurisdictionName.replace(/\s+/g, '_')}.xlsx`;
+    await downloadRecapData({ jurisdictionId, fileName });
+}
+
 
 
 // --- DATA SYNC LOGIC ---
@@ -672,90 +674,27 @@ async function loadInitialData() {
     }
 }
 
-// Global scope for the listener to be added only once
-let rootListenerAttached = false;
-
-async function handleAuthenticationRedirect() {
-    if (!window.location.hash.includes('access_token')) {
-        return false;
-    }
-
-    const fragment = new URLSearchParams(window.location.hash.substring(1));
-    const accessToken = fragment.get('access_token');
-    
-    if (!accessToken) return false;
-
-    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-    
-    showLoader('Memverifikasi...');
-    try {
-        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-        });
-
-        if (!response.ok) throw new Error(`Gagal mengambil profil: ${response.statusText}`);
-        
-        const profile = await response.json();
-        const { user, initialStudents, initialLogs, latestVersion, maintenance } = await apiService.loginOrRegisterUser(profile);
-
-        if (maintenance) {
-            navigateTo('maintenance');
-        } else {
-            await setState({
-                userProfile: user,
-                studentsByClass: initialStudents || {},
-                savedLogs: initialLogs || [],
-                localVersion: latestVersion || 0,
-            });
-            showNotification(`Selamat datang, ${user.name}!`);
-            navigateTo('multiRoleHome');
-        }
-    } catch (error) {
-        console.error("Gagal memproses login OAuth:", error);
-        showNotification(`Gagal memproses login Anda: ${error.message}`, 'error');
-        navigateTo('setup');
-    } finally {
-        hideLoader();
-    }
-    return true;
-}
-
-
 async function initApp() {
     if (await handleAuthenticationRedirect()) {
         return;
     }
 
-    if(state.connectionError) {
-        await setState({ connectionError: null });
-    }
+    showLoader('Memuat Aplikasi Absensi...');
     
-    try {
-        showLoader('Memeriksa status server...');
-        const { isMaintenance } = await apiService.getMaintenanceStatus();
-        state.maintenanceMode.isActive = isMaintenance;
-    } catch (e) {
-        console.error("Tidak dapat memeriksa status perbaikan:", e);
-        hideLoader();
-        await setState({ connectionError: e.message });
-        navigateTo('connectionFailed');
-        return;
-    } finally {
-        state.maintenanceMode.statusChecked = true;
-    }
-
     await loadInitialData();
     
-    if (state.maintenanceMode.isActive && state.userProfile?.primaryRole !== 'SUPER_ADMIN') {
-        navigateTo('maintenance');
-    } else {
-        await initializeGsi();
-        render();
-        if (state.userProfile) {
-            syncWithServer(); // Initial sync on load
-        }
+    // Change loader text before the potentially blocking GSI initialization
+    const loaderTextEl = document.querySelector('#loader-wrapper .loader-text');
+    if (loaderTextEl) {
+        loaderTextEl.textContent = 'Menyiapkan Autentikasi...';
     }
 
+    await initializeGsi();
+    render();
+    if (state.userProfile) {
+        syncWithServer(); // Initial sync on load
+    }
+    
     window.addEventListener('online', async () => {
         updateOnlineStatus(true);
         const queue = await idb.getQueue();
@@ -769,16 +708,6 @@ async function initApp() {
     window.addEventListener('offline', () => updateOnlineStatus(false));
     
     updateOnlineStatus(navigator.onLine);
-
-    if (!rootListenerAttached) {
-        document.getElementById('root').addEventListener('click', (e) => {
-            if (e.target.id === 'retry-connection-btn') {
-                showLoader('Mencoba menghubungkan kembali...');
-                initApp();
-            }
-        });
-        rootListenerAttached = true;
-    }
 }
 
 initApp();
