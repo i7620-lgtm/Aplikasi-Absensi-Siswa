@@ -42,6 +42,7 @@ async function _fetch(url, action, payload = {}) {
             const errorData = await response.json().catch(() => ({ error: 'Gagal mem-parsing JSON error dari server.' }));
             const errorMessage = errorData.error || `Server merespons dengan status ${response.status}`;
             const error = new Error(errorMessage);
+            error.status = response.status; // Tambahkan status code ke objek error
             if (errorData.code) {
                 error.code = errorData.code;
             }
@@ -58,18 +59,7 @@ async function _fetch(url, action, payload = {}) {
 
 export const apiService = {
     async getAuthConfig() {
-        // This is a special case that doesn't use the standard _fetch wrapper
-        try {
-            const response = await fetch('/api/auth-config', { method: 'POST' });
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `Server responded with ${response.status}`);
-            }
-            return await response.json();
-        } catch (error) {
-            console.error("Failed to get auth config:", error);
-            throw error;
-        }
+        return await _fetch('/api/data', 'getAuthConfig');
     },
     
     async loginOrRegisterUser(profile) {
