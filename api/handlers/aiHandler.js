@@ -5,9 +5,8 @@ async function getSubJurisdictionIds(jurisdictionId, sql) {
     const { rows } = await sql`
         WITH RECURSIVE sub_jurisdictions AS (
             SELECT id FROM jurisdictions WHERE id = ${jurisdictionId}
-            UNION
-            SELECT j.id FROM jurisdictions j
-            INNER JOIN sub_jurisdictions s ON s.id = j.parent_id
+            UNION ALL
+            SELECT j.id FROM jurisdictions j JOIN sub_jurisdictions s ON j.parent_id = s.id
         )
         SELECT id FROM sub_jurisdictions;
     `;
@@ -63,7 +62,15 @@ export default async function handleAiRecommendation({ payload, user, sql, respo
         // --- NEW: Logic Branch for Regional vs. School AI ---
         if (payloadJurisdictionId) {
             // --- REGIONAL AI ANALYSIS ---
-            const schoolIdsInScope = await getSubJurisdictionIds(payloadJurisdictionId, sql);
+            const jurisdictionIdsInScope = await getSubJurisdictionIds(payloadJurisdictionId, sql);
+            if (jurisdictionIdsInScope.length === 0) {
+                 return response.status(200).json({ recommendation: `Yurisdiksi yang diminta tidak ditemukan.` });
+            }
+            
+            // --- FIX: Translate jurisdiction IDs to school IDs ---
+            const { rows: schoolRows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${jurisdictionIdsInScope})`;
+            const schoolIdsInScope = schoolRows.map(r => r.id);
+
             if (schoolIdsInScope.length === 0) {
                  return response.status(200).json({ recommendation: `Tidak ada sekolah yang ditemukan di yurisdiksi ini untuk dianalisis.` });
             }
