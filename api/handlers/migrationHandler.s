@@ -1,3 +1,5 @@
+
+
 export default async function handleMigrateLegacyData({ payload, user, sql, response, redis }) {
     if (user.role !== 'SUPER_ADMIN') {
         return response.status(403).json({ error: 'Forbidden: Only Super Admins can migrate data.' });
