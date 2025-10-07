@@ -1,6 +1,6 @@
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport } from './main.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
-import { handleSignIn, handleSignOut } from './auth.js';
+import { handleSignOut, renderSignInButton } from './auth.js';
 import { apiService } from './api.js';
 
 const appContainer = document.getElementById('app-container');
@@ -217,7 +217,16 @@ export function displayAuthError(message, error = null) {
     const errorContainer = document.getElementById('auth-error-container');
     if (!errorContainer) return;
 
-    // Cek untuk error koneksi server spesifik (503) atau pesan terkait database
+    // --- NEW LOGIC ---
+    // If no error object is passed, we assume the 'message' is pre-formatted, trusted HTML.
+    // This allows for richer, diagnostic error messages from the auth module.
+    if (error === null) {
+        errorContainer.innerHTML = message;
+        errorContainer.classList.remove('hidden');
+        return;
+    }
+
+    // --- EXISTING LOGIC for when an actual error object is passed ---
     const isDbError = error && (error.status === 503 || (error.message && error.message.toLowerCase().includes('database')));
 
     if (isDbError) {
@@ -239,8 +248,8 @@ export function displayAuthError(message, error = null) {
                 </div>
             </div>`;
     } else {
-         // Fallback ke pesan error generik
-         let details = error ? (error.message || (typeof error === 'string' ? error : JSON.stringify(error))) : '';
+         // Fallback to generic message encoding for safety
+         let details = error.message || (typeof error === 'string' ? error : JSON.stringify(error));
          details = encodeHTML(details); // Sanitize error details
          errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${encodeHTML(message)}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
     }
@@ -280,9 +289,17 @@ async function teacherProfilePoller() {
 
 function renderLandingPageScreen() {
     appContainer.innerHTML = templates.landingPage();
-    // The GSI library handles its own button's click event.
-    // This line caused the error because 'loginBtn-landing' no longer exists.
-    // document.getElementById('loginBtn-landing').addEventListener('click', handleSignIn);
+    // This call is crucial. It ensures the button is re-rendered
+    // every time the landing page is shown, especially after a logout.
+    renderSignInButton();
+
+    // This logic clears the one-time logout message after it has been displayed.
+    if (state.logoutMessage) {
+        // Use a timeout to ensure the state change happens after the current render cycle.
+        setTimeout(() => {
+            setState({ logoutMessage: null });
+        }, 0);
+    }
 }
 
 function renderSetupScreen() {
@@ -352,7 +369,12 @@ async function renderMultiRoleHomeScreen() {
                 await setState({ 
                     adminActingAsSchool: selectedSchool, 
                     adminActingAsJurisdiction: null,
-                    dashboard: { ...state.dashboard, data: null, isLoading: true }  
+                    dashboard: { 
+                        ...state.dashboard, 
+                        data: null, 
+                        isLoading: true,
+                        aiRecommendation: { isLoading: false, result: null, error: null, selectedRange: 'last30days' }
+                    }  
                 });
                 navigateTo('setup');
             }
@@ -362,7 +384,8 @@ async function renderMultiRoleHomeScreen() {
     });
 
     // Dashboard button for non-Super Admin roles
-    document.getElementById('view-dashboard-btn')?.addEventListener('click', () => {
+    document.getElementById('view-dashboard-btn')?.addEventListener('click', async () => {
+        await setState({ dashboard: { ...state.dashboard, activeView: 'report' } });
         navigateTo('dashboard');
         dashboardPoller();
     });
@@ -374,7 +397,13 @@ async function renderMultiRoleHomeScreen() {
             await setState({ 
                 adminActingAsSchool: selectedSchool, 
                 adminActingAsJurisdiction: null,
-                dashboard: { ...state.dashboard, data: null, isLoading: true } 
+                dashboard: { 
+                    ...state.dashboard, 
+                    data: null, 
+                    isLoading: true, 
+                    activeView: 'report',
+                    aiRecommendation: { isLoading: false, result: null, error: null, selectedRange: 'last30days' }
+                } 
             });
             navigateTo('dashboard');
             dashboardPoller();
@@ -388,7 +417,13 @@ async function renderMultiRoleHomeScreen() {
             await setState({ 
                 adminActingAsJurisdiction: selectedJurisdiction, 
                 adminActingAsSchool: null,
-                dashboard: { ...state.dashboard, data: null, isLoading: true } 
+                dashboard: { 
+                    ...state.dashboard, 
+                    data: null, 
+                    isLoading: true, 
+                    activeView: 'report',
+                    aiRecommendation: { isLoading: false, result: null, error: null, selectedRange: 'last30days' }
+                } 
             });
             navigateTo('dashboard');
             dashboardPoller();
@@ -579,9 +614,9 @@ function createCustomDatePicker(wrapper, initialDateStr, mode) {
     document.addEventListener('click', (e) => { if (!wrapper.contains(e.target)) popup.classList.add('hidden'); });
 }
 
-// --- NEW: Refactored calculation function for both school and regional views ---
+// --- REFACTORED: New calculation function to include "Unreported" students ---
 function calculatePercentageData(logs, viewMode, filterValue, schoolInfo, selectedDate, isRegional) {
-    if (!logs || !schoolInfo) return { finalCounts: { H: 0, S: 0, I: 0, A: 0 }, totalAttendanceOpportunities: 0 };
+    if (!logs || !schoolInfo) return { finalCounts: { H: 0, S: 0, I: 0, A: 0, Unreported: 0 }, percentageDenominator: 0 };
     
     const d = new Date(selectedDate + 'T00:00:00');
     let startDate, endDate;
@@ -636,16 +671,14 @@ function calculatePercentageData(logs, viewMode, filterValue, schoolInfo, select
         return isInDateRange && isInFilter;
     });
 
-    const periodAbsenceCounts = { S: 0, I: 0, A: 0 };
+    const finalCounts = { H: 0, S: 0, I: 0, A: 0 };
     relevantLogs.forEach(log => {
         Object.values(log.attendance).forEach(status => {
-            if (periodAbsenceCounts[status] !== undefined) {
-                periodAbsenceCounts[status]++;
+            if (finalCounts[status] !== undefined) {
+                finalCounts[status]++;
             }
         });
     });
-    
-    const uniqueSchoolDays = new Set(relevantLogs.map(log => log.date)).size;
     
     let numStudentsInScope = 0;
     if (filterValue === 'all') {
@@ -658,13 +691,24 @@ function calculatePercentageData(logs, viewMode, filterValue, schoolInfo, select
         }
     }
 
-    const totalAttendanceOpportunities = uniqueSchoolDays * numStudentsInScope;
-    const periodTotalAbsent = periodAbsenceCounts.S + periodAbsenceCounts.I + periodAbsenceCounts.A;
-    const periodTotalPresent = Math.max(0, totalAttendanceOpportunities - periodTotalAbsent);
+    let percentageDenominator = 0;
+    if (viewMode === 'daily') {
+        // For a single day, the denominator is always the total number of students in scope.
+        percentageDenominator = numStudentsInScope;
+    } else {
+        // For ranges, it's students * days where at least one report was filed.
+        // This is an approximation, but the best we can do without knowing all school days.
+        const uniqueSchoolDays = new Set(relevantLogs.map(log => log.date)).size;
+        percentageDenominator = uniqueSchoolDays * numStudentsInScope;
+    }
+    
+    const totalReported = finalCounts.H + finalCounts.S + finalCounts.I + finalCounts.A;
+    const unreported = Math.max(0, percentageDenominator - totalReported);
+    finalCounts.Unreported = unreported;
 
     return {
-        finalCounts: { H: periodTotalPresent, ...periodAbsenceCounts },
-        totalAttendanceOpportunities
+        finalCounts,
+        percentageDenominator: percentageDenominator > 0 ? percentageDenominator : numStudentsInScope, // Fallback for empty ranges
     };
 }
 
@@ -767,7 +811,7 @@ function updateDashboardContent(data) {
     // Render Percentage View
     if (activeView === 'percentage' && data.allLogsForYear && data.schoolInfo) {
         const filterValue = isRegionalView ? chartSchoolFilter : chartClassFilter;
-        const { finalCounts, totalAttendanceOpportunities } = calculatePercentageData(data.allLogsForYear, chartViewMode, filterValue, data.schoolInfo, selectedDate, isRegionalView);
+        const { finalCounts, percentageDenominator } = calculatePercentageData(data.allLogsForYear, chartViewMode, filterValue, data.schoolInfo, selectedDate, isRegionalView);
 
         const timeFilters = [{id:'daily',text:'Harian'},{id:'weekly',text:'Mingguan'},{id:'monthly',text:'Bulanan'},{id:'semester1',text:'Semester I'},{id:'semester2',text:'Semester II'},{id:'yearly',text:'Tahun Ajaran'}];
         
@@ -790,15 +834,40 @@ function updateDashboardContent(data) {
              document.getElementById('chart-class-filter').onchange = async (e) => { await setState({ dashboard: { ...state.dashboard, chartClassFilter: e.target.value } }); updateDashboardContent(state.dashboard.data); };
         }
 
-        const chartData=[{label:'Hadir',value:finalCounts.H,color:'#22c55e'},{label:'Sakit',value:finalCounts.S,color:'#fbbf24'},{label:'Izin',value:finalCounts.I,color:'#3b82f6'},{label:'Alpa',value:finalCounts.A,color:'#ef4444'}];
+        const chartData = [
+            { label: 'Hadir', value: finalCounts.H, color: '#22c55e' },
+            { label: 'Sakit', value: finalCounts.S, color: '#fbbf24' },
+            { label: 'Izin', value: finalCounts.I, color: '#3b82f6' },
+            { label: 'Alpa', value: finalCounts.A, color: '#ef4444' },
+            { label: 'Belum Diisi', value: finalCounts.Unreported, color: '#94a3b8' } // slate-400
+        ];
         const chartCanvas = document.getElementById('dashboard-pie-chart');
         if (window.dashboardPieChart instanceof Chart) window.dashboardPieChart.destroy();
 
-        if (totalAttendanceOpportunities > 0 && chartCanvas) {
+        const totalChartValue = Object.values(finalCounts).reduce((a, b) => a + b, 0);
+
+        if (totalChartValue > 0 && chartCanvas) {
             chartCanvas.style.display = 'block';
             document.getElementById('chart-no-data').classList.add('hidden');
-            document.getElementById('custom-legend-container').innerHTML = chartData.map(item=>`<div class="flex items-center justify-between p-3 rounded-lg"><div class="flex items-center gap-3"><span class="w-4 h-4 rounded-full" style="background-color: ${item.color};"></span><span class="font-semibold text-slate-700">${item.label}</span></div><div class="text-right"><span class="font-bold text-slate-800">${item.value}</span><span class="text-sm text-slate-500 ml-2">(${(totalAttendanceOpportunities>0?((item.value/totalAttendanceOpportunities)*100).toFixed(2):0)}%)</span></div></div>`).join('');
-            window.dashboardPieChart=new Chart(chartCanvas.getContext('2d'),{type:'pie',data:{labels:chartData.map(d=>d.label),datasets:[{data:chartData.map(d=>d.value),backgroundColor:chartData.map(d=>d.color),borderColor:'#ffffff',borderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+            document.getElementById('custom-legend-container').innerHTML = chartData.map(item => {
+                if (item.value === 0) return ''; // Do not show legend item if its value is 0
+                const percentage = percentageDenominator > 0 ? ((item.value / percentageDenominator) * 100).toFixed(2) : '0.00';
+                return `<div class="flex items-center justify-between p-3 rounded-lg"><div class="flex items-center gap-3"><span class="w-4 h-4 rounded-full" style="background-color: ${item.color};"></span><span class="font-semibold text-slate-700">${item.label}</span></div><div class="text-right"><span class="font-bold text-slate-800">${item.value}</span><span class="text-sm text-slate-500 ml-2">(${percentage}%)</span></div></div>`;
+            }).join('');
+            
+            window.dashboardPieChart = new Chart(chartCanvas.getContext('2d'), {
+                type: 'pie',
+                data: {
+                    labels: chartData.map(d => d.label),
+                    datasets: [{
+                        data: chartData.map(d => d.value),
+                        backgroundColor: chartData.map(d => d.color),
+                        borderColor: '#ffffff',
+                        borderWidth: 3
+                    }]
+                },
+                options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+            });
         } else {
             chartCanvas.style.display = 'none';
             document.getElementById('chart-no-data').classList.remove('hidden');
@@ -835,9 +904,26 @@ async function renderDashboardScreen() {
     // --- UI ENHANCEMENT: Re-render the whole screen on tab click ---
     ['report', 'percentage', 'ai'].forEach(view => {
         document.getElementById(`db-view-${view}`).addEventListener('click', async () => {
-            await setState({ dashboard: { ...state.dashboard, activeView: view } });
-            // By re-rendering the whole screen, the tab styles are guaranteed to update,
-            // making the UI feel responsive even if data loading fails.
+            const updatedDashboardState = { ...state.dashboard, activeView: view };
+
+            // Jika pengguna mengklik tab "Persentase", reset filter ke default.
+            if (view === 'percentage') {
+                updatedDashboardState.chartViewMode = 'daily';
+                updatedDashboardState.chartClassFilter = 'all';
+                updatedDashboardState.chartSchoolFilter = 'all';
+            }
+            
+            // Jika pengguna mengklik tab "AI", reset filter dan hasil AI.
+            if (view === 'ai') {
+                updatedDashboardState.aiRecommendation = {
+                    ...state.dashboard.aiRecommendation,
+                    selectedRange: 'last30days', // Reset ke default
+                    result: null, // Hapus hasil sebelumnya
+                    error: null   // Hapus error sebelumnya
+                };
+            }
+
+            await setState({ dashboard: updatedDashboardState });
             renderDashboardScreen();
         });
     });
