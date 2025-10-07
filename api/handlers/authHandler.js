@@ -1,3 +1,27 @@
+import { setupDatabase } from '../setup.js';
+
+// --- NEW: Idempotent setup check ---
+// This flag prevents re-checking the database on every subsequent API call
+// within the same serverless function instance (warm start).
+let isDbInitialized = false;
+
+async function ensureDatabaseIsReady(sql) {
+    if (isDbInitialized) return;
+
+    // Proactively check if the 'users' table exists. This is a reliable
+    // indicator of whether the initial schema setup has run.
+    const { rows } = await sql`SELECT to_regclass('public.users');`;
+    const tableExists = rows[0].to_regclass;
+
+    if (!tableExists) {
+        console.warn("Tabel 'users' tidak ditemukan. Menjalankan inisialisasi database (pertama kali)...");
+        await setupDatabase();
+        console.log("Inisialisasi database berhasil.");
+    }
+    isDbInitialized = true;
+}
+
+
 async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
     const { email, name, picture } = profile;
     
@@ -119,6 +143,10 @@ async function reconstructStateFromLogs(schoolId, sql) {
 
 export default async function handleLoginOrRegister({ payload, sql, response, SUPER_ADMIN_EMAILS }) {
     if (!payload || !payload.profile) return response.status(400).json({ error: 'Profile payload is required' });
+    
+    // --- NEW: Proactive DB setup check ---
+    // This stable approach ensures the database schema exists before any login logic runs.
+    await ensureDatabaseIsReady(sql);
     
     const loginResult = await loginOrRegisterUser(payload.profile, sql, SUPER_ADMIN_EMAILS);
     const { user } = loginResult;
