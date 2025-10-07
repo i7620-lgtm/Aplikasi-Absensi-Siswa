@@ -1,5 +1,3 @@
-
-
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport } from './main.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -218,10 +216,35 @@ function showRoleSelectorModal() {
 export function displayAuthError(message, error = null) {
     const errorContainer = document.getElementById('auth-error-container');
     if (!errorContainer) return;
+
+    // Cek untuk error koneksi server spesifik (503) atau pesan terkait database
+    const isDbError = error && (error.status === 503 || (error.message && error.message.toLowerCase().includes('database')));
+
+    if (isDbError) {
+         errorContainer.innerHTML = `
+            <div class="bg-amber-50 p-4 rounded-lg border border-amber-200 text-left flex items-start gap-4">
+                <div class="flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="font-bold text-amber-800">Layanan Sedang Mengalami Gangguan</h3>
+                    <p class="text-sm text-amber-700 mt-1">
+                        Sistem kami sedang mengalami kendala teknis dan tidak dapat memproses login Anda saat ini. Ini bukan kesalahan Anda.
+                    </p>
+                    <p class="text-sm text-amber-700 mt-2">
+                        Silakan coba masuk kembali dalam beberapa saat.
+                    </p>
+                </div>
+            </div>`;
+    } else {
+         // Fallback ke pesan error generik
+         let details = error ? (error.message || (typeof error === 'string' ? error : JSON.stringify(error))) : '';
+         details = encodeHTML(details); // Sanitize error details
+         errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${encodeHTML(message)}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
+    }
     errorContainer.classList.remove('hidden');
-    let details = error ? (error.message || (typeof error === 'string' ? error : JSON.stringify(error))) : '';
-    details = encodeHTML(details); // Sanitize error details
-    errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${encodeHTML(message)}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
 }
 
 // --- NEW: Extracted teacher profile poller for reusability ---
