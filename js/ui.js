@@ -782,6 +782,71 @@ function updateDashboardContent(data) {
     }
 }
 
+function getWeekRange(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const dayOfWeek = d.getDay(); 
+    const diffToMonday = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const monday = new Date(d.setDate(diffToMonday));
+    const sunday = new Date(new Date(monday).setDate(monday.getDate() + 6));
+    
+    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+    const locale = 'id-ID';
+
+    return `${monday.toLocaleDateString(locale, options)} - ${sunday.toLocaleDateString(locale, options)}`;
+}
+
+function updateDashboardDateDisplay() {
+    const dateEl = document.getElementById('dashboard-header-date');
+    const pickerEl = document.getElementById('date-picker-display');
+    if (!dateEl || !pickerEl) return;
+
+    const { activeView, chartViewMode, selectedDate } = state.dashboard;
+    const dateObj = new Date(selectedDate + 'T00:00:00');
+    let displayDate;
+    let isDatePickerVisible = true;
+
+    if (activeView === 'report' || activeView === 'ai') {
+        displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    } else if (activeView === 'percentage') {
+        switch (chartViewMode) {
+            case 'daily':
+                displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                break;
+            case 'weekly':
+                displayDate = getWeekRange(dateObj);
+                break;
+            case 'monthly':
+                displayDate = dateObj.toLocaleDateString('id-ID', { year: 'numeric', month: 'long' });
+                break;
+            case 'semester1':
+                displayDate = `Semester I (Juli - Desember ${dateObj.getFullYear()})`;
+                isDatePickerVisible = false;
+                break;
+            case 'semester2':
+                displayDate = `Semester II (Januari - Juni ${dateObj.getFullYear()})`;
+                isDatePickerVisible = false;
+                break;
+            case 'yearly':
+                displayDate = `Tahun ${dateObj.getFullYear()}`;
+                break;
+            default:
+                 displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+    } else {
+        displayDate = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    
+    dateEl.textContent = displayDate;
+    pickerEl.textContent = dateObj.toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    const datePickerContainer = document.getElementById('date-picker-trigger')?.parentElement;
+    if (datePickerContainer) {
+        datePickerContainer.style.display = isDatePickerVisible ? 'block' : 'none';
+    }
+}
+
+
 function renderCalendar(container, year, month, selectedDate) {
     const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
     const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
@@ -879,8 +944,8 @@ function attachDatePickerListeners() {
             if (newDateStr && newDateStr !== state.dashboard.selectedDate) {
                 await setState({ dashboard: { ...state.dashboard, selectedDate: newDateStr, isLoading: true } });
                 popover.classList.add('hidden');
-                document.getElementById('date-picker-display').textContent = new Date(newDateStr + 'T00:00:00').toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
-                dashboardPoller(); // This triggers data fetch and UI update
+                updateDashboardDateDisplay();
+                dashboardPoller();
             }
         }
     });
