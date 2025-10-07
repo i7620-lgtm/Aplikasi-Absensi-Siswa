@@ -67,6 +67,14 @@ export default async function handler(request, response) {
         const publicActions = {
             'loginOrRegister': () => handleLoginOrRegister(context),
             'initializeDatabase': () => handleInitializeDatabase(context),
+            'getAuthConfig': () => {
+                const clientId = process.env.GOOGLE_CLIENT_ID;
+                if (!clientId) {
+                    console.error("SERVER_CONFIGURATION_ERROR: GOOGLE_CLIENT_ID is not set in environment variables.");
+                    return response.status(503).json({ error: 'Konfigurasi otentikasi server tidak lengkap.' });
+                }
+                return response.status(200).json({ clientId });
+            },
         };
         if (publicActions[action]) {
             return await publicActions[action]();
@@ -146,6 +154,16 @@ export default async function handler(request, response) {
             });
         }
         
+        // Cek untuk error koneksi database umum
+        const dbConnectionErrors = ['failed to connect', 'timeout', 'econnrefused', 'gagal terhubung'];
+        const errorMessage = (error.message || '').toLowerCase();
+        if (dbConnectionErrors.some(keyword => errorMessage.includes(keyword))) {
+            return response.status(503).json({
+                error: 'Gagal terhubung ke database.',
+                details: 'Server tidak dapat membuat koneksi ke database saat ini. Ini mungkin masalah sementara.'
+            });
+        }
+
         return response.status(500).json({ 
             error: 'Terjadi kesalahan internal pada server.', 
             details: error.message 
