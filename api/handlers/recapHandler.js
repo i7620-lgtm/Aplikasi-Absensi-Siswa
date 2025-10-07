@@ -1,4 +1,5 @@
 
+
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
     const { rows } = await sql`
@@ -79,11 +80,12 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             WHERE ${classFilter}::text IS NULL OR lsl.class_name = ${classFilter}::text
         ),
         attendance_events AS (
-            SELECT
+            SELECT DISTINCT ON (school_id, payload->>'class', payload->>'date')
                 payload
             FROM change_log
             WHERE school_id = ANY(${schoolIdsInScope}) AND event_type = 'ATTENDANCE_UPDATED'
             AND (${classFilter}::text IS NULL OR payload->>'class' = ${classFilter}::text)
+            ORDER BY school_id, payload->>'class', payload->>'date', id DESC
         ),
         absences AS (
             SELECT
