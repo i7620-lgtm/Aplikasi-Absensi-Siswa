@@ -133,13 +133,13 @@ export default async function handleLoginOrRegister({ payload, sql, response, SU
         
         return response.status(200).json({ user });
     } catch (error) {
-        // Menangkap error spesifik dari Postgres saat tabel tidak ditemukan
-        if (error.code === '42P01') { // 42P01 = undefined_table
+        // Intercept the specific Postgres error for "undefined_table"
+        if (error.code === '42P01') { 
             const initError = new Error("Database not initialized, caught undefined table error.");
-            initError.code = 'DB_NOT_INITIALIZED';
+            initError.code = 'DB_NOT_INITIALIZED'; // Attach custom code for the frontend
             throw initError;
         }
-        // Melempar kembali error lainnya
+        // Re-throw any other errors
         throw error;
     }
 }
@@ -150,7 +150,7 @@ export async function handleInitializeDatabase({ response }) {
         return response.status(200).json({ success: true, message: "Database setup complete." });
     } catch (error) {
         console.error("Manual database setup failed:", error);
-        // Mengembalikan 500 karena ini adalah kegagalan server yang kritis
+        // Return 500 as this is a critical server failure
         return response.status(500).json({ error: "Failed to initialize database.", details: error.message });
     }
 }
