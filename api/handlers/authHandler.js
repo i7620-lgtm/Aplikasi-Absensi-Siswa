@@ -1,27 +1,5 @@
 import { setupDatabase } from '../setup.js';
 
-// --- NEW: Idempotent setup check ---
-// This flag prevents re-checking the database on every subsequent API call
-// within the same serverless function instance (warm start).
-let isDbInitialized = false;
-
-async function ensureDatabaseIsReady(sql) {
-    if (isDbInitialized) return;
-
-    // Proactively check if the 'users' table exists. This is a reliable
-    // indicator of whether the initial schema setup has run.
-    const { rows } = await sql`SELECT to_regclass('public.users');`;
-    const tableExists = rows[0].to_regclass;
-
-    if (!tableExists) {
-        console.warn("Tabel 'users' tidak ditemukan. Menjalankan inisialisasi database (pertama kali)...");
-        await setupDatabase();
-        console.log("Inisialisasi database berhasil.");
-    }
-    isDbInitialized = true;
-}
-
-
 async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
     const { email, name, picture } = profile;
     
@@ -144,20 +122,35 @@ async function reconstructStateFromLogs(schoolId, sql) {
 export default async function handleLoginOrRegister({ payload, sql, response, SUPER_ADMIN_EMAILS }) {
     if (!payload || !payload.profile) return response.status(400).json({ error: 'Profile payload is required' });
     
-    // --- NEW: Proactive DB setup check ---
-    // This stable approach ensures the database schema exists before any login logic runs.
-    await ensureDatabaseIsReady(sql);
-    
-    const loginResult = await loginOrRegisterUser(payload.profile, sql, SUPER_ADMIN_EMAILS);
-    const { user } = loginResult;
+    try {
+        const loginResult = await loginOrRegisterUser(payload.profile, sql, SUPER_ADMIN_EMAILS);
+        const { user } = loginResult;
 
-    // For roles that require initial school data, bootstrap it.
-    if (user.primaryRole !== 'ORANG_TUA' && user.school_id) {
-        const { initialStudents, initialLogs, latestVersion } = await reconstructStateFromLogs(user.school_id, sql);
-        return response.status(200).json({ user, initialStudents, initialLogs, latestVersion });
+        if (user.primaryRole !== 'ORANG_TUA' && user.school_id) {
+            const { initialStudents, initialLogs, latestVersion } = await reconstructStateFromLogs(user.school_id, sql);
+            return response.status(200).json({ user, initialStudents, initialLogs, latestVersion });
+        }
+        
+        return response.status(200).json({ user });
+    } catch (error) {
+        // Menangkap error spesifik dari Postgres saat tabel tidak ditemukan
+        if (error.code === '42P01') { // 42P01 = undefined_table
+            const initError = new Error("Database not initialized, caught undefined table error.");
+            initError.code = 'DB_NOT_INITIALIZED';
+            throw initError;
+        }
+        // Melempar kembali error lainnya
+        throw error;
     }
-    
-    // For other roles (Super Admin without school, Parent, Dinas), just return the user profile. 
-    // Data will be fetched based on context later.
-    return response.status(200).json({ user });
+}
+
+export async function handleInitializeDatabase({ response }) {
+    try {
+        await setupDatabase();
+        return response.status(200).json({ success: true, message: "Database setup complete." });
+    } catch (error) {
+        console.error("Manual database setup failed:", error);
+        // Mengembalikan 500 karena ini adalah kegagalan server yang kritis
+        return response.status(500).json({ error: "Failed to initialize database.", details: error.message });
+    }
 }
