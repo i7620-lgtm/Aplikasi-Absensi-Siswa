@@ -56,14 +56,18 @@ async function _fetch(action, payload = {}) {
             } else {
                 errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}${serverDetails}`;
             }
-            throw new Error(errorMessage);
+            const error = new Error(errorMessage);
+            if (errorData.code) {
+                error.code = errorData.code;
+            }
+            throw error;
         }
     
         return response.json();
     } catch (error) {
         console.error(`Panggilan API '${action}' gagal:`, error);
         
-        if (error.message.startsWith('Layanan tidak tersedia') || error.message.startsWith('Kesalahan Server') || error.message.startsWith('Error')) {
+        if (error.code || error.message.startsWith('Layanan tidak tersedia') || error.message.startsWith('Kesalahan Server') || error.message.startsWith('Error')) {
             throw error;
         }
         throw new Error('Gagal terhubung ke server. Periksa koneksi internet Anda.');
@@ -90,8 +94,11 @@ export const apiService = {
     },
     
     async loginOrRegisterUser(profile) {
-        // Logika sederhana dan langsung. Server sekarang cukup cepat untuk menangani ini.
         return await _fetch('loginOrRegister', { profile });
+    },
+    
+    async initializeDatabase() {
+        return await _fetch('initializeDatabase');
     },
 
     async getUserProfile() {
