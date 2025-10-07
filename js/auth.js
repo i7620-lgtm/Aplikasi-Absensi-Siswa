@@ -120,8 +120,8 @@ export async function initializeGsi() {
             google.accounts.id.initialize({
                 client_id: clientId,
                 callback: handleSignIn,
-                auto_select: true,
-                ux_mode: 'popup', // Can be 'popup' or 'redirect'
+                auto_select: false, // Diubah ke false untuk menonaktifkan login otomatis
+                ux_mode: 'popup', 
             });
 
             const gsiContainer = document.getElementById('gsi-button-container');
@@ -132,10 +132,10 @@ export async function initializeGsi() {
                 );
             }
            
-            // Show One Tap prompt if not logged in
-            if (!state.userProfile) {
-                google.accounts.id.prompt();
-            }
+            // Hapus pemicu "One Tap" prompt
+            // if (!state.userProfile) {
+            //     google.accounts.id.prompt();
+            // }
 
             // Hide initial loader after GSI is ready
             const loaderWrapper = document.getElementById('loader-wrapper');
