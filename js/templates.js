@@ -1,4 +1,5 @@
 
+
 import { state, CLASSES } from './main.js';
 
 export function encodeHTML(str) {
@@ -424,15 +425,18 @@ export const templates = {
                     </div>
                     <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
                         ${isDatePickerVisible ? `
-                        <div class="flex items-center gap-2 w-full">
-                             <label for="ks-date-display" class="text-sm font-medium text-slate-600 flex-shrink-0">Pilih Tanggal:</label>
-                             <div id="ks-datepicker-wrapper" class="custom-datepicker-wrapper">
-                                <input type="text" id="ks-date-display" value="${new Date(state.dashboard.selectedDate + 'T00:00:00').toLocaleDateString('id-ID', {day: '2-digit', month: '2-digit', year: 'numeric'})}" readonly class="w-full sm:w-auto p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm"/>
-                                <div id="ks-datepicker-popup" class="datepicker-popup hidden"></div>
-                             </div>
+                        <div class="relative w-full sm:w-auto">
+                            <label for="date-picker-trigger" class="text-sm font-medium text-slate-600 mb-1 block">Pilih Tanggal:</label>
+                            <button id="date-picker-trigger" class="w-full sm:w-56 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm text-left flex items-center justify-between bg-white">
+                                <span id="date-picker-display">${new Date(state.dashboard.selectedDate + 'T00:00:00').toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            </button>
+                            <div id="date-picker-popover" class="hidden absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-lg shadow-xl p-4 z-50">
+                                <!-- Calendar will be rendered here by JS -->
+                            </div>
                         </div>
                         ` : ''}
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 self-end">
                            ${backButtonHtml}
                            <button id="logoutBtn-ks" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full flex items-center gap-2 text-sm font-semibold">
                                <span>Logout</span>
