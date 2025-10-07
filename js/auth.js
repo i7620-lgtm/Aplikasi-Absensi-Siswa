@@ -5,7 +5,37 @@ import { apiService } from './api.js';
 let googleClientId = null;
 let authInitStarted = false;
 
-// --- GOOGLE SIGN-IN LOGIC ---
+async function performLogin(profile) {
+    const { user, initialStudents, initialLogs, latestVersion } = await apiService.loginOrRegisterUser(profile);
+
+    await setState({
+        userProfile: user,
+        studentsByClass: initialStudents || {},
+        savedLogs: initialLogs || [],
+        localVersion: latestVersion || 0,
+    });
+    showNotification(`Selamat datang, ${user.name}!`);
+    navigateTo('multiRoleHome');
+}
+
+async function pollForLoginSuccess(profile, maxRetries = 10, interval = 3000) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            console.log(`Polling for login, attempt ${i + 1}...`);
+            await performLogin(profile);
+            return; // Success
+        } catch (error) {
+            if (error.code === 'DATABASE_NOT_INITIALIZED') {
+                // DB is still setting up, wait for the next poll
+                await new Promise(resolve => setTimeout(resolve, interval));
+            } else {
+                // A different error occurred, fail fast
+                throw error;
+            }
+        }
+    }
+    throw new Error("Gagal login setelah inisialisasi database. Coba muat ulang halaman.");
+}
 
 export async function initializeGsi() {
     if (authInitStarted) return;
@@ -21,7 +51,6 @@ export async function initializeGsi() {
         }
         googleClientId = clientId;
 
-        // --- Enable the button now that config is ready ---
         const loginButton = document.getElementById('loginBtn-landing');
         if (loginButton) {
             loginButton.disabled = false;
@@ -41,12 +70,7 @@ export function handleSignIn() {
     }
 
     const oauth2Endpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
-
-    // --- FIX: Construct a robust redirect URI using the current origin and path. ---
-    // This avoids hardcoded domain checks and works for both localhost and Vercel.
-    // The user must ensure this exact URI is registered in their Google Cloud Console.
     const currentUrl = new URL(window.location.href);
-    // For a root deploy, pathname is '/', resulting in e.g. "https://domain.com/"
     const redirectUri = `${currentUrl.origin}${currentUrl.pathname}`;
 
     const params = {
@@ -83,17 +107,24 @@ export async function handleAuthenticationRedirect() {
         
         const profile = await response.json();
         
-        // Menggunakan fungsi login yang sederhana dan langsung.
-        const { user, initialStudents, initialLogs, latestVersion } = await apiService.loginOrRegisterUser(profile);
-
-        await setState({
-            userProfile: user,
-            studentsByClass: initialStudents || {},
-            savedLogs: initialLogs || [],
-            localVersion: latestVersion || 0,
-        });
-        showNotification(`Selamat datang, ${user.name}!`);
-        navigateTo('multiRoleHome');
+        try {
+            await performLogin(profile);
+        } catch (loginError) {
+            if (loginError.code === 'DATABASE_NOT_INITIALIZED') {
+                console.warn('Database belum siap. Memulai proses setup satu kali...');
+                updateLoaderText('Menyiapkan database untuk penggunaan pertama kali. Ini mungkin memakan waktu sebentar...');
+                
+                // Memicu setup di latar belakang
+                await apiService.initializeDatabase();
+                
+                // Mulai polling untuk login
+                updateLoaderText('Menyelesaikan login...');
+                await pollForLoginSuccess(profile);
+            } else {
+                // Melempar kembali error login lainnya
+                throw loginError;
+            }
+        }
 
     } catch (error) {
         console.error("Gagal memproses login OAuth:", error);
