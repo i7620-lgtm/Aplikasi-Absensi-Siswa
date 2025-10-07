@@ -1,11 +1,37 @@
 import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
-import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal, stopAllPollers, resumePollingForCurrentScreen } from './ui.js';
+import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal, stopAllPollers, resumePollingForCurrentScreen, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
 import { idb } from './db.js';
 
 // --- CONFIGURATION ---
-export const CLASSES = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "5A", "5B", "6A", "6B"];
+/**
+ * Generates an array of class names based on a grade and letter range.
+ * @param {number} startGrade The starting grade number.
+ * @param {number} endGrade The ending grade number.
+ * @param {string} startLetterChar The starting letter (e.g., 'A').
+ * @param {string} endLetterChar The ending letter (e.g., 'D').
+ * @returns {string[]} An array of generated class names.
+ */
+function generateClasses(startGrade, endGrade, startLetterChar, endLetterChar) {
+    const classes = [];
+    const startLetter = startLetterChar.charCodeAt(0);
+    const endLetter = endLetterChar.charCodeAt(0);
+
+    for (let grade = startGrade; grade <= endGrade; grade++) {
+        for (let letterCode = startLetter; letterCode <= endLetter; letterCode++) {
+            const letter = String.fromCharCode(letterCode);
+            classes.push(`${grade}${letter}`);
+        }
+    }
+    return classes;
+}
+
+// Generate presets for Elementary (SD) and Junior High (SMP)
+const sdClasses = generateClasses(1, 6, 'A', 'D'); // Generates 1A-1D, 2A-2D, ..., 6A-6D
+const smpClasses = generateClasses(7, 9, 'A', 'P'); // Generates 7A-7P, 8A-8P, 9A-9P
+
+export const CLASSES = [...sdClasses, ...smpClasses];
 
 // --- APPLICATION STATE ---
 export let state = {
@@ -72,6 +98,7 @@ export let state = {
     adminActingAsSchool: null, // Stores {id, name} for SUPER_ADMIN context
     adminActingAsJurisdiction: null, // NEW: Stores {id, name} for SUPER_ADMIN/DINAS context
     lastSaveContext: null, // Stores { savedBy, className } for success message
+    logoutMessage: null, // NEW: Stores a one-time message after logout
 };
 
 // Function to update state and persist it
@@ -112,7 +139,12 @@ export function navigateTo(screen) {
             console.log("Leaving school context. Clearing Super Admin school context.");
             setState({ 
                 adminActingAsSchool: null,
-                dashboard: { ...state.dashboard, data: null, isLoading: true }
+                dashboard: { 
+                    ...state.dashboard, 
+                    data: null, 
+                    isLoading: true,
+                    aiRecommendation: { isLoading: false, result: null, error: null, selectedRange: 'last30days' }
+                }
             });
         }
     }
@@ -122,7 +154,12 @@ export function navigateTo(screen) {
             console.log("Leaving jurisdiction context. Clearing context.");
             setState({ 
                 adminActingAsJurisdiction: null,
-                dashboard: { ...state.dashboard, data: null, isLoading: true } 
+                dashboard: { 
+                    ...state.dashboard, 
+                    data: null, 
+                    isLoading: true,
+                    aiRecommendation: { isLoading: false, result: null, error: null, selectedRange: 'last30days' }
+                }
             });
         }
     }
@@ -506,27 +543,110 @@ export function handleExcelImport(event) {
 async function downloadRecapData(params) {
     showLoader('Menyiapkan data untuk diunduh...');
     try {
-        const { recapArray } = await apiService.getRecapData(params);
+        const { recapData, reportType, monthlySummary } = await apiService.getRecapData(params);
+        const hasRecapData = recapData && ((reportType === 'class' && recapData.length > 0) || (reportType !== 'class' && Object.keys(recapData).length > 0));
+        const hasSummaryData = monthlySummary && monthlySummary.length > 0;
 
-        if (!recapArray || recapArray.length === 0) {
+        if (!hasRecapData && !hasSummaryData) {
             hideLoader();
             showNotification('Tidak ada data rekap untuk diunduh.', 'info');
             return;
         }
 
-        const dataForSheet = [['Nama Lengkap', 'Kelas', 'Sakit (S)', 'Izin (I)', 'Alpa (A)', 'Total Absen']];
-        recapArray.forEach(item => {
-            dataForSheet.push([item.name, item.class, item.S, item.I, item.A, item.total]);
-        });
-        
-        const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Absensi');
-        
-        const columnWidths = dataForSheet[0].map((_, colIndex) => ({
-            wch: dataForSheet.reduce((w, r) => Math.max(w, String(r[colIndex] || "").length), 10)
-        }));
-        worksheet['!cols'] = columnWidths;
+
+        // --- NEW: Add Monthly Summary Sheet for Regional Reports ---
+        if (reportType === 'regional' && hasSummaryData) {
+            const header1 = ["Nama Sekolah"];
+            const header2 = [""];
+            const merges = [];
+            const months = ['Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni'];
+            const statuses = ['Hadir', 'Sakit', 'Izin', 'Alpa', 'Belum Absensi'];
+            
+            let col = 1;
+            months.forEach(month => {
+                header1.push(month, null, null, null, null);
+                merges.push({ s: { r: 0, c: col }, e: { r: 0, c: col + 4 } });
+                statuses.forEach(status => header2.push(status));
+                col += 5;
+            });
+
+            const dataForSheet = [header1, header2];
+
+            monthlySummary.forEach(school => {
+                const row = [school.schoolName];
+                months.forEach((month, index) => {
+                    const monthIndex = (index + 6) % 12; // Juli is 6, Jan is 0
+                    const monthData = school.monthlyData[monthIndex];
+                    if (monthData) {
+                        row.push(
+                            `${monthData.H.toFixed(2)}%`,
+                            `${monthData.S.toFixed(2)}%`,
+                            `${monthData.I.toFixed(2)}%`,
+                            `${monthData.A.toFixed(2)}%`,
+                            `${monthData.Unreported.toFixed(2)}%`
+                        );
+                    } else {
+                        row.push('0.00%', '0.00%', '0.00%', '0.00%', '100.00%');
+                    }
+                });
+                dataForSheet.push(row);
+            });
+            
+            const summaryWorksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
+            summaryWorksheet['!merges'] = merges;
+            XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Rekapitulasi Kehadiran');
+        }
+
+        // --- Existing Logic for Detail Sheets ---
+        if (hasRecapData) {
+            const header = ['Nama Lengkap', 'Kelas', 'Sakit (S)', 'Izin (I)', 'Alpa (A)', 'Total Absen'];
+            const createSheetFromData = (dataArray, includeClassCol = true) => {
+                const finalHeader = includeClassCol ? header : header.filter(h => h !== 'Kelas');
+                const dataForSheet = [finalHeader];
+                
+                dataArray
+                    .sort((a, b) => {
+                        if (a.class && b.class && a.class !== b.class) {
+                            return a.class.localeCompare(b.class);
+                        }
+                        return (a.originalIndex || 0) - (b.originalIndex || 0);
+                    })
+                    .forEach(item => {
+                        const row = [item.name, item.class, item.S, item.I, item.A, item.total];
+                        if (!includeClassCol) {
+                            row.splice(1, 1);
+                        }
+                        dataForSheet.push(row);
+                    });
+                
+                const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
+                worksheet['!cols'] = finalHeader.map((_, colIndex) => ({
+                    wch: dataForSheet.reduce((w, r) => Math.max(w, String(r[colIndex] || "").length), 10)
+                }));
+                return worksheet;
+            };
+            
+            const sanitizeSheetName = (name) => name.replace(/[*?:/\\\[\]]/g, '').substring(0, 31);
+
+            if (reportType === 'regional') {
+                for (const schoolName in recapData) {
+                    if (Object.hasOwnProperty.call(recapData, schoolName)) {
+                        const worksheet = createSheetFromData(recapData[schoolName], true);
+                        XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(schoolName));
+                    }
+                }
+            } else if (reportType === 'school') {
+                const sortedClasses = Object.keys(recapData).sort();
+                for (const className of sortedClasses) {
+                    const worksheet = createSheetFromData(recapData[className], false);
+                    XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(`Kelas ${className}`));
+                }
+            } else { // 'class' report type (fallback)
+                const worksheet = createSheetFromData(recapData, true);
+                XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Absensi');
+            }
+        }
 
         const fileName = params.fileName || 'Laporan_Absensi.xlsx';
         XLSX.writeFile(workbook, fileName);
@@ -678,19 +798,13 @@ async function initApp() {
         console.log('Data lama dari localStorage telah dihapus.');
     }
 
-    if (await handleAuthenticationRedirect()) {
-        showLoader('Menyelesaikan proses login...');
-        return; // Wait for redirect to complete
-    }
-
+    // Simplified flow: load local data, render, then init GSI.
     showLoader('Memuat Aplikasi Absensi...');
-    
     await loadInitialData();
-    
-    render(); // Render UI first to ensure login button exists
-    
-    await initializeGsi(); 
-    
+    await initializeGsi(); // This now loads the script and sets up the client.
+    render(); // Initial render will trigger the button render via ui.js
+
+    // This part only runs if the user was already logged in (from IndexedDB)
     if (state.userProfile) {
         await syncWithServer();
         await fetchChangesFromServer();
