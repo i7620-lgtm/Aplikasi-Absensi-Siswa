@@ -421,7 +421,7 @@ export const templates = {
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 pb-4 border-b border-slate-200 gap-4">
                     <div>
                         <h1 class="text-2xl font-bold text-slate-800">${title}</h1>
-                        <p class="text-slate-500">${displayDate}</p>
+                        <p id="dashboard-header-date" class="text-slate-500">${displayDate}</p>
                     </div>
                     <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
                         ${isDatePickerVisible ? `
