@@ -1,3 +1,4 @@
+
 import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal, stopAllPollers, resumePollingForCurrentScreen, displayAuthError } from './ui.js';
@@ -405,7 +406,12 @@ export async function handleGenerateAiRecommendation() {
     }
 
     try {
-        const { recommendation } = await apiService.generateAiRecommendation({ aiRange, schoolId, jurisdictionId });
+        const { recommendation } = await apiService.generateAiRecommendation({ 
+            aiRange, 
+            schoolId, 
+            jurisdictionId,
+            selectedDate: state.dashboard.selectedDate // Pass the dashboard's date context
+        });
         await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: recommendation, error: null } } });
     
     } catch(error) {
