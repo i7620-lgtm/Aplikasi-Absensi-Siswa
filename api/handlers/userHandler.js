@@ -14,26 +14,24 @@ async function getSubJurisdictionIds(jurisdictionId, sql) {
     return rows.map(r => r.id);
 }
 
-export async function handleGetFullUserData({ user, sql, response }) {
-    // This function is now mostly DEPRECATED in the delta-sync model.
-    // The initial data load is handled by the login function.
-    // This can serve as a hard refresh fallback if needed.
-    console.warn("handleGetFullUserData was called. This should be infrequent in the new delta-sync architecture.");
-    
-    if (!user.school_id) {
-        return response.status(200).json({ userData: { students_by_class: {}, saved_logs: [] }, updateSignal: 0 });
+/**
+ * Reconstructs a school's current state from its entire change log.
+ * This is the heavy data-lifting operation, now separated from login.
+ */
+async function reconstructStateFromLogs(schoolId, sql) {
+    if (!schoolId) {
+        return { initialStudents: {}, initialLogs: [], latestVersion: 0 };
     }
 
-    // Reconstruct state from logs as a fallback
     const { rows: changes } = await sql`
         SELECT id, event_type, payload
         FROM change_log
-        WHERE school_id = ${user.school_id}
+        WHERE school_id = ${schoolId}
         ORDER BY id ASC;
     `;
 
     const studentsByClass = {};
-    const attendanceLogs = {}; // Use map for efficient updates
+    const attendanceLogs = {}; // Use a map for efficient updates by key
 
     changes.forEach(change => {
         if (change.event_type === 'ATTENDANCE_UPDATED') {
@@ -45,13 +43,29 @@ export async function handleGetFullUserData({ user, sql, response }) {
     });
 
     const latestVersion = changes.length > 0 ? changes[changes.length - 1].id : 0;
-
-    const userData = {
-        students_by_class: studentsByClass,
-        saved_logs: Object.values(attendanceLogs)
-    };
     
-    return response.status(200).json({ userData, updateSignal: latestVersion });
+    return {
+        initialStudents: studentsByClass,
+        initialLogs: Object.values(attendanceLogs),
+        latestVersion
+    };
+}
+
+
+/**
+ * New handler for fetching the main school data after a successful login.
+ */
+export async function handleGetInitialData({ user, sql, response }) {
+    // The user object is already available in the context from api/data.js
+    if (!user || !user.school_id) {
+        // This case covers new users, admins without context, parents etc.
+        // It's not an error, just means there's no school data to fetch.
+        return response.status(200).json({ initialStudents: {}, initialLogs: [], latestVersion: 0 });
+    }
+    
+    const { initialStudents, initialLogs, latestVersion } = await reconstructStateFromLogs(user.school_id, sql);
+    
+    return response.status(200).json({ initialStudents, initialLogs, latestVersion });
 }
 
 
