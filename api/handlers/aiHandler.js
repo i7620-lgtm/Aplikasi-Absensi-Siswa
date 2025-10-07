@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 async function getSubJurisdictionIds(jurisdictionId, sql) {
@@ -32,6 +31,7 @@ export default async function handleAiRecommendation({ payload, user, sql, respo
         // Use the selected date from the dashboard as the reference point, defaulting to today's date
         const referenceDate = selectedDate ? new Date(selectedDate + 'T00:00:00') : new Date();
         referenceDate.setHours(0, 0, 0, 0);
+        const endDateString = referenceDate.toISOString().split('T')[0];
 
         let startDate = new Date(referenceDate);
         let dateRangeContext = "30 Hari Terakhir";
@@ -72,25 +72,38 @@ export default async function handleAiRecommendation({ payload, user, sql, respo
                 WITH SchoolStudentCounts AS (
                     SELECT
                         school_id,
-                        COUNT(DISTINCT student_obj->>'name') as student_count
-                    FROM change_log, jsonb_array_elements(payload->'students') as student_obj
-                    WHERE school_id = ANY(${schoolIdsInScope}) AND event_type = 'STUDENT_LIST_UPDATED'
+                        SUM(student_count)::int as total_students
+                    FROM (
+                        SELECT DISTINCT ON (school_id, payload->>'class')
+                            school_id,
+                            jsonb_array_length(payload->'students') as student_count
+                        FROM change_log
+                        WHERE school_id = ANY(${schoolIdsInScope}) AND event_type = 'STUDENT_LIST_UPDATED'
+                        ORDER BY school_id, payload->>'class', id DESC
+                    ) as latest_lists
                     GROUP BY school_id
+                ),
+                latest_attendance_in_range AS (
+                    SELECT DISTINCT ON (cl.school_id, cl.payload->>'class', cl.payload->>'date')
+                        cl.school_id,
+                        cl.payload->'attendance' as attendance
+                    FROM change_log cl
+                    WHERE cl.school_id = ANY(${schoolIdsInScope})
+                      AND cl.event_type = 'ATTENDANCE_UPDATED'
+                      AND (cl.payload->>'date')::date BETWEEN ${startDateString} AND ${endDateString}
+                    ORDER BY cl.school_id, cl.payload->>'class', cl.payload->>'date', cl.id DESC
                 ),
                 SchoolAbsences AS (
                     SELECT
-                        cl.school_id,
+                        lai.school_id,
                         att.value as status
-                    FROM change_log cl, jsonb_each_text(cl.payload->'attendance') as att
-                    WHERE cl.school_id = ANY(${schoolIdsInScope})
-                      AND cl.event_type = 'ATTENDANCE_UPDATED'
-                      AND (cl.payload->>'date')::date >= ${startDateString}
-                      AND att.value <> 'H'
+                    FROM latest_attendance_in_range lai, jsonb_each_text(lai.attendance) as att
+                    WHERE att.value <> 'H'
                 )
                 SELECT 
                     s.id as "schoolId",
                     s.name as "schoolName",
-                    COALESCE(ssc.student_count, 0)::int as "totalStudents",
+                    COALESCE(ssc.total_students, 0)::int as "totalStudents",
                     COALESCE(COUNT(sa.status), 0)::int as "totalAbsences",
                     COALESCE(COUNT(sa.status) FILTER (WHERE sa.status = 'S'), 0)::int as "S",
                     COALESCE(COUNT(sa.status) FILTER (WHERE sa.status = 'I'), 0)::int as "I",
@@ -99,7 +112,7 @@ export default async function handleAiRecommendation({ payload, user, sql, respo
                 LEFT JOIN SchoolStudentCounts ssc ON s.id = ssc.school_id
                 LEFT JOIN SchoolAbsences sa ON s.id = sa.school_id
                 WHERE s.id = ANY(${schoolIdsInScope})
-                GROUP BY s.id, s.name, ssc.student_count
+                GROUP BY s.id, s.name, ssc.total_students
                 ORDER BY "totalAbsences" DESC;
             `;
 
@@ -156,12 +169,13 @@ export default async function handleAiRecommendation({ payload, user, sql, respo
             const { rows: topStudentsData } = await sql`
                 WITH
                 attendance_events_in_range AS (
-                    SELECT
+                    SELECT DISTINCT ON (payload->>'class', payload->>'date')
                         payload
                     FROM change_log
                     WHERE school_id = ${schoolId}
                       AND event_type = 'ATTENDANCE_UPDATED'
-                      AND (payload->>'date')::date >= ${startDateString}
+                      AND (payload->>'date')::date BETWEEN ${startDateString} AND ${endDateString}
+                    ORDER BY payload->>'class', payload->>'date', id DESC
                 ),
                 absences_in_range AS (
                     SELECT
