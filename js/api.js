@@ -105,9 +105,8 @@ export const apiService = {
         return await _fetch('getUserProfile');
     },
     
-    async getFullUserData() {
-        console.warn("getFullUserData is deprecated.");
-        return await _fetch('getFullUserData');
+    async getInitialData() {
+        return await _fetch('getInitialData');
     },
     
     async getUpdateSignal(params) {
