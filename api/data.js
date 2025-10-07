@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 import { Redis } from '@upstash/redis';
 
 // Import Handlers
-import handleLoginOrRegister from './handlers/authHandler.js';
+import handleLoginOrRegister, { handleInitializeDatabase } from './handlers/authHandler.js';
 import { handleGetUpdateSignal } from './handlers/configHandler.js';
 import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetFullUserData } from './handlers/userHandler.js';
 import { handleGetAllSchools, handleCreateSchool } from './handlers/schoolHandler.js';
@@ -66,6 +66,7 @@ export default async function handler(request, response) {
         // --- Tindakan Publik ---
         const publicActions = {
             'loginOrRegister': () => handleLoginOrRegister(context),
+            'initializeDatabase': () => handleInitializeDatabase(context),
         };
         if (publicActions[action]) {
             return await publicActions[action]();
@@ -136,6 +137,15 @@ export default async function handler(request, response) {
 
     } catch (error) {
         console.error(`API Action '${action}' failed unexpectedly:`, error);
+        
+        // Penanganan spesifik untuk error inisialisasi database
+        if (error.code === 'DB_NOT_INITIALIZED') {
+            return response.status(503).json({ 
+                error: 'Database is not initialized.', 
+                code: 'DATABASE_NOT_INITIALIZED' 
+            });
+        }
+        
         return response.status(500).json({ 
             error: 'Terjadi kesalahan internal pada server.', 
             details: error.message 
