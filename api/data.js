@@ -5,7 +5,7 @@ import { Redis } from '@upstash/redis';
 // Import Handlers
 import handleLoginOrRegister, { handleInitializeDatabase } from './handlers/authHandler.js';
 import { handleGetUpdateSignal } from './handlers/configHandler.js';
-import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetFullUserData } from './handlers/userHandler.js';
+import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetInitialData } from './handlers/userHandler.js';
 import { handleGetAllSchools, handleCreateSchool } from './handlers/schoolHandler.js';
 import { handleSaveData, handleGetHistoryData, handleGetSchoolStudentData, handleGetChangesSince } from './handlers/attendanceHandler.js';
 import handleGetDashboardData from './handlers/dashboardHandler.js';
@@ -105,7 +105,7 @@ export default async function handler(request, response) {
 
         const authenticatedActions = {
             'getUserProfile': () => response.status(200).json({ userProfile: context.user }),
-            'getFullUserData': () => handleGetFullUserData(context),
+            'getInitialData': () => handleGetInitialData(context),
             'getUpdateSignal': () => handleGetUpdateSignal(context),
             'getChangesSince': () => handleGetChangesSince(context),
             'getAllUsers': () => handleGetAllUsers(context),
