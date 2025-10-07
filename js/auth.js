@@ -1,127 +1,90 @@
 import { setState, navigateTo } from './main.js';
-import { showLoader, hideLoader, showNotification, displayAuthError, updateLoaderText } from './ui.js';
+import { showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
+import { idb } from './db.js';
 
-let googleClientId = null;
-let authInitStarted = false;
-
-export async function initializeGsi() {
-    if (authInitStarted) return;
-    authInitStarted = true;
-    updateLoaderText('Menyiapkan Autentikasi...');
-
+// Helper to decode JWT tokens from Google
+function jwtDecode(token) {
     try {
-        const { clientId } = await apiService.getAuthConfig();
-        if (!clientId) throw new Error("Google Client ID tidak diterima dari server.");
-        googleClientId = clientId;
-
-        const loginButton = document.getElementById('loginBtn-landing');
-        if (loginButton) loginButton.disabled = false;
-        // After GSI is ready, hide the main loader if we are on the landing page
-        const loaderWrapper = document.getElementById('loader-wrapper');
-        if (loaderWrapper.querySelector('.loader-text').textContent.includes('Memuat Aplikasi')) {
-            hideLoader();
-        }
-
-    } catch (error) {
-        console.error("Google Auth initialization failed:", error);
-        displayAuthError('Konfigurasi otentikasi belum siap. Coba lagi sesaat.', error);
-        hideLoader();
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
+    } catch (e) {
+        console.error("Failed to decode JWT", e);
+        return null;
     }
 }
 
-export function handleSignIn() {
-    if (!googleClientId) {
-        displayAuthError('Konfigurasi otentikasi belum siap. Coba lagi sesaat.');
-        return;
-    }
-
-    const oauth2Endpoint = 'https://accounts.google.com/o/oauth2/v2/auth';
-    const currentUrl = new URL(window.location.href);
-    const redirectUri = `${currentUrl.origin}${currentUrl.pathname}`;
-
-    const params = {
-        'client_id': googleClientId,
-        'redirect_uri': redirectUri,
-        'response_type': 'token',
-        'scope': 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-        'include_granted_scopes': 'true'
-    };
-
-    const url = `${oauth2Endpoint}?${new URLSearchParams(params).toString()}`;
-    window.location.href = url;
-}
-
-export async function handleAuthenticationRedirect() {
-    const fragment = new URLSearchParams(window.location.hash.substring(1));
-    const accessToken = fragment.get('access_token');
-    
-    if (!accessToken) return false;
-
-    // Clean the URL of auth tokens
-    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-    
-    showLoader('Memverifikasi...');
+/**
+ * Handles the successful sign-in callback from Google.
+ * @param {object} response The credential response object from Google.
+ */
+export async function handleSignIn(response) {
+    showLoader('Memverifikasi pengguna...');
     try {
-        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
+        const profile = jwtDecode(response.credential);
+        if (!profile) throw new Error("Gagal mendekode profil pengguna.");
+
+        const { user: userProfile } = await attemptLogin(profile);
+        
+        showLoader('Mengambil data sekolah...');
+        const { initialStudents, initialLogs, latestVersion } = await apiService.getInitialData();
+        
+        await setState({
+            userProfile,
+            studentsByClass: initialStudents,
+            savedLogs: initialLogs,
+            localVersion: latestVersion
         });
-        if (!response.ok) throw new Error(`Gagal mengambil profil: ${response.statusText}`);
         
-        const profile = await response.json();
-        
-        // --- NEW TWO-STEP LOGIN FLOW ---
-        let userProfile;
-
-        // STEP 1: LOGIN & GET PROFILE (with retry for DB setup)
-        try {
-            updateLoaderText('Memvalidasi pengguna...');
-            const loginResult = await apiService.loginOrRegisterUser(profile);
-            userProfile = loginResult.user;
-        } catch (loginError) {
-            if (loginError.code === 'DATABASE_NOT_INITIALIZED') {
-                console.warn('Database not initialized. Starting one-time setup.');
-                updateLoaderText('Menyiapkan database untuk penggunaan pertama...');
-                await apiService.initializeDatabase();
-                
-                updateLoaderText('Mencoba login kembali...');
-                const loginResult = await apiService.loginOrRegisterUser(profile);
-                userProfile = loginResult.user;
-            } else {
-                throw loginError; // Rethrow other login errors
-            }
-        }
-        
-        // At this point, login is successful. Set user profile in state.
-        await setState({ userProfile });
-        
-        // STEP 2: FETCH INITIAL DATA (if applicable)
-        if (userProfile.primaryRole !== 'ORANG_TUA' && userProfile.school_id) {
-            updateLoaderText('Memuat data sekolah...');
-            const { initialStudents, initialLogs, latestVersion } = await apiService.getInitialData();
-            // Set the rest of the data state
-            await setState({
-                studentsByClass: initialStudents || {},
-                savedLogs: initialLogs || [],
-                localVersion: latestVersion || 0,
-            });
-        }
-        
-        // Login complete
-        showNotification(`Selamat datang, ${userProfile.name}!`);
+        hideLoader();
+        showNotification(`Selamat datang, ${userProfile.name}!`, 'success');
         navigateTo('multiRoleHome');
 
     } catch (error) {
-        console.error("Gagal memproses login OAuth:", error);
-        showNotification(`Gagal memproses login Anda: ${error.message}`, 'error');
-        navigateTo('landingPage');
-    } finally {
+        console.error("Authentication failed:", error);
         hideLoader();
+        displayAuthError('Login Gagal. Silakan coba lagi.', error);
+        navigateTo('landingPage');
     }
-    return true; // Indicates that an auth redirect was successfully processed.
 }
 
+async function attemptLogin(profile) {
+    try {
+        return await apiService.loginOrRegisterUser({ profile });
+    } catch (error) {
+        if (error.code === 'DATABASE_NOT_INITIALIZED') {
+            showLoader('Database belum siap. Menginisialisasi...');
+            console.warn("Database not initialized, attempting to set it up now.");
+            try {
+                await apiService.initializeDatabase();
+                showLoader('Inisialisasi berhasil. Mencoba login kembali...');
+                // Retry the login after successful initialization
+                return await apiService.loginOrRegisterUser({ profile });
+            } catch (initError) {
+                console.error("Fatal: Database initialization failed.", initError);
+                throw new Error("Gagal menginisialisasi database aplikasi. Silakan hubungi administrator.");
+            }
+        }
+        // Re-throw other errors
+        throw error;
+    }
+}
+
+
+/**
+ * Handles signing out the current user.
+ */
 export async function handleSignOut() {
+    showLoader('Logout...');
+    if (window.google && google.accounts && google.accounts.id) {
+        google.accounts.id.disableAutoSelect();
+    }
+    
+    // Clear all application state
     await setState({
         userProfile: null,
         studentsByClass: {},
@@ -129,7 +92,80 @@ export async function handleSignOut() {
         localVersion: 0,
         adminActingAsSchool: null,
         adminActingAsJurisdiction: null,
+        // Reset other states to default
+        dashboard: { ...state.dashboard, data: null, isLoading: true, aiRecommendation: { isLoading: false, result: null, error: null } },
+        adminPanel: { ...state.adminPanel, users: [], schools: [], isLoading: true, selectedUsers: [] },
     });
+    
+    // Clear IndexedDB for a clean slate on next login
+    await idb.set('userProfile', null);
+    await idb.set('userData', null);
+    
+    hideLoader();
     navigateTo('landingPage');
     showNotification('Anda telah berhasil logout.', 'info');
+}
+
+/**
+ * Initializes the Google Sign-In client.
+ */
+export async function initializeGsi() {
+    try {
+        const { clientId } = await apiService.getAuthConfig();
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => {
+            google.accounts.id.initialize({
+                client_id: clientId,
+                callback: handleSignIn,
+                auto_select: true,
+                ux_mode: 'popup', // Can be 'popup' or 'redirect'
+            });
+
+            const gsiContainer = document.getElementById('gsi-button-container');
+            if (gsiContainer && !state.userProfile) {
+                 google.accounts.id.renderButton(
+                    gsiContainer,
+                    { theme: "outline", size: "large", text: "signin_with", shape: "rectangular", logo_alignment: "left" }
+                );
+            }
+           
+            // Show One Tap prompt if not logged in
+            if (!state.userProfile) {
+                google.accounts.id.prompt();
+            }
+
+            // Hide initial loader after GSI is ready
+            const loaderWrapper = document.getElementById('loader-wrapper');
+            if (loaderWrapper.querySelector('.loader-text').textContent.includes('Memuat Aplikasi')) {
+                hideLoader();
+            }
+        };
+        script.onerror = () => {
+             displayAuthError('Gagal memuat skrip otentikasi Google. Periksa koneksi internet Anda atau coba muat ulang halaman.');
+             hideLoader();
+        };
+        document.head.appendChild(script);
+    } catch (error) {
+        displayAuthError('Gagal mengambil konfigurasi otentikasi dari server.', error);
+        hideLoader();
+    }
+}
+
+
+/**
+ * Handles the GSI redirect flow. Returns true if a redirect is being handled.
+ */
+export async function handleAuthenticationRedirect() {
+    // A simple check for the g_csrf_token cookie is enough to know
+    // if we are in a GSI redirect callback.
+    const isGsiRedirect = document.cookie.includes('g_csrf_token');
+    
+    if (isGsiRedirect) {
+        console.log("GSI redirect detected, waiting for callback to handle sign-in.");
+        return true;
+    }
+    return false;
 }
