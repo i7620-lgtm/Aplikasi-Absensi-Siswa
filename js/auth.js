@@ -5,6 +5,10 @@ import { apiService } from './api.js';
 let googleClientId = null;
 let authInitStarted = false;
 
+/**
+ * Performs the final login steps after a user profile is successfully retrieved or created.
+ * @param {object} profile - The user profile from Google.
+ */
 async function performLogin(profile) {
     const { user, initialStudents, initialLogs, latestVersion } = await apiService.loginOrRegisterUser(profile);
 
@@ -16,25 +20,6 @@ async function performLogin(profile) {
     });
     showNotification(`Selamat datang, ${user.name}!`);
     navigateTo('multiRoleHome');
-}
-
-async function pollForLoginSuccess(profile, maxRetries = 10, interval = 3000) {
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            console.log(`Polling for login, attempt ${i + 1}...`);
-            await performLogin(profile);
-            return; // Success
-        } catch (error) {
-            if (error.code === 'DATABASE_NOT_INITIALIZED') {
-                // DB is still setting up, wait for the next poll
-                await new Promise(resolve => setTimeout(resolve, interval));
-            } else {
-                // A different error occurred, fail fast
-                throw error;
-            }
-        }
-    }
-    throw new Error("Gagal login setelah inisialisasi database. Coba muat ulang halaman.");
 }
 
 export async function initializeGsi() {
@@ -108,20 +93,23 @@ export async function handleAuthenticationRedirect() {
         const profile = await response.json();
         
         try {
+            // First optimistic attempt to login
             await performLogin(profile);
         } catch (loginError) {
+            // If the specific error for a non-existent DB is returned, handle it gracefully.
             if (loginError.code === 'DATABASE_NOT_INITIALIZED') {
-                console.warn('Database belum siap. Memulai proses setup satu kali...');
-                updateLoaderText('Menyiapkan database untuk penggunaan pertama kali. Ini mungkin memakan waktu sebentar...');
+                console.warn('Database not initialized. Starting one-time setup process.');
+                updateLoaderText('Menyiapkan database untuk penggunaan pertama kali...');
                 
-                // Memicu setup di latar belakang
+                // Call the dedicated setup endpoint
                 await apiService.initializeDatabase();
                 
-                // Mulai polling untuk login
+                // Retry the login now that the database is ready
                 updateLoaderText('Menyelesaikan login...');
-                await pollForLoginSuccess(profile);
+                await performLogin(profile);
+
             } else {
-                // Melempar kembali error login lainnya
+                // For any other error, fail fast
                 throw loginError;
             }
         }
