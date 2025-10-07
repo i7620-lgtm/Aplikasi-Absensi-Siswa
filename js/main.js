@@ -1,4 +1,3 @@
-
 import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal, stopAllPollers, resumePollingForCurrentScreen } from './ui.js';
@@ -578,71 +577,77 @@ export async function handleDownloadJurisdictionReport(jurisdictionId, jurisdict
 
 
 // --- DATA SYNC LOGIC ---
-function applyChanges(changes) {
-    if (!changes || changes.length === 0) return false;
-
-    let dataChanged = false;
-    const newStudentsByClass = { ...state.studentsByClass };
-    const newSavedLogs = [...state.savedLogs];
-
-    changes.forEach(change => {
-        const { event_type, payload } = change;
-        if (event_type === 'ATTENDANCE_UPDATED') {
-            const existingLogIndex = newSavedLogs.findIndex(log => log.class === payload.class && log.date === payload.date);
-            if (existingLogIndex > -1) {
-                newSavedLogs[existingLogIndex] = payload;
-            } else {
-                newSavedLogs.push(payload);
-            }
-            dataChanged = true;
-        } else if (event_type === 'STUDENT_LIST_UPDATED') {
-            newStudentsByClass[payload.class] = { students: payload.students };
-            dataChanged = true;
-        }
-    });
-
-    if (dataChanged) {
-        setState({
-            studentsByClass: newStudentsByClass,
-            savedLogs: newSavedLogs,
-            localVersion: changes[changes.length - 1].id // Update to the latest version ID from the batch
-        });
-    } else {
-        // Even if no data changed, update version to not re-fetch same empty changes
-        setState({ localVersion: changes[changes.length - 1].id });
-    }
-    
-    return dataChanged;
-}
-
 async function syncWithServer() {
-    if (!navigator.onLine || !state.userProfile || !state.userProfile.school_id) {
-        console.log("Skipping sync: Offline, no user, or no school context.");
+    if (!navigator.onLine) {
+        console.log("Offline, skipping server sync.");
+        return;
+    }
+    const queue = await idb.getQueue();
+    if (queue.length === 0) {
+        console.log("No offline actions to sync.");
         return;
     }
 
+    showNotification(`Menyinkronkan ${queue.length} perubahan offline...`, 'info');
+    let failedActions = [];
+    let successCount = 0;
+
+    for (const request of queue) {
+        try {
+            await apiService.saveData(request.body.payload);
+            successCount++;
+        } catch (error) {
+            console.error('Failed to sync an action:', request, error);
+            failedActions.push(request);
+        }
+    }
+
+    await idb.setQueue(failedActions);
+    if (failedActions.length > 0) {
+        showNotification(`Gagal menyinkronkan ${failedActions.length} perubahan. Akan dicoba lagi nanti.`, 'error');
+    } else {
+        showNotification('Semua data offline berhasil disinkronkan!', 'success');
+        // If sync is successful, we should probably fetch the latest state
+        await fetchChangesFromServer();
+    }
+}
+
+async function fetchChangesFromServer() {
+    if (!navigator.onLine || !state.userProfile?.school_id) return;
     try {
-        const { latestVersion } = await apiService.getUpdateSignal({ schoolId: state.userProfile.school_id });
-
-        if (latestVersion && latestVersion > state.localVersion) {
-            console.log(`Server version (${latestVersion}) > Local version (${state.localVersion}). Fetching changes.`);
-            showNotification('Memperbarui data terbaru dari server...', 'info');
-
-            const { changes } = await apiService.getChangesSince({ schoolId: state.userProfile.school_id, lastVersion: state.localVersion });
+        const { changes } = await apiService.getChangesSince({ 
+            schoolId: state.userProfile.school_id, 
+            lastVersion: state.localVersion 
+        });
+        
+        if (changes.length > 0) {
+            let updatedStudentsByClass = { ...state.studentsByClass };
+            let updatedLogs = [...state.savedLogs];
+            let latestVersion = state.localVersion;
             
-            const dataWasUpdated = applyChanges(changes);
+            changes.forEach(change => {
+                if (change.event_type === 'ATTENDANCE_UPDATED') {
+                    const existingLogIndex = updatedLogs.findIndex(log => log.class === change.payload.class && log.date === change.payload.date);
+                    if (existingLogIndex > -1) updatedLogs[existingLogIndex] = change.payload;
+                    else updatedLogs.push(change.payload);
+                } else if (change.event_type === 'STUDENT_LIST_UPDATED') {
+                    updatedStudentsByClass[change.payload.class] = { students: change.payload.students };
+                }
+                latestVersion = Math.max(latestVersion, change.id);
+            });
             
-            if (dataWasUpdated) {
-                showNotification('Data berhasil diperbarui!', 'success');
-                render(); // Re-render the current screen with the fresh data
-            } else {
-                console.log("Sync completed, no render needed as only version number was updated.");
-            }
-        } else {
-            console.log("Local data is up-to-date.");
+            await setState({
+                studentsByClass: updatedStudentsByClass,
+                savedLogs: updatedLogs,
+                localVersion: latestVersion
+            });
+            
+            showNotification('Data telah diperbarui dari server.', 'info');
+            render(); // Re-render the current screen with fresh data
         }
     } catch (error) {
-        console.error("Failed to sync with server:", error);
+        console.error("Failed to fetch changes from server:", error);
+        showNotification('Gagal mengambil data terbaru dari server.', 'error');
     }
 }
 
@@ -674,7 +679,8 @@ async function initApp() {
     }
 
     if (await handleAuthenticationRedirect()) {
-        return;
+        showLoader('Menyelesaikan proses login...');
+        return; // Wait for redirect to complete
     }
 
     showLoader('Memuat Aplikasi Absensi...');
@@ -682,20 +688,18 @@ async function initApp() {
     await loadInitialData();
     
     render(); // Render UI first to ensure login button exists
-    await initializeGsi(); // Then initialize auth to enable it
+    
+    await initializeGsi(); 
+    
     if (state.userProfile) {
-        syncWithServer(); // Initial sync on load
+        await syncWithServer();
+        await fetchChangesFromServer();
     }
     
     window.addEventListener('online', async () => {
         updateOnlineStatus(true);
-        const queue = await idb.getQueue();
-        if (queue.length > 0) {
-            showNotification(`Koneksi pulih. Menyinkronkan ${queue.length} perubahan...`, 'info');
-        } else {
-            showNotification('Koneksi internet kembali pulih.', 'success');
-        }
-        if (state.userProfile) syncWithServer();
+        showNotification('Koneksi internet kembali pulih.', 'success');
+        await syncWithServer();
     });
     window.addEventListener('offline', () => updateOnlineStatus(false));
     
