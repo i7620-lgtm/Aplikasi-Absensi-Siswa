@@ -1,4 +1,4 @@
-const CACHE_NAME = 'absensi-cache-v9';
+const CACHE_NAME = 'absensi-cache-v10';
 const localUrlsToCache = [
   '/',
   '/index.html',
