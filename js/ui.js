@@ -1,4 +1,5 @@
 
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport } from './main.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignIn, handleSignOut } from './auth.js';
@@ -256,7 +257,9 @@ async function teacherProfilePoller() {
 
 function renderLandingPageScreen() {
     appContainer.innerHTML = templates.landingPage();
-    document.getElementById('loginBtn-landing').addEventListener('click', handleSignIn);
+    // The GSI library handles its own button's click event.
+    // This line caused the error because 'loginBtn-landing' no longer exists.
+    // document.getElementById('loginBtn-landing').addEventListener('click', handleSignIn);
 }
 
 function renderSetupScreen() {
