@@ -1,120 +1,99 @@
 import { state } from './main.js';
 import { idb } from './db.js';
 
-async function _fetch(action, payload = {}) {
-    // Logic to queue 'saveData' action when offline
+async function _fetch(url, action, payload = {}) {
+    const body = {
+        action,
+        payload,
+        userEmail: state.userProfile?.email || null,
+    };
+    
+    // For save actions, if offline, queue it.
     if (action === 'saveData' && !navigator.onLine) {
         console.log(`Offline mode detected. Queuing action: ${action}`);
         try {
             const queue = await idb.getQueue();
-            const offlineAction = {
-                body: {
-                    action,
-                    payload,
-                    userEmail: state.userProfile?.email
-                }
-            };
-
+            const offlineAction = { url, body };
             queue.push(offlineAction);
             await idb.setQueue(queue);
             
+            // Register a sync event with the service worker
             if ('serviceWorker' in navigator && 'SyncManager' in window) {
                 navigator.serviceWorker.ready.then(sw => {
                     sw.sync.register('sync-offline-actions');
-                    console.log('Background sync registered for offline actions.');
-                });
+                }).catch(err => console.error("Sync registration failed:", err));
             }
-
+            
             return Promise.resolve({ success: true, queued: true, savedBy: state.userProfile.name });
         } catch (error) {
             console.error('Failed to queue offline action:', error);
             throw new Error('Gagal menyimpan data secara lokal. Coba lagi.');
         }
     }
-
-    // Original online logic for data actions
+    
     try {
-        const response = await fetch('/api/data', {
+        const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action,
-                payload,
-                userEmail: state.userProfile?.email
-            }),
+            body: JSON.stringify(body)
         });
-    
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            let errorMessage;
-            const serverDetails = errorData.details ? ` Detail: ${errorData.details}` : '';
 
-            if (response.status === 503) {
-                 errorMessage = `Layanan tidak tersedia: ${errorData.error || 'Konfigurasi otentikasi server tidak lengkap. Hubungi administrator.'}`;
-            } else if (response.status >= 500) {
-                errorMessage = `Kesalahan Server (${response.status}): ${errorData.error || 'Gagal terhubung ke database.'}${serverDetails}`;
-            } else {
-                errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}${serverDetails}`;
-            }
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Gagal mem-parsing JSON error dari server.' }));
+            const errorMessage = errorData.error || `Server merespons dengan status ${response.status}`;
             const error = new Error(errorMessage);
             if (errorData.code) {
                 error.code = errorData.code;
             }
             throw error;
         }
-    
-        return response.json();
+
+        return await response.json();
     } catch (error) {
-        console.error(`Panggilan API '${action}' gagal:`, error);
-        
-        if (error.code || error.message.startsWith('Layanan tidak tersedia') || error.message.startsWith('Kesalahan Server') || error.message.startsWith('Error')) {
-            throw error;
-        }
-        throw new Error('Gagal terhubung ke server. Periksa koneksi internet Anda.');
+        console.error(`API call for action '${action}' failed:`, error);
+        // Rethrow to be handled by the calling function
+        throw error;
     }
 }
 
 export const apiService = {
     async getAuthConfig() {
+        // This is a special case that doesn't use the standard _fetch wrapper
         try {
-            const response = await fetch('/api/auth-config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            });
+            const response = await fetch('/api/auth-config', { method: 'POST' });
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                const errorMessage = `Error ${response.status}: ${errorData.error || response.statusText}`;
-                throw new Error(errorMessage);
+                throw new Error(errorData.error || `Server responded with ${response.status}`);
             }
-            return response.json();
+            return await response.json();
         } catch (error) {
-            console.error("Panggilan API 'getAuthConfig' gagal:", error);
-            throw new Error('Gagal mendapatkan konfigurasi autentikasi dari server.');
+            console.error("Failed to get auth config:", error);
+            throw error;
         }
     },
     
     async loginOrRegisterUser(profile) {
-        return await _fetch('loginOrRegister', { profile });
+        return await _fetch('/api/data', 'loginOrRegister', { profile });
     },
     
     async initializeDatabase() {
-        return await _fetch('initializeDatabase');
+        return await _fetch('/api/data', 'initializeDatabase');
     },
 
     async getUserProfile() {
-        return await _fetch('getUserProfile');
+        return await _fetch('/api/data', 'getUserProfile');
     },
     
     async getInitialData() {
-        return await _fetch('getInitialData');
+        return await _fetch('/api/data', 'getInitialData');
     },
     
     async getUpdateSignal(params) {
-        return await _fetch('getUpdateSignal', params);
+        return await _fetch('/api/data', 'getUpdateSignal', params);
     },
 
     async getChangesSince(params) {
-        return await _fetch('getChangesSince', params);
+        return await _fetch('/api/data', 'getChangesSince', params);
     },
 
     async saveData(event) {
@@ -122,74 +101,74 @@ export const apiService = {
             ...event,
             actingAsSchoolId: state.adminActingAsSchool?.id || null,
         };
-        return await _fetch('saveData', payload);
+        return await _fetch('/api/data', 'saveData', payload);
     },
 
     async getHistoryData(params) {
-        return await _fetch('getHistoryData', params);
+        return await _fetch('/api/data', 'getHistoryData', params);
     },
     
     async getDashboardData(params) {
-        return await _fetch('getDashboardData', params);
+        return await _fetch('/api/data', 'getDashboardData', params);
     },
 
     async getRecapData(params) {
-        return await _fetch('getRecapData', params);
+        return await _fetch('/api/data', 'getRecapData', params);
     },
 
     async getParentData() {
-        return await _fetch('getParentData');
+        return await _fetch('/api/data', 'getParentData');
     },
     
     async getSchoolStudentData(schoolId) {
-        return await _fetch('getSchoolStudentData', { schoolId });
+        return await _fetch('/api/data', 'getSchoolStudentData', { schoolId });
     },
 
     async getAllUsers() {
-        return await _fetch('getAllUsers');
+        return await _fetch('/api/data', 'getAllUsers');
     },
 
     async getAllSchools() {
-        return await _fetch('getAllSchools');
+        return await _fetch('/api/data', 'getAllSchools');
     },
 
     async createSchool(schoolName) {
-        return await _fetch('createSchool', { schoolName });
+        return await _fetch('/api/data', 'createSchool', { schoolName });
     },
 
     async updateUserConfiguration(targetEmail, newRole, newSchoolId, newClasses, newJurisdictionId) {
-        return await _fetch('updateUserConfiguration', { targetEmail, newRole, newSchoolId, newClasses, newJurisdictionId });
+        return await _fetch('/api/data', 'updateUserConfiguration', { targetEmail, newRole, newSchoolId, newClasses, newJurisdictionId });
     },
 
     async updateUsersBulkConfiguration({ targetEmails, newRole, newSchoolId }) {
-        return await _fetch('updateUsersBulk', { targetEmails, newRole, newSchoolId });
+        return await _fetch('/api/data', 'updateUsersBulk', { targetEmails, newRole, newSchoolId });
     },
 
     async generateAiRecommendation(params) {
-        return await _fetch('generateAiRecommendation', params);
+        return await _fetch('/api/data', 'generateAiRecommendation', params);
     },
 
     async migrateLegacyData(params) {
-        return await _fetch('migrateLegacyData', params);
+        return await _fetch('/api/data', 'migrateLegacyData', params);
     },
 
     // Jurisdiction APIs
     async getJurisdictionTree() {
-        return await _fetch('getJurisdictionTree');
+        return await _fetch('/api/data', 'getJurisdictionTree');
     },
     async createJurisdiction(name, type, parentId) {
-        return await _fetch('createJurisdiction', { name, type, parentId });
+        return await _fetch('/api/data', 'createJurisdiction', { name, type, parentId });
     },
     async updateJurisdiction(id, name, type, parentId) {
-        return await _fetch('updateJurisdiction', { id, name, type, parentId });
+        return await _fetch('/api/data', 'updateJurisdiction', { id, name, type, parentId });
     },
     async deleteJurisdiction(id) {
-        return await _fetch('deleteJurisdiction', { id });
+        return await _fetch('/api/data', 'deleteJurisdiction', { id });
     },
     async getSchoolsForJurisdiction(jurisdictionId) {
-        return await _fetch('getSchoolsForJurisdiction', { jurisdictionId });
+        return await _fetch('/api/data', 'getSchoolsForJurisdiction', { jurisdictionId });
     },
     async assignSchoolToJurisdiction(schoolId, jurisdictionId) {
-        return await _fetch('assignSchoolToJurisdiction', { schoolId, jurisdictionId });
+        return await _fetch('/api/data', 'assignSchoolToJurisdiction', { schoolId, jurisdictionId });
     }
 };
