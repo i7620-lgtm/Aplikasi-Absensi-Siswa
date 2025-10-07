@@ -55,7 +55,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
     }
     
     if (schoolIdsInScope.length === 0) {
-        return response.status(200).json({ recapArray: [] });
+        return response.status(200).json({ recapData: [], reportType: 'class' });
     }
 
     const { rows: recapArray } = await sql`
@@ -71,11 +71,12 @@ export default async function handleGetRecapData({ payload, user, sql, response 
         ),
         students_flat AS (
             SELECT
-                class_name as class,
+                lsl.school_id,
+                lsl.class_name as class,
                 (jsonb_array_elements(students)->>'name') as name,
-                row_number() over (partition by class_name order by (jsonb_array_elements(students)->>'name')) as "originalIndex"
-            FROM latest_student_lists
-            WHERE ${classFilter}::text IS NULL OR class_name = ${classFilter}::text
+                row_number() over (partition by lsl.class_name order by (jsonb_array_elements(students)->>'name')) as "originalIndex"
+            FROM latest_student_lists lsl
+            WHERE ${classFilter}::text IS NULL OR lsl.class_name = ${classFilter}::text
         ),
         attendance_events AS (
             SELECT
@@ -102,16 +103,41 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             GROUP BY name
         )
         SELECT
-            s.name,
-            s.class,
-            s."originalIndex",
+            s_flat.name,
+            s_flat.class,
+            s_flat."originalIndex",
+            sch.name as school_name,
             COALESCE(ac."S", 0)::int as "S",
             COALESCE(ac."I", 0)::int as "I",
             COALESCE(ac."A", 0)::int as "A",
             (COALESCE(ac."S", 0) + COALESCE(ac."I", 0) + COALESCE(ac."A", 0))::int as total
-        FROM students_flat s
-        LEFT JOIN absence_counts ac ON s.name = ac.name;
+        FROM students_flat s_flat
+        LEFT JOIN absence_counts ac ON s_flat.name = ac.name
+        JOIN schools sch ON s_flat.school_id = sch.id;
     `;
+
+    const isRegionalReport = !!jurisdictionId;
+    const isFullSchoolReport = !!schoolId && !classFilter;
+
+    if (isRegionalReport) {
+        const dataBySchool = recapArray.reduce((acc, row) => {
+            const { school_name, ...studentData } = row;
+            if (!acc[school_name]) acc[school_name] = [];
+            acc[school_name].push(studentData);
+            return acc;
+        }, {});
+        return response.status(200).json({ recapData: dataBySchool, reportType: 'regional' });
+
+    } else if (isFullSchoolReport) {
+        const dataByClass = recapArray.reduce((acc, row) => {
+            const { class: className, ...studentData } = row;
+            if (!acc[className]) acc[className] = [];
+            acc[className].push(studentData);
+            return acc;
+        }, {});
+        return response.status(200).json({ recapData: dataByClass, reportType: 'school' });
+    }
     
-    return response.status(200).json({ recapArray });
+    // Fallback for single class report
+    return response.status(200).json({ recapData: recapArray, reportType: 'class' });
 }
