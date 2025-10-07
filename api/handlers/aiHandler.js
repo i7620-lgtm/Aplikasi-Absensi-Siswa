@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 
 async function getSubJurisdictionIds(jurisdictionId, sql) {
@@ -26,31 +27,33 @@ export default async function handleAiRecommendation({ payload, user, sql, respo
             return response.status(500).json({ error: 'Gagal menghasilkan rekomendasi: Konfigurasi server tidak lengkap.' });
         }
         
-        const { aiRange, schoolId: payloadSchoolId, jurisdictionId: payloadJurisdictionId } = payload;
+        const { aiRange, schoolId: payloadSchoolId, jurisdictionId: payloadJurisdictionId, selectedDate } = payload;
         
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        let startDate = new Date(today);
+        // Use the selected date from the dashboard as the reference point, defaulting to today's date
+        const referenceDate = selectedDate ? new Date(selectedDate + 'T00:00:00') : new Date();
+        referenceDate.setHours(0, 0, 0, 0);
+
+        let startDate = new Date(referenceDate);
         let dateRangeContext = "30 Hari Terakhir";
 
         switch (aiRange) {
             case 'last30days':
-                startDate.setDate(today.getDate() - 30);
+                startDate.setDate(referenceDate.getDate() - 30);
                 break;
             case 'semester':
-                const currentMonth = today.getMonth(); // 0-11
+                const currentMonth = referenceDate.getMonth(); // 0-11
                 if (currentMonth >= 0 && currentMonth <= 5) { // Semester 2 (Jan-Juni)
-                    startDate = new Date(today.getFullYear(), 0, 1);
-                    dateRangeContext = `Semester II (Januari - Juni ${today.getFullYear()})`;
+                    startDate = new Date(referenceDate.getFullYear(), 0, 1);
+                    dateRangeContext = `Semester II (Januari - Juni ${referenceDate.getFullYear()})`;
                 } else { // Semester 1 (Juli-Des)
-                    startDate = new Date(today.getFullYear(), 6, 1);
-                    dateRangeContext = `Semester I (Juli - Desember ${today.getFullYear()})`;
+                    startDate = new Date(referenceDate.getFullYear(), 6, 1);
+                    dateRangeContext = `Semester I (Juli - Desember ${referenceDate.getFullYear()})`;
                 }
                 break;
             case 'year':
-                startDate = new Date(today.getFullYear(), 6, 1); // Tahun ajaran dimulai Juli
-                if (today.getMonth() < 6) { // Jika sekarang sebelum Juli, tahun ajaran dimulai tahun lalu
-                    startDate.setFullYear(today.getFullYear() - 1);
+                startDate = new Date(referenceDate.getFullYear(), 6, 1); // Tahun ajaran dimulai Juli
+                if (referenceDate.getMonth() < 6) { // Jika sekarang sebelum Juli, tahun ajaran dimulai tahun lalu
+                    startDate.setFullYear(referenceDate.getFullYear() - 1);
                 }
                 dateRangeContext = `Tahun Ajaran ${startDate.getFullYear()}/${startDate.getFullYear() + 1}`;
                 break;
