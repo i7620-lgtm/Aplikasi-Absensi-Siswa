@@ -1,3 +1,4 @@
+
 import { state, CLASSES } from './main.js';
 
 export function encodeHTML(str) {
@@ -42,12 +43,14 @@ export const templates = {
         <div class="screen active">
             <div class="max-w-5xl mx-auto text-center py-12 px-4 sm:px-6 lg:py-16 lg:px-8">
                 <h2 class="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-                    <span class="block">Selamat Datang di Aplikasi Absensi Siswa</span>
+                    <span class="block">
+                        ${state.logoutMessage ? encodeHTML(state.logoutMessage) : 'Manajemen Kehadiran Jadi Lebih Mudah'}
+                    </span>
                 </h2>
-                <p class="mt-4 text-lg leading-6 text-slate-500">
-                    Solusi modern untuk manajemen kehadiran siswa yang efisien, transparan, dan cerdas.
+                <p class="mt-4 text-lg leading-6 text-slate-500 max-w-2xl mx-auto">
+                    ${state.logoutMessage ? 'Anda telah keluar dari sesi. Silakan masuk kembali untuk melanjutkan.' : 'Aplikasi absensi modern yang dirancang untuk efisiensi, transparansi, dan analisis cerdas bagi sekolah Anda.'}
                 </p>
-                <div class="mt-8 flex justify-center">
+                <div class="mt-8 flex justify-center px-4">
                     <div id="gsi-button-container"></div>
                 </div>
                  <div id="auth-error-container" class="text-center text-sm mt-4"></div>
