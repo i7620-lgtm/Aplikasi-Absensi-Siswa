@@ -1,3 +1,4 @@
+
 import { state, setState, navigateTo } from './main.js';
 import { showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
@@ -57,7 +58,7 @@ export async function handleSignIn(response) {
         console.error("Authentication failed:", error);
         hideLoader();
         
-        if (error.status === 500) {
+        if (error.status === 500 || (error.message && error.message.toLowerCase().includes('gagal terhubung'))) {
             const dbConnectionError = `
                 <div class="bg-red-50 p-4 rounded-lg border border-red-200 text-left flex items-start gap-4">
                     <div class="flex-shrink-0">
@@ -233,6 +234,7 @@ export async function initializeGsi() {
                         </div>
                     </div>`;
                 displayAuthError(detailedError, null);
+                hideLoader();
             }
         };
         script.onerror = () => {
