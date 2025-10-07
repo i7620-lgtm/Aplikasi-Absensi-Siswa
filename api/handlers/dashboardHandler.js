@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+
 
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
@@ -25,8 +25,11 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
 
     if (user.role === 'SUPER_ADMIN') {
         if (jurisdictionId) {
-            const { rows: schoolRows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ${jurisdictionId}`;
-            schoolIdList = schoolRows.map(r => r.id);
+            const accessibleJurisdictionIds = await getSubJurisdictionIds(jurisdictionId, sql);
+            if (accessibleJurisdictionIds.length > 0) {
+                const { rows: schoolRows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
+                schoolIdList = schoolRows.map(r => r.id);
+            }
             isRegionalView = true;
         } else if (schoolId) {
             schoolIdList.push(schoolId);
@@ -34,8 +37,12 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
     } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(user.role)) {
         const effectiveJurisdictionId = jurisdictionId || user.jurisdiction_id;
         if (!effectiveJurisdictionId) return response.status(200).json({ isUnassigned: true });
-        const { rows: schoolRows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ${effectiveJurisdictionId}`;
-        schoolIdList = schoolRows.map(r => r.id);
+        
+        const accessibleJurisdictionIds = await getSubJurisdictionIds(effectiveJurisdictionId, sql);
+        if (accessibleJurisdictionIds.length > 0) {
+            const { rows: schoolRows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
+            schoolIdList = schoolRows.map(r => r.id);
+        }
         isRegionalView = true;
     } else {
         if (user.school_id) schoolIdList.push(user.school_id);
