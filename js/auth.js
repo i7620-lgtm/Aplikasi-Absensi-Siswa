@@ -1,4 +1,4 @@
-import { setState, navigateTo } from './main.js';
+import { state, setState, navigateTo } from './main.js';
 import { showLoader, hideLoader, showNotification, displayAuthError } from './ui.js';
 import { apiService } from './api.js';
 import { idb } from './db.js';
