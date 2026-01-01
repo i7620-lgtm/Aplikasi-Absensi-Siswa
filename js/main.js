@@ -1,7 +1,7 @@
 
 import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
-import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal, stopAllPollers, resumePollingForCurrentScreen, displayAuthError } from './ui.js';
+import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal, stopAllPollers, resumePollingForCurrentScreen, displayAuthError, updateLoaderText } from './ui.js';
 import { apiService } from './api.js';
 import { idb } from './db.js';
 
@@ -215,9 +215,19 @@ async function findAndLoadClassDataForAdmin(className) {
 }
 
 // --- EVENT HANDLERS & LOGIC ---
-export async function handleStartAttendance() {
-    state.selectedClass = document.getElementById('class-select').value;
-    state.selectedDate = document.getElementById('date-input').value;
+export async function handleStartAttendance(overrideClass = null, overrideDate = null) {
+    // If overrides are provided (e.g. from Missing History), use them.
+    // Otherwise, read from the DOM elements (Setup screen).
+    if (overrideClass && overrideDate) {
+        state.selectedClass = overrideClass;
+        state.selectedDate = overrideDate;
+    } else {
+        const classSelect = document.getElementById('class-select');
+        const dateInput = document.getElementById('date-input');
+        
+        if (classSelect) state.selectedClass = classSelect.value;
+        if (dateInput) state.selectedDate = dateInput.value;
+    }
     
     let students = (state.studentsByClass[state.selectedClass] || {}).students || [];
     const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole);
@@ -230,8 +240,15 @@ export async function handleStartAttendance() {
     }
     state.students = students;
     
+    // Check if logs already exist for this date/class
+    // Note: When clicking "Isi Sekarang" from Missing History, we expect this to be false/undefined,
+    // but checking doesn't hurt.
     const existingLog = state.savedLogs.find(log => log.class === state.selectedClass && log.date === state.selectedDate);
-    if (existingLog) {
+    
+    // Only prompt confirmation if we are NOT coming from the "Missing" button (which implies intention)
+    // OR if we strictly want to warn about overwrites.
+    // Let's keep the warning if data actually exists, to be safe.
+    if (existingLog && !overrideClass) {
         const confirmed = await showConfirmation(`Absensi untuk kelas ${state.selectedClass} pada tanggal ini sudah ada. Ingin mengeditnya?`);
         if (!confirmed) return;
     }
@@ -780,20 +797,20 @@ async function fetchChangesFromServer() {
 
 // --- INITIALIZATION ---
 async function loadInitialData() {
-    const userProfile = await idb.get('userProfile');
-    const userData = await idb.get('userData');
+    try {
+        const userProfile = await idb.get('userProfile');
+        const userData = await idb.get('userData');
 
-    if (userProfile && userData) {
-        state.userProfile = userProfile;
-        state.studentsByClass = userData.studentsByClass || {};
-        state.savedLogs = userData.savedLogs || [];
-        state.localVersion = userData.localVersion || 0;
-        
-        console.log(`Data dipulihkan dari penyimpanan offline. Versi lokal: ${state.localVersion}`);
-        
-        // With the new multi-role home, always go there if logged in.
-        state.currentScreen = 'multiRoleHome';
-
+        if (userProfile && userData) {
+            state.userProfile = userProfile;
+            state.studentsByClass = userData.studentsByClass || {};
+            state.savedLogs = Array.isArray(userData.savedLogs) ? userData.savedLogs : [];
+            state.localVersion = typeof userData.localVersion === 'number' ? userData.localVersion : 0;
+            state.currentScreen = 'multiRoleHome';
+            console.log(`Data dipulihkan dari penyimpanan offline. Versi lokal: ${state.localVersion}`);
+        }
+    } catch (e) {
+        console.warn("Gagal memuat data awal, memulai dengan state kosong:", e);
     }
 }
 
@@ -804,16 +821,46 @@ async function initApp() {
         console.log('Data lama dari localStorage telah dihapus.');
     }
 
+    // Registrasi Service Worker untuk kapabilitas Offline
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/service-worker.js').then(registration => {
+                console.log('ServiceWorker registered with scope: ', registration.scope);
+            }).catch(err => {
+                console.log('ServiceWorker registration failed: ', err);
+            });
+        });
+    }
+
     // Simplified flow: load local data, render, then init GSI.
-    showLoader('Memuat Aplikasi Absensi...');
-    await loadInitialData();
-    await initializeGsi(); // This now loads the script and sets up the client.
-    render(); // Initial render will trigger the button render via ui.js
+    updateLoaderText('Memuat Aplikasi Absensi...'); 
+    
+    // Add timeout to IDB loading to prevent infinite loader
+    const loadPromise = loadInitialData();
+    const timeoutPromise = new Promise(r => setTimeout(() => r('timeout'), 2000));
+    
+    const loadResult = await Promise.race([loadPromise, timeoutPromise]);
+    if (loadResult === 'timeout') {
+        console.warn("Pemuatan data lokal timeout. Melanjutkan rendering.");
+    }
+    
+    // --- CRITICAL FIX: Render UI immediately before initializing GSI ---
+    // This ensures the DOM exists (including error containers) and users see the app
+    // while the Google script loads in the background.
+    render(); 
+
+    try {
+        await initializeGsi(); // This now loads the script and sets up the client.
+    } catch (e) {
+        console.warn("GSI Initialization deferred or failed:", e);
+        // We do NOT stop here; the app is already rendered.
+        // The user can retry login if they are on the landing page.
+    }
 
     // This part only runs if the user was already logged in (from IndexedDB)
     if (state.userProfile) {
-        await syncWithServer();
-        await fetchChangesFromServer();
+        // Run sync in background
+        syncWithServer().then(() => fetchChangesFromServer()).catch(console.error);
     }
     
     window.addEventListener('online', async () => {
@@ -837,4 +884,21 @@ async function initApp() {
     });
 }
 
-initApp();
+// Wrap initApp in a catch block to handle startup failures gracefull
+initApp().catch(error => {
+    console.error("Failed to initialize app:", error);
+    const loader = document.getElementById('loader-wrapper');
+    if (loader) loader.style.display = 'none';
+    
+    document.body.innerHTML = `
+        <div style="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+            <div class="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
+                <svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                <h1 class="text-xl font-bold text-slate-800 mb-2">Gagal Memuat Aplikasi</h1>
+                <p class="text-slate-600 mb-6">Terjadi kesalahan saat menyiapkan aplikasi. Mohon periksa koneksi internet Anda dan muat ulang halaman.</p>
+                <pre class="bg-slate-100 p-3 rounded text-xs text-left overflow-auto mb-6 text-slate-700 max-h-32">${error.message}</pre>
+                <button onclick="window.location.reload()" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition">Muat Ulang Halaman</button>
+            </div>
+        </div>
+    `;
+});
