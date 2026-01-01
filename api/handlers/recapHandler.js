@@ -22,7 +22,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
 
     const { schoolId, classFilter: payloadClassFilter, jurisdictionId } = payload;
     let schoolIdsInScope = [];
-    let classFilter = payloadClassFilter;
+    let classFilter = payloadClassFilter ? payloadClassFilter.trim() : null;
 
     // Determine scope based on user role and payload
     if (jurisdictionId) {
@@ -62,38 +62,42 @@ export default async function handleGetRecapData({ payload, user, sql, response 
     const { rows: recapArray } = await sql`
         WITH
         latest_student_lists AS (
-            SELECT DISTINCT ON (school_id, payload->>'class')
+            SELECT DISTINCT ON (school_id, TRIM(payload->>'class'))
                 school_id,
-                payload->>'class' as class_name,
+                TRIM(payload->>'class') as class_name,
                 payload->'students' as students
             FROM change_log
-            WHERE school_id = ANY(${schoolIdsInScope}) AND event_type = 'STUDENT_LIST_UPDATED'
-            ORDER BY school_id, payload->>'class', id DESC
+            WHERE school_id = ANY(${schoolIdsInScope}) 
+              AND event_type = 'STUDENT_LIST_UPDATED'
+              AND jsonb_array_length(payload->'students') > 0 -- Ignore accidentally saved empty lists
+            ORDER BY school_id, TRIM(payload->>'class'), id DESC
         ),
         students_flat AS (
             SELECT
                 lsl.school_id,
                 lsl.class_name as class,
-                (jsonb_array_elements(students)->>'name') as name,
-                row_number() over (partition by lsl.class_name order by (jsonb_array_elements(students)->>'name')) as "originalIndex"
-            FROM latest_student_lists lsl
+                -- Robust extraction: Handles {name: "Budi"} AND "Budi" (legacy strings)
+                TRIM(COALESCE(elem->>'name', elem#>>'{}')) as name,
+                row_number() over (partition by lsl.class_name order by TRIM(COALESCE(elem->>'name', elem#>>'{}'))) as "originalIndex"
+            FROM latest_student_lists lsl,
+            jsonb_array_elements(lsl.students) as elem
             WHERE ${classFilter}::text IS NULL OR lsl.class_name = ${classFilter}::text
         ),
         attendance_events AS (
-            SELECT DISTINCT ON (school_id, payload->>'class', payload->>'date')
+            SELECT DISTINCT ON (school_id, TRIM(payload->>'class'), payload->>'date')
                 school_id,
-                payload->>'class' as class_name,
+                TRIM(payload->>'class') as class_name,
                 payload
             FROM change_log
             WHERE school_id = ANY(${schoolIdsInScope}) AND event_type = 'ATTENDANCE_UPDATED'
-            AND (${classFilter}::text IS NULL OR payload->>'class' = ${classFilter}::text)
-            ORDER BY school_id, payload->>'class', payload->>'date', id DESC
+            AND (${classFilter}::text IS NULL OR TRIM(payload->>'class') = ${classFilter}::text)
+            ORDER BY school_id, TRIM(payload->>'class'), payload->>'date', id DESC
         ),
         absences AS (
             SELECT
                 ae.school_id,
                 ae.class_name,
-                att.key as name,
+                TRIM(att.key) as name, -- Normalize student name key
                 att.value as status
             FROM attendance_events ae
             CROSS JOIN jsonb_each_text(ae.payload->'attendance') as att
@@ -124,7 +128,8 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             ON s_flat.name = ac.name 
             AND s_flat.class = ac.class_name 
             AND s_flat.school_id = ac.school_id
-        LEFT JOIN schools sch ON s_flat.school_id = sch.id;
+        LEFT JOIN schools sch ON s_flat.school_id = sch.id
+        WHERE s_flat.name IS NOT NULL AND s_flat.name <> ''; 
     `;
 
     const isRegionalReport = !!jurisdictionId;
