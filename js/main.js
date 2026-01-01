@@ -55,6 +55,7 @@ export let state = {
     },
     newStudents: [{ name: '', parentEmail: '' }], // Changed to object
     recapSortOrder: 'total',
+    recapPeriod: null, // NEW: Stores 'YYYY-1' (Odd/Ganjil) or 'YYYY-2' (Even/Genap)
     adminPanel: {
         users: [],
         schools: [],
@@ -687,7 +688,34 @@ export async function handleDownloadData() {
     state.selectedClass = document.getElementById('class-select').value;
     const schoolId = state.adminActingAsSchool?.id || state.userProfile.school_id;
     const fileName = `Rekap_Absensi_Kelas_${state.selectedClass}.xlsx`;
-    await downloadRecapData({ classFilter: state.selectedClass, schoolId, fileName });
+    
+    // --- NEW: Calculate dates based on current state.recapPeriod ---
+    let startDate, endDate;
+    if (state.recapPeriod) {
+        const [year, sem] = state.recapPeriod.split('-').map(Number);
+        if (sem === 1) { // Ganjil: July - Dec
+            startDate = `${year}-07-01`;
+            endDate = `${year}-12-31`;
+        } else { // Genap: Jan - June
+            startDate = `${year}-01-01`;
+            endDate = `${year}-06-30`;
+        }
+    } else {
+        // Default to current semester if not set
+        const today = new Date();
+        const currentMonth = today.getMonth(); // 0-11
+        const currentYear = today.getFullYear();
+        if (currentMonth >= 6) { // Jul-Dec
+            startDate = `${currentYear}-07-01`;
+            endDate = `${currentYear}-12-31`;
+        } else { // Jan-Jun
+            startDate = `${currentYear}-01-01`;
+            endDate = `${currentYear}-06-30`;
+        }
+    }
+    // --- END: Date Calculation ---
+
+    await downloadRecapData({ classFilter: state.selectedClass, schoolId, fileName, startDate, endDate });
 }
 
 export async function handleDownloadFullSchoolReport(schoolId, schoolName) {
@@ -704,7 +732,24 @@ export async function handleDownloadFullSchoolReport(schoolId, schoolName) {
     }
     
     const fileName = `Laporan_Absensi_Lengkap_${finalSchoolName.replace(/\s+/g, '_')}.xlsx`;
-    await downloadRecapData({ schoolId: finalSchoolId, fileName });
+    
+    // Default to current semester for bulk download if specific range not easily accessible
+    // or we could use the same logic if we track global dashboard semester state.
+    // For now, let's use the dashboard's selected date context to imply the year?
+    // Safer to default to "current semester" logic unless we add a specific selector for bulk downloads.
+    const today = new Date();
+    const currentMonth = today.getMonth(); // 0-11
+    const currentYear = today.getFullYear();
+    let startDate, endDate;
+    if (currentMonth >= 6) { // Jul-Dec
+        startDate = `${currentYear}-07-01`;
+        endDate = `${currentYear}-12-31`;
+    } else { // Jan-Jun
+        startDate = `${currentYear}-01-01`;
+        endDate = `${currentYear}-06-30`;
+    }
+
+    await downloadRecapData({ schoolId: finalSchoolId, fileName, startDate, endDate });
 }
 
 export async function handleDownloadJurisdictionReport(jurisdictionId, jurisdictionName) {
@@ -714,7 +759,21 @@ export async function handleDownloadJurisdictionReport(jurisdictionId, jurisdict
     }
     const finalJurisdictionName = jurisdictionName || `Yurisdiksi_ID_${jurisdictionId}`;
     const fileName = `Laporan_Absensi_Regional_${finalJurisdictionName.replace(/\s+/g, '_')}.xlsx`;
-    await downloadRecapData({ jurisdictionId, fileName });
+    
+    // Default to current semester
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    let startDate, endDate;
+    if (currentMonth >= 6) {
+        startDate = `${currentYear}-07-01`;
+        endDate = `${currentYear}-12-31`;
+    } else {
+        startDate = `${currentYear}-01-01`;
+        endDate = `${currentYear}-06-30`;
+    }
+
+    await downloadRecapData({ jurisdictionId, fileName, startDate, endDate });
 }
 
 
