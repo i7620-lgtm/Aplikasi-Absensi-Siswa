@@ -1,3 +1,4 @@
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport } from './main.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignOut, renderSignInButton } from './auth.js';
@@ -1602,21 +1603,33 @@ async function renderRecapScreen() {
         const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole);
         const classFilter = (state.userProfile.primaryRole === 'GURU' || isAdmin) ? state.selectedClass : null;
         
-        const { recapArray } = await apiService.getRecapData({ schoolId, classFilter });
+        // Destructure 'recapData' and 'reportType' from the API response
+        // The previous code destructured 'recapArray' which caused the issue when the API returned an object.
+        const { recapData, reportType } = await apiService.getRecapData({ schoolId, classFilter });
 
-        if (!recapArray || recapArray.length === 0) {
+        // Flatten logic: Ensure we have a flat array to render in the table.
+        // If it's a regional/school report (object of arrays), flatten it.
+        // If it's a class report (array), use it directly.
+        let rowsToRender = [];
+        if (Array.isArray(recapData)) {
+            rowsToRender = recapData;
+        } else if (recapData && typeof recapData === 'object') {
+            rowsToRender = Object.values(recapData).flat();
+        }
+
+        if (!rowsToRender || rowsToRender.length === 0) {
             container.innerHTML = `<p class="text-center text-slate-500">Belum ada data untuk direkap.</p>`;
             return;
         }
 
-        recapArray.sort((a, b) => {
+        rowsToRender.sort((a, b) => {
             if (state.recapSortOrder === 'total') return b.total - a.total || a.name.localeCompare(b.name);
             return a.class.localeCompare(b.class) || a.originalIndex - b.originalIndex;
         });
 
         container.innerHTML = `<table class="w-full text-left">
             <thead><tr class="border-b bg-slate-50"><th class="p-3 text-sm font-semibold text-slate-600">No.</th><th class="p-3 text-sm font-semibold text-slate-600">Nama Siswa</th><th class="p-3 text-sm font-semibold text-slate-600">Kelas</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Sakit</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Izin</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Alfa</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Total</th></tr></thead>
-            <tbody>${recapArray.map((item, index) => `<tr class="border-b hover:bg-slate-50">
+            <tbody>${rowsToRender.map((item, index) => `<tr class="border-b hover:bg-slate-50">
                 <td class="p-3 text-sm text-slate-500">${index + 1}</td><td class="p-3 font-medium text-slate-800">${encodeHTML(item.name)}</td><td class="p-3 text-sm text-slate-500">${encodeHTML(item.class)}</td><td class="p-3 text-sm text-center">${item.S}</td><td class="p-3 text-sm text-center">${item.I}</td><td class="p-3 text-sm text-center">${item.A}</td><td class="p-3 text-sm font-bold text-center">${item.total}</td>
             </tr>`).join('')}</tbody></table>`;
 
