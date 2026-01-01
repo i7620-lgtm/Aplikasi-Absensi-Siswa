@@ -1,3 +1,4 @@
+
 <script type="importmap">
 {
   "imports": {
@@ -162,9 +163,10 @@
 </head>
 <body class="bg-slate-100 text-slate-800">
     <div id="app-container"></div>
-    <div id="loader-wrapper" style="display: none; opacity: 0;">
+    <!-- Loader displayed by default -->
+    <div id="loader-wrapper" style="display: flex; opacity: 1;">
         <div class="loader"></div>
-        <p class="loader-text">Memuat...</p>
+        <p class="loader-text">Memuat Aplikasi Absensi...</p>
     </div>
     <div id="notification"></div>
     <div id="offline-indicator">
@@ -173,7 +175,17 @@
         </svg>
         <span>Anda sedang offline</span>
     </div>
+
+    <!-- Global Error Handler -->
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error("Global Error:", error);
+            const loader = document.getElementById('loader-wrapper');
+            if (loader) loader.style.display = 'none';
+            document.body.innerHTML = '<div style="padding:20px; text-align:center; color:#ef4444; font-family:sans-serif;"><h1>Gagal Memuat Aplikasi</h1><p>Terjadi kesalahan teknis. Silakan muat ulang halaman.</p><pre style="background:#f1f5f9; padding:10px; border-radius:8px; overflow:auto; text-align:left; margin-top:20px; font-size:12px;">' + message + '</pre></div>';
+        };
+    </script>
+
     <script type="module" src="/js/main.js"></script>
-    <script type="module" src="/index.tsx"></script>
 </body>
 </html>
