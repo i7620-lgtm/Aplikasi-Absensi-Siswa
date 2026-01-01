@@ -229,16 +229,12 @@ export function displayAuthError(message, error = null) {
     const errorContainer = document.getElementById('auth-error-container');
     if (!errorContainer) return;
 
-    // --- NEW LOGIC ---
-    // If no error object is passed, we assume the 'message' is pre-formatted, trusted HTML.
-    // This allows for richer, diagnostic error messages from the auth module.
     if (error === null) {
         errorContainer.innerHTML = message;
         errorContainer.classList.remove('hidden');
         return;
     }
 
-    // --- EXISTING LOGIC for when an actual error object is passed ---
     const isDbError = error && (error.status === 503 || (error.message && error.message.toLowerCase().includes('database')));
 
     if (isDbError) {
@@ -260,15 +256,13 @@ export function displayAuthError(message, error = null) {
                 </div>
             </div>`;
     } else {
-         // Fallback to generic message encoding for safety
          let details = error.message || (typeof error === 'string' ? error : JSON.stringify(error));
-         details = encodeHTML(details); // Sanitize error details
+         details = encodeHTML(details); 
          errorContainer.innerHTML = `<div class="bg-red-50 p-3 rounded-lg border border-red-200"><p class="text-red-700 font-semibold">${encodeHTML(message)}</p><p class="text-slate-500 text-xs mt-2">${details}</p></div>`;
     }
     errorContainer.classList.remove('hidden');
 }
 
-// --- NEW: Extracted teacher profile poller for reusability ---
 async function teacherProfilePoller() {
     if (state.currentScreen !== 'setup' || state.userProfile?.primaryRole !== 'GURU') return;
     console.log(`Teacher profile polling...`);
@@ -284,7 +278,7 @@ async function teacherProfilePoller() {
                 setup: { ...state.setup, polling: { ...state.setup.polling, interval: INITIAL_POLLING_INTERVAL } }
             });
             showNotification('Hak akses kelas Anda telah diperbarui oleh admin.', 'info');
-            renderScreen('setup'); // This re-render will re-trigger the poller.
+            renderScreen('setup'); 
             return; 
         }
     } catch (error) {
@@ -292,8 +286,6 @@ async function teacherProfilePoller() {
     }
 
     const newTimeoutId = setTimeout(teacherProfilePoller, state.setup.polling.interval);
-    // Use direct state mutation here for simplicity as setState would be overly complex
-    // and this is an internal-only state update for the poller's own management.
     state.setup.polling.timeoutId = newTimeoutId;
     state.setup.polling.interval = nextInterval;
 }
@@ -301,13 +293,9 @@ async function teacherProfilePoller() {
 
 function renderLandingPageScreen() {
     appContainer.innerHTML = templates.landingPage();
-    // This call is crucial. It ensures the button is re-rendered
-    // every time the landing page is shown, especially after a logout.
     renderSignInButton();
 
-    // This logic clears the one-time logout message after it has been displayed.
     if (state.logoutMessage) {
-        // Use a timeout to ensure the state change happens after the current render cycle.
         setTimeout(() => {
             setState({ logoutMessage: null });
         }, 0);
@@ -354,13 +342,11 @@ function renderSetupScreen() {
         document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
         document.getElementById('downloadDataBtn').addEventListener('click', handleDownloadData);
 
-        // Pre-select active class if available and nothing is currently selected
         const classSelect = document.getElementById('class-select');
         if (classSelect && !classSelect.value && classSelect.options.length > 0) {
              classSelect.selectedIndex = 0;
              state.selectedClass = classSelect.value;
         }
-        // Force update state on change
         if (classSelect) {
             classSelect.addEventListener('change', (e) => {
                 state.selectedClass = e.target.value;
@@ -382,19 +368,17 @@ async function renderMultiRoleHomeScreen() {
     const isSuperAdmin = primaryRole === 'SUPER_ADMIN';
     const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole);
 
-    // Event listeners for action cards
     document.getElementById('go-to-attendance-btn')?.addEventListener('click', async () => {
         if (isSuperAdmin) {
             const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Absensi');
             if (selectedSchool) {
                 showLoader('Memuat data sekolah...');
                 try {
-                    // Fetch existing class/student data for the selected school
                     const { aggregatedStudentsByClass } = await apiService.getSchoolStudentData(selectedSchool.id);
                     await setState({ 
                         adminActingAsSchool: selectedSchool, 
                         adminActingAsJurisdiction: null,
-                        studentsByClass: aggregatedStudentsByClass || {}, // Populate this so Active Classes works
+                        studentsByClass: aggregatedStudentsByClass || {}, 
                         dashboard: { 
                             ...state.dashboard, 
                             data: null, 
@@ -414,14 +398,12 @@ async function renderMultiRoleHomeScreen() {
         }
     });
 
-    // Dashboard button for non-Super Admin roles
     document.getElementById('view-dashboard-btn')?.addEventListener('click', async () => {
         await setState({ dashboard: { ...state.dashboard, activeView: 'report' } });
         navigateTo('dashboard');
         dashboardPoller();
     });
 
-    // Super Admin: School-context dashboard button
     document.getElementById('view-school-dashboard-btn')?.addEventListener('click', async () => {
         const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Dasbor');
         if (selectedSchool) {
@@ -441,7 +423,6 @@ async function renderMultiRoleHomeScreen() {
         }
     });
 
-    // Super Admin: Jurisdiction-context dashboard button
     document.getElementById('view-jurisdiction-dashboard-btn')?.addEventListener('click', async () => {
         const selectedJurisdiction = await showJurisdictionSelectorModal('Pilih Yurisdiksi untuk Dasbor');
         if (selectedJurisdiction) {
@@ -461,16 +442,14 @@ async function renderMultiRoleHomeScreen() {
         }
     });
     
-    // Scoped Report Download Button (for non-Super Admins)
     document.getElementById('download-scoped-report-btn')?.addEventListener('click', () => {
         if (isDinas) {
             handleDownloadJurisdictionReport(state.userProfile.jurisdiction_id, state.userProfile.jurisdiction_name);
-        } else { // Kepala Sekolah, Admin Sekolah
+        } else { 
             handleDownloadFullSchoolReport();
         }
     });
 
-    // Super Admin Report Download Buttons
     document.getElementById('download-school-report-btn')?.addEventListener('click', async () => {
         const school = await showSchoolSelectorModal('Pilih Sekolah untuk Laporan');
         if (school) {
@@ -612,11 +591,8 @@ function calculatePercentageData(logs, viewMode, filterValue, schoolInfo, select
 
     let percentageDenominator = 0;
     if (viewMode === 'daily') {
-        // For a single day, the denominator is always the total number of students in scope.
         percentageDenominator = numStudentsInScope;
     } else {
-        // For ranges, it's students * days where at least one report was filed.
-        // This is an approximation, but the best we can do without knowing all school days.
         const uniqueSchoolDays = new Set(relevantLogs.map(log => log.date)).size;
         percentageDenominator = uniqueSchoolDays * numStudentsInScope;
     }
@@ -631,7 +607,6 @@ function calculatePercentageData(logs, viewMode, filterValue, schoolInfo, select
     };
 }
 
-// --- NEW: Completely refactored function to handle both regional and school views ---
 function updateDashboardContent(data) {
     const { activeView, selectedDate, aiRecommendation, chartViewMode, chartClassFilter, chartSchoolFilter } = state.dashboard;
     
@@ -688,9 +663,7 @@ function updateDashboardContent(data) {
         return;
     }
 
-    // Render Report View
     if (activeView === 'report' && data.schoolInfo && data.allLogsForYear) {
-        // --- NEW: Calculate summary stats on the frontend for consistency ---
         const dailyStats = calculatePercentageData(data.allLogsForYear, 'daily', 'all', data.schoolInfo, selectedDate, isRegionalView);
         const summaryStats = {
             totalStudents: data.schoolInfo.totalStudents || 0,
@@ -699,7 +672,6 @@ function updateDashboardContent(data) {
             I: dailyStats.finalCounts.I,
             A: dailyStats.finalCounts.A,
         };
-        // --- END of new logic ---
 
         const summaryStatsHtml = `<div id="dashboard-summary-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">${Object.entries({'Total Siswa':{count:summaryStats.totalStudents,color:'slate'},Hadir:{count:summaryStats.totalPresent,color:'green'},Sakit:{count:summaryStats.S,color:'yellow'},Izin:{count:summaryStats.I,color:'blue'},Alpa:{count:summaryStats.A,color:'red'}}).map(([label,{count,color}])=>`<div class="bg-${color}-100 p-4 rounded-xl text-center"><p class="text-sm font-semibold text-${color}-700">${label}</p><p class="text-3xl font-bold text-${color}-800">${count}</p></div>`).join('')}</div>`;
         
@@ -727,7 +699,6 @@ function updateDashboardContent(data) {
         reportContent.innerHTML = summaryStatsHtml + detailedReportHtml;
     }
 
-    // Render Percentage View
     if (activeView === 'percentage' && data.allLogsForYear && data.schoolInfo) {
         const filterValue = isRegionalView ? chartSchoolFilter : chartClassFilter;
         const { finalCounts, percentageDenominator } = calculatePercentageData(data.allLogsForYear, chartViewMode, filterValue, data.schoolInfo, selectedDate, isRegionalView);
@@ -758,7 +729,7 @@ function updateDashboardContent(data) {
             { label: 'Sakit', value: finalCounts.S, color: '#fbbf24' },
             { label: 'Izin', value: finalCounts.I, color: '#3b82f6' },
             { label: 'Alpa', value: finalCounts.A, color: '#ef4444' },
-            { label: 'Belum Diisi', value: finalCounts.Unreported, color: '#94a3b8' } // slate-400
+            { label: 'Belum Diisi', value: finalCounts.Unreported, color: '#94a3b8' } 
         ];
         const chartCanvas = document.getElementById('dashboard-pie-chart');
         if (window.dashboardPieChart instanceof Chart) window.dashboardPieChart.destroy();
@@ -769,7 +740,7 @@ function updateDashboardContent(data) {
             chartCanvas.style.display = 'block';
             document.getElementById('chart-no-data').classList.add('hidden');
             document.getElementById('custom-legend-container').innerHTML = chartData.map(item => {
-                if (item.value === 0) return ''; // Do not show legend item if its value is 0
+                if (item.value === 0) return ''; 
                 const percentage = percentageDenominator > 0 ? ((item.value / percentageDenominator) * 100).toFixed(2) : '0.00';
                 return `<div class="flex items-center justify-between p-3 rounded-lg"><div class="flex items-center gap-3"><span class="w-4 h-4 rounded-full" style="background-color: ${item.color};"></span><span class="font-semibold text-slate-700">${item.label}</span></div><div class="text-right"><span class="font-bold text-slate-800">${item.value}</span><span class="text-sm text-slate-500 ml-2">(${percentage}%)</span></div></div>`;
             }).join('');
@@ -794,7 +765,6 @@ function updateDashboardContent(data) {
         }
     }
 
-    // Render AI View
     if (activeView === 'ai') {
         const { isLoading: isAiLoading, result, error, selectedRange } = aiRecommendation;
         const aiRanges = [{id:'last30days',text:'30 Hari Terakhir'},{id:'semester',text:'Semester Ini'},{id:'year',text:'Tahun Ajaran Ini'}];
@@ -1013,7 +983,6 @@ async function renderDashboardScreen() {
         });
     });
     
-    // Attach listeners for the new custom date picker
     attachDatePickerListeners();
 }
 
@@ -1022,7 +991,7 @@ async function dashboardPoller() {
     if (state.currentScreen !== 'dashboard') return;
     if (state.dashboard.polling.timeoutId) clearTimeout(state.dashboard.polling.timeoutId);
 
-    let nextInterval = getNextInterval(state.dashboard.polling.interval); // Default to backoff
+    let nextInterval = getNextInterval(state.dashboard.polling.interval); 
 
     try {
         let schoolId = null;
@@ -1042,7 +1011,7 @@ async function dashboardPoller() {
         if (JSON.stringify(dashboardData) !== JSON.stringify(state.dashboard.data) || state.dashboard.isLoading) {
             await setState({ dashboard: { ...state.dashboard, data: dashboardData, isLoading: false } });
             updateDashboardContent(dashboardData);
-            nextInterval = INITIAL_POLLING_INTERVAL; // Reset interval on change or initial load
+            nextInterval = INITIAL_POLLING_INTERVAL; 
         }
 
     } catch (error) {
@@ -1187,7 +1156,6 @@ async function adminPanelPoller() {
     }
     
     const newTimeoutId = setTimeout(adminPanelPoller, nextInterval);
-    // Use direct mutation for simplicity, as this is an internal state of the poller loop.
     state.adminPanel.polling.timeoutId = newTimeoutId;
     state.adminPanel.polling.interval = nextInterval;
 }
@@ -1356,26 +1324,21 @@ function filterAndRenderHistory(container) {
     const { allHistoryLogs, dataScreenFilters, historyClassFilter } = state;
     const { studentName, status, startDate, endDate } = dataScreenFilters;
     
-    // 1. Calculate and Render Missing Days (If filtering by a class)
-    // Only attempt this if we have a specific class context to check against.
     if (historyClassFilter) {
         const today = new Date();
         today.setHours(0,0,0,0);
         
-        // Ensure dates are treated as local time to avoid UTC shifts
         let startD;
         if (startDate) {
             startD = new Date(startDate + 'T00:00:00');
         } else {
-            startD = new Date(today.getFullYear(), today.getMonth(), 1); // Default 1st of month
+            startD = new Date(today.getFullYear(), today.getMonth(), 1); 
         }
 
         const endD = endDate ? new Date(endDate + 'T00:00:00') : new Date(today);
         
-        // Ensure start doesn't exceed end
         if (startD > endD) startD = new Date(endD);
 
-        // Find existing log dates for this class
         const existingDates = new Set(allHistoryLogs
             .filter(log => log.class === historyClassFilter)
             .map(log => log.date)
@@ -1384,12 +1347,9 @@ function filterAndRenderHistory(container) {
         const missingDates = [];
         const currentPtr = new Date(startD);
         
-        // Iterate through dates
         while (currentPtr <= endD) {
             const dayOfWeek = currentPtr.getDay();
-            // 0 = Sunday, 6 = Saturday. We assume school days are Mon-Fri (1-5).
             if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                // FIX: Use local date components to construct the string, avoiding toISOString() UTC shifts
                 const year = currentPtr.getFullYear();
                 const month = String(currentPtr.getMonth() + 1).padStart(2, '0');
                 const day = String(currentPtr.getDate()).padStart(2, '0');
@@ -1402,9 +1362,7 @@ function filterAndRenderHistory(container) {
             currentPtr.setDate(currentPtr.getDate() + 1);
         }
 
-        // Render Missing Section
         if (missingDates.length > 0) {
-            // Sort descending (newest missing first)
             missingDates.sort((a, b) => b.localeCompare(a));
             
             const missingHtml = `
@@ -1435,19 +1393,16 @@ function filterAndRenderHistory(container) {
             missingContainer.innerHTML = missingHtml;
             container.appendChild(missingContainer);
             
-            // Attach event listeners for "Isi Sekarang"
             missingContainer.querySelectorAll('.fill-missing-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const cls = e.target.dataset.class;
                     const dte = e.target.dataset.date;
-                    // Directly call handleStartAttendance with overrides
                     handleStartAttendance(cls, dte);
                 });
             });
         }
     }
 
-    // 2. Filter existing logs based on filters
     let filteredByDate = allHistoryLogs;
     if (startDate) {
         filteredByDate = filteredByDate.filter(log => log.date >= startDate);
@@ -1456,7 +1411,6 @@ function filterAndRenderHistory(container) {
         filteredByDate = filteredByDate.filter(log => log.date <= endDate);
     }
     
-    // 3. Process the remaining logs to find matching absences
     const logsByDate = {};
     filteredByDate.forEach(log => {
         const filteredAbsences = Object.entries(log.attendance)
@@ -1467,9 +1421,6 @@ function filterAndRenderHistory(container) {
             })
             .map(([name, stts]) => ({ name, status: stts }));
 
-        // Show the log entry if there are filtered absences OR if no filters are applied (showing the fact that attendance was taken)
-        // Adjust logic: If searching for specific student/status, only show matches.
-        // If filters are empty (default view), show everything.
         const hasFilters = studentName || (status !== 'all');
         
         if (!hasFilters || filteredAbsences.length > 0) {
@@ -1479,14 +1430,12 @@ function filterAndRenderHistory(container) {
             logsByDate[log.date].push({
                 ...log,
                 filteredAbsences,
-                // If checking specific student, use filtered list. Otherwise show all absent students for context in summary view
                 displayAbsences: hasFilters ? filteredAbsences : Object.entries(log.attendance).filter(([_, s]) => s !== 'H').map(([n, s]) => ({name: n, status: s}))
             });
         }
     });
 
-    // 4. Render the results
-    const sortedDates = Object.keys(logsByDate).sort((a, b) => b.localeCompare(a)); // Newest first
+    const sortedDates = Object.keys(logsByDate).sort((a, b) => b.localeCompare(a));
 
     if (sortedDates.length === 0) {
         const noDataMsg = document.createElement('p');
@@ -1532,7 +1481,6 @@ async function renderDataScreen() {
     const startDateInput = document.getElementById('filter-start-date');
     const endDateInput = document.getElementById('filter-end-date');
 
-    // Restore filter values from state
     studentNameInput.value = state.dataScreenFilters.studentName;
     statusSelect.value = state.dataScreenFilters.status;
     startDateInput.value = state.dataScreenFilters.startDate;
@@ -1552,8 +1500,8 @@ async function renderDataScreen() {
             });
 
             await setState({ allHistoryLogs: allLogs });
-            container.innerHTML = ''; // Clear loading message
-            filterAndRenderHistory(container); // Initial render with fetched data
+            container.innerHTML = '';
+            filterAndRenderHistory(container); 
             
         } catch (error) {
             container.innerHTML = `<p class="text-center text-red-500">Gagal memuat data: ${error.message}</p>`;
@@ -1569,8 +1517,8 @@ async function renderDataScreen() {
                 endDate: endDateInput.value 
             } 
         });
-        container.innerHTML = ''; // Clear previous results
-        filterAndRenderHistory(container); // Re-render with new filters on existing data
+        container.innerHTML = ''; 
+        filterAndRenderHistory(container); 
     };
     
     let debounceTimer;
@@ -1592,10 +1540,84 @@ async function renderDataScreen() {
     fetchDataAndRender();
 }
 
+// --- RECAP FUNCTIONALITY REFACTORED FOR SEMESTER HANDLING ---
+
+function generateSemesterOptions() {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0-11
+    
+    let options = [];
+    
+    // Logic: Provide current year, last year, and next year
+    // Years to generate: Y-1, Y, Y+1
+    for (let y = currentYear + 1; y >= currentYear - 1; y--) {
+        options.push({ value: `${y}-2`, label: `Semester Genap (Jan - Jun ${y})` });
+        options.push({ value: `${y}-1`, label: `Semester Ganjil (Jul - Des ${y})` });
+    }
+    
+    return options;
+}
+
+function getDatesFromPeriod(periodKey) {
+    if (!periodKey) {
+        // Default to current semester
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = today.getMonth();
+        return m >= 6 
+            ? { startDate: `${y}-07-01`, endDate: `${y}-12-31` } // Sem 1
+            : { startDate: `${y}-01-01`, endDate: `${y}-06-30` }; // Sem 2
+    }
+    
+    const [year, sem] = periodKey.split('-').map(Number);
+    if (sem === 1) {
+        return { startDate: `${year}-07-01`, endDate: `${year}-12-31` };
+    } else {
+        return { startDate: `${year}-01-01`, endDate: `${year}-06-30` };
+    }
+}
+
+function getCurrentSemesterKey() {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = today.getMonth();
+    return m >= 6 ? `${y}-1` : `${y}-2`;
+}
 
 async function renderRecapScreen() {
     appContainer.innerHTML = templates.recap();
     const container = document.getElementById('recap-container');
+    
+    // Setup Dropdown for Semester/Period
+    const periodSelectContainer = document.createElement('div');
+    periodSelectContainer.className = "mb-4 flex justify-end";
+    
+    const periodOptions = generateSemesterOptions();
+    // Default state.recapPeriod if not set
+    if (!state.recapPeriod) {
+        state.recapPeriod = getCurrentSemesterKey();
+    }
+
+    periodSelectContainer.innerHTML = `
+        <div class="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-300">
+            <span class="text-sm font-medium text-slate-600">Periode:</span>
+            <select id="recap-period-select" class="text-sm border-none focus:ring-0 text-slate-700 font-semibold bg-transparent cursor-pointer">
+                ${periodOptions.map(opt => `<option value="${opt.value}" ${state.recapPeriod === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}
+            </select>
+        </div>
+    `;
+    
+    // Insert dropdown into the header (find the flex container)
+    const headerContainer = document.querySelector('.screen .flex-col.md\\:flex-row');
+    if (headerContainer) {
+        // Find existing button group to append next to it, or just append to header
+        const btnGroup = headerContainer.querySelector('.flex.gap-2');
+        if (btnGroup) {
+            btnGroup.parentElement.insertBefore(periodSelectContainer, btnGroup);
+        }
+    }
+
     container.innerHTML = `<p class="text-center text-slate-500">Memuat rekapitulasi...</p>`;
 
     try {
@@ -1603,13 +1625,15 @@ async function renderRecapScreen() {
         const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole);
         const classFilter = (state.userProfile.primaryRole === 'GURU' || isAdmin) ? state.selectedClass : null;
         
-        // Destructure 'recapData' and 'reportType' from the API response
-        // The previous code destructured 'recapArray' which caused the issue when the API returned an object.
-        const { recapData, reportType } = await apiService.getRecapData({ schoolId, classFilter });
+        const { startDate, endDate } = getDatesFromPeriod(state.recapPeriod);
 
-        // Flatten logic: Ensure we have a flat array to render in the table.
-        // If it's a regional/school report (object of arrays), flatten it.
-        // If it's a class report (array), use it directly.
+        const { recapData, reportType } = await apiService.getRecapData({ 
+            schoolId, 
+            classFilter,
+            startDate,
+            endDate
+        });
+
         let rowsToRender = [];
         if (Array.isArray(recapData)) {
             rowsToRender = recapData;
@@ -1618,20 +1642,19 @@ async function renderRecapScreen() {
         }
 
         if (!rowsToRender || rowsToRender.length === 0) {
-            container.innerHTML = `<p class="text-center text-slate-500">Belum ada data untuk direkap.</p>`;
-            return;
+            container.innerHTML = `<p class="text-center text-slate-500 py-8">Belum ada data untuk periode ini.</p>`;
+        } else {
+            rowsToRender.sort((a, b) => {
+                if (state.recapSortOrder === 'total') return b.total - a.total || a.name.localeCompare(b.name);
+                return a.class.localeCompare(b.class) || a.originalIndex - b.originalIndex;
+            });
+
+            container.innerHTML = `<table class="w-full text-left">
+                <thead><tr class="border-b bg-slate-50"><th class="p-3 text-sm font-semibold text-slate-600">No.</th><th class="p-3 text-sm font-semibold text-slate-600">Nama Siswa</th><th class="p-3 text-sm font-semibold text-slate-600">Kelas</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Sakit</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Izin</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Alfa</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Total</th></tr></thead>
+                <tbody>${rowsToRender.map((item, index) => `<tr class="border-b hover:bg-slate-50">
+                    <td class="p-3 text-sm text-slate-500">${index + 1}</td><td class="p-3 font-medium text-slate-800">${encodeHTML(item.name)}</td><td class="p-3 text-sm text-slate-500">${encodeHTML(item.class)}</td><td class="p-3 text-sm text-center">${item.S}</td><td class="p-3 text-sm text-center">${item.I}</td><td class="p-3 text-sm text-center">${item.A}</td><td class="p-3 text-sm font-bold text-center">${item.total}</td>
+                </tr>`).join('')}</tbody></table>`;
         }
-
-        rowsToRender.sort((a, b) => {
-            if (state.recapSortOrder === 'total') return b.total - a.total || a.name.localeCompare(b.name);
-            return a.class.localeCompare(b.class) || a.originalIndex - b.originalIndex;
-        });
-
-        container.innerHTML = `<table class="w-full text-left">
-            <thead><tr class="border-b bg-slate-50"><th class="p-3 text-sm font-semibold text-slate-600">No.</th><th class="p-3 text-sm font-semibold text-slate-600">Nama Siswa</th><th class="p-3 text-sm font-semibold text-slate-600">Kelas</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Sakit</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Izin</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Alfa</th><th class="p-3 text-sm font-semibold text-slate-600 text-center">Total</th></tr></thead>
-            <tbody>${rowsToRender.map((item, index) => `<tr class="border-b hover:bg-slate-50">
-                <td class="p-3 text-sm text-slate-500">${index + 1}</td><td class="p-3 font-medium text-slate-800">${encodeHTML(item.name)}</td><td class="p-3 text-sm text-slate-500">${encodeHTML(item.class)}</td><td class="p-3 text-sm text-center">${item.S}</td><td class="p-3 text-sm text-center">${item.I}</td><td class="p-3 text-sm text-center">${item.A}</td><td class="p-3 text-sm font-bold text-center">${item.total}</td>
-            </tr>`).join('')}</tbody></table>`;
 
     } catch (error) {
         container.innerHTML = `<p class="text-center text-red-500">Gagal memuat rekap: ${error.message}</p>`;
@@ -1639,6 +1662,15 @@ async function renderRecapScreen() {
         document.getElementById('recap-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
         document.getElementById('sort-by-total-btn').addEventListener('click', () => { setState({ recapSortOrder: 'total' }); renderRecapScreen(); });
         document.getElementById('sort-by-absen-btn').addEventListener('click', () => { setState({ recapSortOrder: 'absen' }); renderRecapScreen(); });
+        
+        // Attach listener for Period Select
+        const periodSelect = document.getElementById('recap-period-select');
+        if (periodSelect) {
+            periodSelect.addEventListener('change', async (e) => {
+                await setState({ recapPeriod: e.target.value });
+                renderRecapScreen(); // Re-render to fetch new data
+            });
+        }
     }
 }
 
@@ -1648,12 +1680,12 @@ async function renderJurisdictionPanelScreen() {
     
     const treeContainer = document.getElementById('jurisdiction-tree-container');
     const detailsContainer = document.getElementById('jurisdiction-details-container');
-    let jurisdictions = []; // Will store the full tree for modals
+    let jurisdictions = []; 
 
     const fetchAndRenderTree = async () => {
         try {
             const { tree } = await apiService.getJurisdictionTree();
-            jurisdictions = tree; // Save for later use in modals
+            jurisdictions = tree; 
 
             const renderTree = (nodes, level = 0) => {
                 if (nodes.length === 0 && level === 0) {
@@ -1694,9 +1726,9 @@ async function renderJurisdictionPanelScreen() {
 
             showLoader('Menyimpan...');
             try {
-                if (jurisdiction) { // Editing
+                if (jurisdiction) { 
                     await apiService.updateJurisdiction(jurisdiction.id, name, type, parentId);
-                } else { // Creating
+                } else { 
                     await apiService.createJurisdiction(name, type, parentId);
                 }
                 showNotification('Yurisdiksi berhasil disimpan.');
@@ -1776,7 +1808,7 @@ async function renderJurisdictionPanelScreen() {
                      try {
                         await apiService.assignSchoolToJurisdiction(schoolId, targetJurId);
                         modalContainer.remove();
-                        nodeEl.click(); // Re-click to refresh details
+                        nodeEl.click(); 
                      } catch(err) {
                         showNotification(err.message, 'error');
                      } finally {
@@ -1798,7 +1830,7 @@ async function renderJurisdictionPanelScreen() {
 }
 
 async function renderParentDashboardScreen() {
-    appContainer.innerHTML = templates.parentDashboard(); // Renders loading state initially
+    appContainer.innerHTML = templates.parentDashboard(); 
     
     const { isLoading } = state.parentDashboard;
 
@@ -1806,15 +1838,14 @@ async function renderParentDashboardScreen() {
         try {
             const { parentData } = await apiService.getParentData();
             await setState({ parentDashboard: { isLoading: false, data: parentData } });
-            renderScreen('parentDashboard'); // Re-render with the fetched data
+            renderScreen('parentDashboard'); 
         } catch (error) {
             console.error("Failed to load parent data:", error);
             showNotification(error.message, 'error');
-            await setState({ parentDashboard: { isLoading: false, data: [] } }); // Set to empty array on error
+            await setState({ parentDashboard: { isLoading: false, data: [] } }); 
             renderScreen('parentDashboard');
         }
     } else {
-        // Data is loaded, just attach event listeners
         document.getElementById('parent-dashboard-back-btn')?.addEventListener('click', () => navigateTo('multiRoleHome'));
     }
 }
@@ -1843,11 +1874,11 @@ export function renderScreen(screen) {
         'success': () => {
              appContainer.innerHTML = templates.success();
              document.getElementById('success-back-to-start-btn').addEventListener('click', () => {
-                 setState({ lastSaveContext: null }); // Clear context before navigating
+                 setState({ lastSaveContext: null }); 
                  navigateTo('setup');
              });
              document.getElementById('success-view-data-btn').addEventListener('click', () => {
-                 setState({ lastSaveContext: null }); // Clear context before navigating
+                 setState({ lastSaveContext: null }); 
                  handleViewHistory(false);
              });
         },
@@ -1858,8 +1889,6 @@ export function renderScreen(screen) {
     (screenRenderers[screen] || renderLandingPageScreen)();
     hideLoader();
 }
-
-// --- NEW: Centralized polling control functions ---
 
 export function stopAllPollers() {
     if (state.dashboard.polling.timeoutId) {
@@ -1880,13 +1909,12 @@ export function stopAllPollers() {
 }
 
 export function resumePollingForCurrentScreen() {
-    if (!state.userProfile) return; // Don't poll if not logged in
+    if (!state.userProfile) return; 
 
     console.log(`Page is visible again. Resuming polling for screen: ${state.currentScreen}`);
     
     switch (state.currentScreen) {
         case 'dashboard':
-            // Reset interval to the fastest and start the poller immediately
             setState({ dashboard: { ...state.dashboard, polling: { ...state.dashboard.polling, interval: INITIAL_POLLING_INTERVAL } } });
             dashboardPoller();
             break;
@@ -1901,7 +1929,6 @@ export function resumePollingForCurrentScreen() {
              }
             break;
         default:
-            // No polling on other screens
             break;
     }
 }
