@@ -1,12 +1,13 @@
 
 
-import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, CLASSES, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport } from './main.js';
+
+import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport } from './main.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignOut, renderSignInButton } from './auth.js';
 import { apiService } from './api.js';
 
 const appContainer = document.getElementById('app-container');
-const loaderWrapper = document.getElementById('loader-wrapper');
+// Don't cache loaderWrapper here to ensure it's found even if DOM updates strangely, though ID should be stable.
 const notificationEl = document.getElementById('notification');
 const offlineIndicator = document.getElementById('offline-indicator');
 
@@ -28,24 +29,35 @@ function getNextInterval(currentInterval) {
 
 
 export function showLoader(message) {
-    loaderWrapper.querySelector('.loader-text').textContent = message;
-    loaderWrapper.style.display = 'flex';
-    setTimeout(() => loaderWrapper.style.opacity = '1', 10);
+    const loaderWrapper = document.getElementById('loader-wrapper');
+    if (loaderWrapper) {
+        const textEl = loaderWrapper.querySelector('.loader-text');
+        if (textEl) textEl.textContent = message;
+        loaderWrapper.style.display = 'flex';
+        setTimeout(() => loaderWrapper.style.opacity = '1', 10);
+    }
 }
 
 export function updateLoaderText(message) {
-    const loaderText = loaderWrapper.querySelector('.loader-text');
-    if (loaderText) {
-        loaderText.textContent = message;
+    const loaderWrapper = document.getElementById('loader-wrapper');
+    if (loaderWrapper) {
+        const loaderText = loaderWrapper.querySelector('.loader-text');
+        if (loaderText) {
+            loaderText.textContent = message;
+        }
     }
 }
 
 export function hideLoader() {
-    loaderWrapper.style.opacity = '0';
-    setTimeout(() => {
-        loaderWrapper.style.display = 'none';
-        loaderWrapper.querySelector('.loader-text').textContent = 'Memuat...';
-    }, 300);
+    const loaderWrapper = document.getElementById('loader-wrapper');
+    if (loaderWrapper) {
+        loaderWrapper.style.opacity = '0';
+        setTimeout(() => {
+            loaderWrapper.style.display = 'none';
+            const textEl = loaderWrapper.querySelector('.loader-text');
+            if(textEl) textEl.textContent = 'Memuat...';
+        }, 300);
+    }
 }
 
 export function showNotification(message, type = 'success') {
@@ -338,14 +350,24 @@ function renderSetupScreen() {
     }
     
     if (!needsAssignment) {
-        document.getElementById('startBtn').addEventListener('click', handleStartAttendance);
+        document.getElementById('startBtn').addEventListener('click', () => handleStartAttendance());
         document.getElementById('historyBtn').addEventListener('click', () => handleViewHistory(true));
         document.getElementById('recapBtn').addEventListener('click', handleViewRecap);
         document.getElementById('manageStudentsBtn').addEventListener('click', handleManageStudents);
         document.getElementById('downloadDataBtn').addEventListener('click', handleDownloadData);
 
-        const availableClasses = isAdmin ? CLASSES : (state.userProfile?.assigned_classes || []);
-        document.getElementById('class-select').value = state.selectedClass || availableClasses[0] || '';
+        // Pre-select active class if available and nothing is currently selected
+        const classSelect = document.getElementById('class-select');
+        if (classSelect && !classSelect.value && classSelect.options.length > 0) {
+             classSelect.selectedIndex = 0;
+             state.selectedClass = classSelect.value;
+        }
+        // Force update state on change
+        if (classSelect) {
+            classSelect.addEventListener('change', (e) => {
+                state.selectedClass = e.target.value;
+            });
+        }
     }
     
     if (isTeacher) {
@@ -367,18 +389,27 @@ async function renderMultiRoleHomeScreen() {
         if (isSuperAdmin) {
             const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Absensi');
             if (selectedSchool) {
-                // --- FIX: Ensure dashboard context is reset when entering a new context ---
-                await setState({ 
-                    adminActingAsSchool: selectedSchool, 
-                    adminActingAsJurisdiction: null,
-                    dashboard: { 
-                        ...state.dashboard, 
-                        data: null, 
-                        isLoading: true,
-                        aiRecommendation: { isLoading: false, result: null, error: null, selectedRange: 'last30days' }
-                    }  
-                });
-                navigateTo('setup');
+                showLoader('Memuat data sekolah...');
+                try {
+                    // Fetch existing class/student data for the selected school
+                    const { aggregatedStudentsByClass } = await apiService.getSchoolStudentData(selectedSchool.id);
+                    await setState({ 
+                        adminActingAsSchool: selectedSchool, 
+                        adminActingAsJurisdiction: null,
+                        studentsByClass: aggregatedStudentsByClass || {}, // Populate this so Active Classes works
+                        dashboard: { 
+                            ...state.dashboard, 
+                            data: null, 
+                            isLoading: true,
+                            aiRecommendation: { isLoading: false, result: null, error: null, selectedRange: 'last30days' }
+                        }  
+                    });
+                    hideLoader();
+                    navigateTo('setup');
+                } catch (error) {
+                    hideLoader();
+                    showNotification('Gagal memuat data sekolah: ' + error.message, 'error');
+                }
             }
         } else {
             navigateTo('setup');
@@ -1324,10 +1355,89 @@ function renderAttendanceScreen() {
 
 
 function filterAndRenderHistory(container) {
-    const { allHistoryLogs, dataScreenFilters } = state;
+    const { allHistoryLogs, dataScreenFilters, historyClassFilter } = state;
     const { studentName, status, startDate, endDate } = dataScreenFilters;
     
-    // 1. Filter logs based on date range
+    // 1. Calculate and Render Missing Days (If filtering by a class)
+    // Only attempt this if we have a specific class context to check against.
+    if (historyClassFilter) {
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        
+        let startD = startDate ? new Date(startDate) : new Date(today.getFullYear(), today.getMonth(), 1); // Default 1st of month
+        const endD = endDate ? new Date(endDate) : new Date(today);
+        
+        // Ensure start doesn't exceed end
+        if (startD > endD) startD = new Date(endD);
+
+        // Find existing log dates for this class
+        const existingDates = new Set(allHistoryLogs
+            .filter(log => log.class === historyClassFilter)
+            .map(log => log.date)
+        );
+
+        const missingDates = [];
+        const currentPtr = new Date(startD);
+        
+        // Iterate through dates
+        while (currentPtr <= endD) {
+            const dayOfWeek = currentPtr.getDay();
+            // 0 = Sunday, 6 = Saturday. We assume school days are Mon-Fri (1-5).
+            if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                const dateStr = currentPtr.toISOString().split('T')[0];
+                if (!existingDates.has(dateStr)) {
+                    missingDates.push(dateStr);
+                }
+            }
+            currentPtr.setDate(currentPtr.getDate() + 1);
+        }
+
+        // Render Missing Section
+        if (missingDates.length > 0) {
+            // Sort descending (newest missing first)
+            missingDates.sort((a, b) => b.localeCompare(a));
+            
+            const missingHtml = `
+                <div id="missing-attendance-alert" class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                    <h3 class="font-bold text-red-800 mb-2 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                        Hari Belum Absensi (${missingDates.length})
+                    </h3>
+                    <p class="text-sm text-red-600 mb-3">Anda belum mengisi absensi untuk kelas <strong>${encodeHTML(historyClassFilter)}</strong> pada tanggal-tanggal hari kerja berikut:</p>
+                    <div class="space-y-2 max-h-48 overflow-y-auto pr-2">
+                        ${missingDates.map(date => {
+                            const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                            return `
+                                <div class="flex items-center justify-between bg-white p-3 rounded border border-red-100 shadow-sm">
+                                    <span class="text-sm font-medium text-slate-700">${formattedDate}</span>
+                                    <button class="fill-missing-btn bg-red-100 hover:bg-red-200 text-red-700 text-xs font-bold py-1 px-3 rounded transition" data-date="${date}" data-class="${historyClassFilter}">
+                                        Isi Sekarang
+                                    </button>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+            const missingContainer = document.createElement('div');
+            missingContainer.innerHTML = missingHtml;
+            container.appendChild(missingContainer);
+            
+            // Attach event listeners for "Isi Sekarang"
+            missingContainer.querySelectorAll('.fill-missing-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const cls = e.target.dataset.class;
+                    const dte = e.target.dataset.date;
+                    // Directly call handleStartAttendance with overrides
+                    handleStartAttendance(cls, dte);
+                });
+            });
+        }
+    }
+
+    // 2. Filter existing logs based on filters
     let filteredByDate = allHistoryLogs;
     if (startDate) {
         filteredByDate = filteredByDate.filter(log => log.date >= startDate);
@@ -1336,7 +1446,7 @@ function filterAndRenderHistory(container) {
         filteredByDate = filteredByDate.filter(log => log.date <= endDate);
     }
     
-    // 2. Process the remaining logs to find matching absences
+    // 3. Process the remaining logs to find matching absences
     const logsByDate = {};
     filteredByDate.forEach(log => {
         const filteredAbsences = Object.entries(log.attendance)
@@ -1347,36 +1457,58 @@ function filterAndRenderHistory(container) {
             })
             .map(([name, stts]) => ({ name, status: stts }));
 
-        if (filteredAbsences.length > 0) {
+        // Show the log entry if there are filtered absences OR if no filters are applied (showing the fact that attendance was taken)
+        // Adjust logic: If searching for specific student/status, only show matches.
+        // If filters are empty (default view), show everything.
+        const hasFilters = studentName || (status !== 'all');
+        
+        if (!hasFilters || filteredAbsences.length > 0) {
             if (!logsByDate[log.date]) {
                 logsByDate[log.date] = [];
             }
             logsByDate[log.date].push({
                 ...log,
                 filteredAbsences,
+                // If checking specific student, use filtered list. Otherwise show all absent students for context in summary view
+                displayAbsences: hasFilters ? filteredAbsences : Object.entries(log.attendance).filter(([_, s]) => s !== 'H').map(([n, s]) => ({name: n, status: s}))
             });
         }
     });
 
-    // 3. Render the results
-    const sortedDates = Object.keys(logsByDate).sort((a, b) => b.localeCompare(a));
+    // 4. Render the results
+    const sortedDates = Object.keys(logsByDate).sort((a, b) => b.localeCompare(a)); // Newest first
 
     if (sortedDates.length === 0) {
-        container.innerHTML = `<p class="text-center text-slate-500">Tidak ada riwayat absensi yang cocok dengan filter.</p>`;
+        const noDataMsg = document.createElement('p');
+        noDataMsg.className = "text-center text-slate-500 mt-4";
+        noDataMsg.textContent = "Tidak ada riwayat absensi yang cocok dengan filter.";
+        container.appendChild(noDataMsg);
         return;
     }
 
-    container.innerHTML = sortedDates.map(date => {
+    const historyContentHtml = sortedDates.map(date => {
         const logGroupsForDate = logsByDate[date];
         const displayDate = new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         
         const logsHtml = logGroupsForDate.map(logGroup => {
-            const contentHtml = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead><tbody>${logGroup.filteredAbsences.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${encodeHTML(s.name)}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody></table></div>`;
-            return `<div class="bg-slate-50 p-4 rounded-lg"><div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${encodeHTML(logGroup.class)}</h3>${logGroup.teacherName ? `<p class="text-xs text-slate-400">Oleh: ${encodeHTML(logGroup.teacherName)}</p>` : ''}</div>${contentHtml}</div>`;
+            const hasAbsences = logGroup.displayAbsences && logGroup.displayAbsences.length > 0;
+            
+            let contentHtml;
+            if (hasAbsences) {
+                contentHtml = `<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead><tbody>${logGroup.displayAbsences.map(s => `<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${encodeHTML(s.name)}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status === 'S' ? 'bg-yellow-100 text-yellow-800' : s.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody></table></div>`;
+            } else {
+                contentHtml = `<p class="text-sm text-green-600 flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg> Semua siswa hadir.</p>`;
+            }
+
+            return `<div class="bg-slate-50 p-4 rounded-lg shadow-sm border border-slate-100"><div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${encodeHTML(logGroup.class)}</h3>${logGroup.teacherName ? `<p class="text-xs text-slate-400">Oleh: ${encodeHTML(logGroup.teacherName)}</p>` : ''}</div>${contentHtml}</div>`;
         }).join('');
 
-        return `<div><h2 class="text-lg font-semibold text-slate-700 mb-3">${displayDate}</h2><div class="space-y-4">${logsHtml}</div></div>`;
+        return `<div class="mb-6"><h2 class="text-lg font-semibold text-slate-700 mb-3 border-b pb-2">${displayDate}</h2><div class="space-y-4">${logsHtml}</div></div>`;
     }).join('');
+
+    const historyContainer = document.createElement('div');
+    historyContainer.innerHTML = historyContentHtml;
+    container.appendChild(historyContainer);
 }
 
 
@@ -1410,6 +1542,7 @@ async function renderDataScreen() {
             });
 
             await setState({ allHistoryLogs: allLogs });
+            container.innerHTML = ''; // Clear loading message
             filterAndRenderHistory(container); // Initial render with fetched data
             
         } catch (error) {
@@ -1426,6 +1559,7 @@ async function renderDataScreen() {
                 endDate: endDateInput.value 
             } 
         });
+        container.innerHTML = ''; // Clear previous results
         filterAndRenderHistory(container); // Re-render with new filters on existing data
     };
     
