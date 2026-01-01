@@ -1,6 +1,3 @@
-
-
-
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport } from './main.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignOut, renderSignInButton } from './auth.js';
@@ -1364,8 +1361,15 @@ function filterAndRenderHistory(container) {
         const today = new Date();
         today.setHours(0,0,0,0);
         
-        let startD = startDate ? new Date(startDate) : new Date(today.getFullYear(), today.getMonth(), 1); // Default 1st of month
-        const endD = endDate ? new Date(endDate) : new Date(today);
+        // Ensure dates are treated as local time to avoid UTC shifts
+        let startD;
+        if (startDate) {
+            startD = new Date(startDate + 'T00:00:00');
+        } else {
+            startD = new Date(today.getFullYear(), today.getMonth(), 1); // Default 1st of month
+        }
+
+        const endD = endDate ? new Date(endDate + 'T00:00:00') : new Date(today);
         
         // Ensure start doesn't exceed end
         if (startD > endD) startD = new Date(endD);
@@ -1384,7 +1388,12 @@ function filterAndRenderHistory(container) {
             const dayOfWeek = currentPtr.getDay();
             // 0 = Sunday, 6 = Saturday. We assume school days are Mon-Fri (1-5).
             if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                const dateStr = currentPtr.toISOString().split('T')[0];
+                // FIX: Use local date components to construct the string, avoiding toISOString() UTC shifts
+                const year = currentPtr.getFullYear();
+                const month = String(currentPtr.getMonth() + 1).padStart(2, '0');
+                const day = String(currentPtr.getDate()).padStart(2, '0');
+                const dateStr = `${year}-${month}-${day}`;
+
                 if (!existingDates.has(dateStr)) {
                     missingDates.push(dateStr);
                 }
