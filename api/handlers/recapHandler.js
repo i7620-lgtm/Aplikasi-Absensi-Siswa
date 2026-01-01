@@ -81,6 +81,8 @@ export default async function handleGetRecapData({ payload, user, sql, response 
         ),
         attendance_events AS (
             SELECT DISTINCT ON (school_id, payload->>'class', payload->>'date')
+                school_id,
+                payload->>'class' as class_name,
                 payload
             FROM change_log
             WHERE school_id = ANY(${schoolIdsInScope}) AND event_type = 'ATTENDANCE_UPDATED'
@@ -89,33 +91,40 @@ export default async function handleGetRecapData({ payload, user, sql, response 
         ),
         absences AS (
             SELECT
+                ae.school_id,
+                ae.class_name,
                 att.key as name,
                 att.value as status
-            FROM attendance_events
-            CROSS JOIN jsonb_each_text(payload->'attendance') as att
+            FROM attendance_events ae
+            CROSS JOIN jsonb_each_text(ae.payload->'attendance') as att
             WHERE att.value <> 'H'
         ),
         absence_counts AS (
             SELECT
+                school_id,
+                class_name,
                 name,
                 COUNT(*) FILTER (WHERE status = 'S') as "S",
                 COUNT(*) FILTER (WHERE status = 'I') as "I",
                 COUNT(*) FILTER (WHERE status = 'A') as "A"
             FROM absences
-            GROUP BY name
+            GROUP BY school_id, class_name, name
         )
         SELECT
             s_flat.name,
             s_flat.class,
             s_flat."originalIndex",
-            sch.name as school_name,
+            COALESCE(sch.name, 'Unknown School') as school_name,
             COALESCE(ac."S", 0)::int as "S",
             COALESCE(ac."I", 0)::int as "I",
             COALESCE(ac."A", 0)::int as "A",
             (COALESCE(ac."S", 0) + COALESCE(ac."I", 0) + COALESCE(ac."A", 0))::int as total
         FROM students_flat s_flat
-        LEFT JOIN absence_counts ac ON s_flat.name = ac.name
-        JOIN schools sch ON s_flat.school_id = sch.id;
+        LEFT JOIN absence_counts ac 
+            ON s_flat.name = ac.name 
+            AND s_flat.class = ac.class_name 
+            AND s_flat.school_id = ac.school_id
+        LEFT JOIN schools sch ON s_flat.school_id = sch.id;
     `;
 
     const isRegionalReport = !!jurisdictionId;
