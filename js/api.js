@@ -1,3 +1,4 @@
+
 import { state } from './main.js';
 import { idb } from './db.js';
 
@@ -31,12 +32,19 @@ async function _fetch(url, action, payload = {}) {
         }
     }
     
+    // Create an abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+
     try {
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            signal: controller.signal // Attach the signal
         });
+        
+        clearTimeout(timeoutId); // Clear timeout on successful response
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: 'Gagal mem-parsing JSON error dari server.' }));
@@ -51,6 +59,13 @@ async function _fetch(url, action, payload = {}) {
 
         return await response.json();
     } catch (error) {
+        clearTimeout(timeoutId); // Ensure timeout is cleared on error too
+        
+        if (error.name === 'AbortError') {
+            console.error(`API call for action '${action}' timed out.`);
+            throw new Error('Koneksi server terlalu lama (timeout). Silakan periksa internet Anda atau coba lagi nanti.');
+        }
+        
         console.error(`API call for action '${action}' failed:`, error);
         // Rethrow to be handled by the calling function
         throw error;
