@@ -1,5 +1,4 @@
 
-
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
     const { rows } = await sql`
@@ -20,7 +19,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
         return response.status(403).json({ error: 'Forbidden: Access denied' });
     }
 
-    const { schoolId, classFilter: payloadClassFilter, jurisdictionId } = payload;
+    const { schoolId, classFilter: payloadClassFilter, jurisdictionId, startDate, endDate } = payload;
     let schoolIdsInScope = [];
     let classFilter = payloadClassFilter ? payloadClassFilter.trim() : null;
 
@@ -59,6 +58,12 @@ export default async function handleGetRecapData({ payload, user, sql, response 
         return response.status(200).json({ recapData: [], reportType: 'class' });
     }
 
+    // --- Date Filtering Logic ---
+    // If startDate/endDate provided, use them. Otherwise, default to "all time" (no filter),
+    // but in practice, the frontend should now always provide semester dates.
+    // To be safe, we check if they exist.
+    const hasDateFilter = startDate && endDate;
+
     const { rows: recapArray } = await sql`
         WITH
         latest_student_lists AS (
@@ -91,6 +96,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             FROM change_log
             WHERE school_id = ANY(${schoolIdsInScope}) AND event_type = 'ATTENDANCE_UPDATED'
             AND (${classFilter}::text IS NULL OR TRIM(payload->>'class') = ${classFilter}::text)
+            AND (${!hasDateFilter} OR (payload->>'date')::date BETWEEN ${startDate}::date AND ${endDate}::date)
             ORDER BY school_id, TRIM(payload->>'class'), payload->>'date', id DESC
         ),
         absences AS (
