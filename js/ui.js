@@ -1324,6 +1324,13 @@ function filterAndRenderHistory(container) {
     const { allHistoryLogs, dataScreenFilters, historyClassFilter } = state;
     const { studentName, status, startDate, endDate } = dataScreenFilters;
     
+    // --- IMPROVED LOGIC: Filter by class if filtering specifically ---
+    let filteredLogs = allHistoryLogs;
+    if (historyClassFilter) {
+        const trimmedFilter = historyClassFilter.trim();
+        filteredLogs = filteredLogs.filter(log => log.class && log.class.trim() === trimmedFilter);
+    }
+    
     if (historyClassFilter) {
         const today = new Date();
         today.setHours(0,0,0,0);
@@ -1339,7 +1346,7 @@ function filterAndRenderHistory(container) {
         
         if (startD > endD) startD = new Date(endD);
 
-        const existingDates = new Set(allHistoryLogs
+        const existingDates = new Set(filteredLogs
             .filter(log => log.class === historyClassFilter)
             .map(log => log.date)
         );
@@ -1403,7 +1410,7 @@ function filterAndRenderHistory(container) {
         }
     }
 
-    let filteredByDate = allHistoryLogs;
+    let filteredByDate = filteredLogs;
     if (startDate) {
         filteredByDate = filteredByDate.filter(log => log.date >= startDate);
     }
