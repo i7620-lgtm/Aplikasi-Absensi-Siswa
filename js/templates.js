@@ -219,12 +219,24 @@ export const templates = {
                     <div id="school-search-results" class="space-y-2 max-h-60 overflow-y-auto">
                         <!-- Results injected here -->
                     </div>
+                    
                     <div id="school-found-msg" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-4">
                         <h4 class="font-bold text-blue-800 mb-1">Sekolah Terdaftar!</h4>
                         <p class="text-sm text-blue-700 mb-3">Sekolah <span id="found-school-name" class="font-bold"></span> sudah ada di sistem.</p>
-                        <p class="text-sm text-blue-700">Silakan hubungi Admin Sekolah: <br><span id="found-admin-name" class="font-bold text-lg bg-blue-100 px-2 rounded"></span></p>
-                        <p class="text-xs text-blue-600 mt-2">Minta admin untuk menambahkan email Anda (<strong>${encodeHTML(state.userProfile.email)}</strong>) ke dalam sistem.</p>
+                        
+                        <div class="bg-white p-3 rounded-lg border border-blue-100 mb-3 shadow-sm">
+                            <p class="text-xs text-slate-500 uppercase tracking-wide font-bold mb-1">Admin Sekolah</p>
+                            <p id="found-admin-name" class="font-bold text-slate-800"></p>
+                            <p id="found-admin-email" class="text-sm text-slate-600 font-mono break-all"></p>
+                        </div>
+
+                        <a id="contact-admin-btn" href="#" class="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-sm flex items-center justify-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                            Kirim Permintaan Akses
+                        </a>
+                        <p class="text-xs text-blue-600 mt-2 text-center opacity-80">Klik tombol di atas untuk mengirim email ke admin.</p>
                     </div>
+
                     <div id="school-not-found-msg" class="hidden text-center py-4">
                         <p class="text-slate-500 mb-2">Sekolah tidak ditemukan?</p>
                         <button id="btn-redirect-create" class="text-blue-600 font-bold hover:underline">Daftarkan Sekolah Baru Sekarang</button>
@@ -253,7 +265,7 @@ export const templates = {
         const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile?.primaryRole);
         const isTeacher = state.userProfile?.primaryRole === 'GURU';
         const assignedClasses = state.userProfile?.assigned_classes || [];
-        const needsAssignment = isTeacher && assignedClasses.length === 0;
+        const needsAssignment = isTeacher && (!state.userProfile.assigned_classes || state.userProfile.assigned_classes.length === 0);
         const isSuperAdminInContext = state.userProfile?.primaryRole === 'SUPER_ADMIN' && state.adminActingAsSchool;
         const title = isSuperAdminInContext 
             ? `Absensi Sekolah`
