@@ -363,6 +363,24 @@ function renderSetupScreen() {
                             btn.onclick = () => {
                                 document.getElementById('found-school-name').textContent = school.name;
                                 document.getElementById('found-admin-name').textContent = school.admin_name || "Belum ada Admin";
+                                
+                                const emailEl = document.getElementById('found-admin-email');
+                                const contactBtn = document.getElementById('contact-admin-btn');
+                                
+                                if (school.admin_email) {
+                                    emailEl.textContent = school.admin_email;
+                                    emailEl.parentElement.classList.remove('hidden');
+                                    
+                                    const subject = encodeURIComponent(`Permintaan Akses Aplikasi Absensi - ${state.userProfile.name}`);
+                                    const body = encodeURIComponent(`Halo Admin ${school.name},\n\nSaya ${state.userProfile.name} (${state.userProfile.email}) ingin meminta akses masuk dan penugasan kelas di aplikasi absensi sekolah.\n\nMohon bantuannya.\n\nTerima kasih.`);
+                                    
+                                    contactBtn.href = `mailto:${school.admin_email}?subject=${subject}&body=${body}`;
+                                    contactBtn.classList.remove('hidden');
+                                } else {
+                                    emailEl.textContent = "Email tidak tersedia";
+                                    contactBtn.classList.add('hidden');
+                                }
+                                
                                 document.getElementById('school-found-msg').classList.remove('hidden');
                                 resultsContainer.innerHTML = ''; // Clear list
                             };
