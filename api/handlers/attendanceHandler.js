@@ -141,23 +141,21 @@ export async function handleGetHistoryData({ payload, user, sql, response }) {
         return response.status(200).json({ allLogs: [] });
     }
 
-    // --- FIXED LOGIC: Use DISTINCT ON to ensure only the latest record for each date/class is shown ---
+    // --- IMPROVED LOGIC: Filter by class in SQL if requested, and always get DISTINCT per day/class ---
     const { rows } = await sql`
         SELECT DISTINCT ON (cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date')
             cl.payload, u.name as "teacherName"
         FROM change_log cl
         JOIN users u ON cl.user_email = u.email
-        WHERE cl.school_id = ANY(${schoolIds}) AND cl.event_type = 'ATTENDANCE_UPDATED'
+        WHERE cl.school_id = ANY(${schoolIds}) 
+          AND cl.event_type = 'ATTENDANCE_UPDATED'
+          AND (${!isClassSpecific} OR TRIM(cl.payload->>'class') = TRIM(${classFilter}::text))
         ORDER BY cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date', cl.id DESC
     `;
     
     const allLogs = rows.map(row => ({ ...row.payload, teacherName: row.teacherName }));
 
-    const filteredLogs = isClassSpecific && classFilter
-        ? allLogs.filter(log => log.class === classFilter)
-        : allLogs;
-
-    return response.status(200).json({ allLogs: filteredLogs });
+    return response.status(200).json({ allLogs });
 }
 
 export async function handleGetSchoolStudentData({ payload, user, sql, response }) {
