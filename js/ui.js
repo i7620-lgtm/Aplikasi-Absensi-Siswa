@@ -303,6 +303,109 @@ function renderLandingPageScreen() {
 }
 
 function renderSetupScreen() {
+    // --- NEW LOGIC: Check for School Assignment ---
+    if (state.userProfile && !state.userProfile.school_id && !state.userProfile.jurisdiction_id && !state.userProfile.isParent && state.userProfile.primaryRole !== 'SUPER_ADMIN') {
+        appContainer.innerHTML = templates.onboarding();
+        document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
+        
+        const choiceView = document.getElementById('onboarding-choice-view');
+        const searchView = document.getElementById('onboarding-search-view');
+        const createView = document.getElementById('onboarding-create-view');
+        
+        // Navigation Logic
+        const showView = (view) => {
+            [choiceView, searchView, createView].forEach(v => v.classList.add('hidden'));
+            view.classList.remove('hidden');
+        };
+
+        // 1. Choice: Create New
+        document.getElementById('btn-create-school').addEventListener('click', () => showView(createView));
+        document.getElementById('back-to-choice-from-create').addEventListener('click', () => showView(choiceView));
+        
+        // 1. Choice: Join (Search)
+        document.getElementById('btn-join-school').addEventListener('click', () => showView(searchView));
+        document.getElementById('back-to-choice-from-search').addEventListener('click', () => showView(choiceView));
+        document.getElementById('btn-redirect-create').addEventListener('click', () => showView(createView));
+
+        // 2. Search Logic
+        const searchInput = document.getElementById('school-search-input');
+        const resultsContainer = document.getElementById('school-search-results');
+        let searchTimeout;
+
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            clearTimeout(searchTimeout);
+            
+            document.getElementById('school-found-msg').classList.add('hidden');
+            document.getElementById('school-not-found-msg').classList.add('hidden');
+            resultsContainer.innerHTML = '';
+
+            if (query.length < 3) return;
+
+            searchTimeout = setTimeout(async () => {
+                resultsContainer.innerHTML = `<p class="text-xs text-slate-400 text-center">Mencari...</p>`;
+                try {
+                    const { results } = await apiService.searchSchools(query);
+                    resultsContainer.innerHTML = '';
+                    
+                    if (results.length === 0) {
+                        document.getElementById('school-not-found-msg').classList.remove('hidden');
+                    } else {
+                        results.forEach(school => {
+                            const btn = document.createElement('button');
+                            btn.className = "w-full text-left p-3 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition group";
+                            btn.innerHTML = `
+                                <div class="flex justify-between items-center">
+                                    <span class="font-bold text-slate-700 group-hover:text-blue-700">${encodeHTML(school.name)}</span>
+                                    <span class="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500">Pilih</span>
+                                </div>
+                            `;
+                            btn.onclick = () => {
+                                document.getElementById('found-school-name').textContent = school.name;
+                                document.getElementById('found-admin-name').textContent = school.admin_name || "Belum ada Admin";
+                                document.getElementById('school-found-msg').classList.remove('hidden');
+                                resultsContainer.innerHTML = ''; // Clear list
+                            };
+                            resultsContainer.appendChild(btn);
+                        });
+                    }
+                } catch (error) {
+                    console.error("Search failed", error);
+                    resultsContainer.innerHTML = `<p class="text-xs text-red-400 text-center">Gagal mencari.</p>`;
+                }
+            }, 500);
+        });
+
+        // 3. Create Logic
+        document.getElementById('btn-confirm-create').addEventListener('click', async () => {
+            const name = document.getElementById('new-school-name').value.trim();
+            if (!name) {
+                showNotification("Nama sekolah tidak boleh kosong", 'error');
+                return;
+            }
+            
+            showLoader("Mendaftarkan sekolah...");
+            try {
+                // This call creates the school AND updates the user's role/school_id
+                await apiService.createSchool(name);
+                
+                // Refresh profile to get the new role/school_id
+                const { userProfile } = await apiService.getUserProfile();
+                await setState({ userProfile });
+                
+                hideLoader();
+                showNotification("Sekolah berhasil dibuat! Anda sekarang adalah Admin.", 'success');
+                renderScreen('setup'); // Refresh to show the main app
+            } catch (error) {
+                hideLoader();
+                showNotification(error.message, 'error');
+            }
+        });
+
+        return; // Stop execution of standard setup render
+    }
+    // --- END NEW LOGIC ---
+
     appContainer.innerHTML = templates.setup();
     if (!state.userProfile) {
         return;
