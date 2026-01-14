@@ -1,3 +1,4 @@
+
 // Simple sanitizer to prevent basic XSS by removing HTML tags.
 function sanitize(text) {
     if (!text) return '';
@@ -140,11 +141,14 @@ export async function handleGetHistoryData({ payload, user, sql, response }) {
         return response.status(200).json({ allLogs: [] });
     }
 
+    // --- FIXED LOGIC: Use DISTINCT ON to ensure only the latest record for each date/class is shown ---
     const { rows } = await sql`
-        SELECT cl.payload, u.name as "teacherName"
+        SELECT DISTINCT ON (cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date')
+            cl.payload, u.name as "teacherName"
         FROM change_log cl
         JOIN users u ON cl.user_email = u.email
         WHERE cl.school_id = ANY(${schoolIds}) AND cl.event_type = 'ATTENDANCE_UPDATED'
+        ORDER BY cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date', cl.id DESC
     `;
     
     const allLogs = rows.map(row => ({ ...row.payload, teacherName: row.teacherName }));
