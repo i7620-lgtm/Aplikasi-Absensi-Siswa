@@ -1,3 +1,4 @@
+
 import { state, CLASSES } from './main.js';
 
 export function encodeHTML(str) {
@@ -166,6 +167,85 @@ export const templates = {
                         </dl>
                     </div>
                 </div>
+            </div>
+        </div>
+    `,
+    onboarding: () => `
+        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4 bg-slate-50">
+            <div class="bg-white p-8 rounded-2xl shadow-lg max-w-lg w-full">
+                <div class="flex items-center justify-between mb-2">
+                    <h1 class="text-2xl font-bold text-slate-800">Selamat Datang!</h1>
+                    <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    </button>
+                </div>
+                <p class="text-slate-500 mb-8">Untuk memulai, silakan pilih status sekolah Anda saat ini.</p>
+
+                <!-- Initial Choice -->
+                <div id="onboarding-choice-view" class="space-y-4">
+                    <button id="btn-join-school" class="w-full bg-white border-2 border-blue-100 hover:border-blue-500 p-6 rounded-xl flex items-center gap-4 transition group text-left">
+                        <div class="bg-blue-100 text-blue-600 p-3 rounded-full group-hover:bg-blue-600 group-hover:text-white transition">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-slate-800">Saya Ingin Bergabung ke Sekolah</h3>
+                            <p class="text-sm text-slate-500">Cari sekolah yang sudah terdaftar dan minta akses.</p>
+                        </div>
+                    </button>
+
+                    <button id="btn-create-school" class="w-full bg-white border-2 border-green-100 hover:border-green-500 p-6 rounded-xl flex items-center gap-4 transition group text-left">
+                        <div class="bg-green-100 text-green-600 p-3 rounded-full group-hover:bg-green-600 group-hover:text-white transition">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-slate-800">Saya Ingin Mendaftarkan Sekolah Baru</h3>
+                            <p class="text-sm text-slate-500">Jadilah admin pertama untuk sekolah Anda.</p>
+                        </div>
+                    </button>
+                </div>
+
+                <!-- Search View (Hidden by default) -->
+                <div id="onboarding-search-view" class="hidden space-y-4">
+                    <button id="back-to-choice-from-search" class="text-sm text-slate-500 hover:text-blue-600 mb-2 flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg> Kembali
+                    </button>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Cari Nama Sekolah</label>
+                        <div class="relative">
+                            <input type="text" id="school-search-input" class="w-full p-3 pl-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Contoh: SD Negeri 1...">
+                            <svg class="w-5 h-5 text-slate-400 absolute left-3 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </div>
+                    </div>
+                    <div id="school-search-results" class="space-y-2 max-h-60 overflow-y-auto">
+                        <!-- Results injected here -->
+                    </div>
+                    <div id="school-found-msg" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <h4 class="font-bold text-blue-800 mb-1">Sekolah Terdaftar!</h4>
+                        <p class="text-sm text-blue-700 mb-3">Sekolah <span id="found-school-name" class="font-bold"></span> sudah ada di sistem.</p>
+                        <p class="text-sm text-blue-700">Silakan hubungi Admin Sekolah: <br><span id="found-admin-name" class="font-bold text-lg bg-blue-100 px-2 rounded"></span></p>
+                        <p class="text-xs text-blue-600 mt-2">Minta admin untuk menambahkan email Anda (<strong>${encodeHTML(state.userProfile.email)}</strong>) ke dalam sistem.</p>
+                    </div>
+                    <div id="school-not-found-msg" class="hidden text-center py-4">
+                        <p class="text-slate-500 mb-2">Sekolah tidak ditemukan?</p>
+                        <button id="btn-redirect-create" class="text-blue-600 font-bold hover:underline">Daftarkan Sekolah Baru Sekarang</button>
+                    </div>
+                </div>
+
+                <!-- Create View (Hidden by default) -->
+                <div id="onboarding-create-view" class="hidden space-y-4">
+                    <button id="back-to-choice-from-create" class="text-sm text-slate-500 hover:text-blue-600 mb-2 flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg> Kembali
+                    </button>
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                        <p class="text-sm text-green-800">Anda akan terdaftar sebagai <strong>Admin Sekolah</strong> untuk sekolah ini.</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Nama Sekolah Resmi</label>
+                        <input type="text" id="new-school-name" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500" placeholder="Nama Sekolah Lengkap">
+                    </div>
+                    <button id="btn-confirm-create" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition shadow-lg">Buat & Masuk</button>
+                </div>
+
             </div>
         </div>
     `,
