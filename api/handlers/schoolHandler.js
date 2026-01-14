@@ -22,20 +22,23 @@ export async function handleSearchSchools({ payload, user, sql, response }) {
         return response.status(200).json({ results: [] });
     }
 
-    // Find schools matching the name AND find the associated Admin/Principal name
+    // Find schools matching the name AND find the associated Admin/Principal name & email
+    // Using LEFT JOIN LATERAL to efficiently fetch the top-ranking admin for each school found
     const { rows: results } = await sql`
         SELECT 
             s.id, 
             s.name, 
-            (
-                SELECT u.name 
-                FROM users u 
-                WHERE u.school_id = s.id 
-                AND u.role IN ('ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN') 
-                ORDER BY CASE WHEN u.role = 'ADMIN_SEKOLAH' THEN 1 ELSE 2 END 
-                LIMIT 1
-            ) as admin_name
-        FROM schools s 
+            u.name as admin_name,
+            u.email as admin_email
+        FROM schools s
+        LEFT JOIN LATERAL (
+            SELECT name, email
+            FROM users
+            WHERE school_id = s.id
+            AND role IN ('ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN')
+            ORDER BY CASE WHEN role = 'ADMIN_SEKOLAH' THEN 1 ELSE 2 END
+            LIMIT 1
+        ) u ON true
         WHERE s.name ILIKE ${'%' + sanitizedQuery + '%'} 
         LIMIT 10;
     `;
