@@ -249,16 +249,23 @@ async function handleSchoolAnalysis(schoolId, startDate, endDate, rangeLabel, sq
         // A4: Sakit Beruntun (>= 3 consecutive days)
         if (s.S.length >= 3) {
             s.S.sort();
-            let consec = 1;
+            let maxConsec = 1;
+            let currentConsec = 1;
+            
             for (let i = 1; i < s.S.length; i++) {
                 const diff = getDayDiff(s.S[i-1], s.S[i]);
-                if (diff <= 3) consec++; 
-                else consec = 1;
-
-                if (consec === 3) { 
-                    issueGroups['Pemulihan Medis'].items.push(`${s.name} (${s.class} - 3 Hari+)`);
-                    break;
+                if (diff <= 3) { // 1 day or weekend gap
+                    currentConsec++;
+                } else {
+                    if (currentConsec >= 3 && currentConsec > maxConsec) maxConsec = currentConsec;
+                    currentConsec = 1;
                 }
+            }
+            // Check final sequence
+            if (currentConsec >= 3 && currentConsec > maxConsec) maxConsec = currentConsec;
+
+            if (maxConsec >= 3) { 
+                issueGroups['Pemulihan Medis'].items.push(`${s.name} (${s.class} - ${maxConsec} hari)`);
             }
         }
 
@@ -323,7 +330,7 @@ async function handleSchoolAnalysis(schoolId, startDate, endDate, rangeLabel, sq
         groupedWarningText = "Tidak ditemukan pola risiko signifikan pada periode ini.";
     }
 
-    // Compile Sorted Recommendations
+    // Compile Sorted Recommendations with Numbering
     const recText = Array.from(recommendations)
         .sort((a, b) => a.priority - b.priority)
         .map((r, index) => `${index + 1}. ${r.rec}`)
