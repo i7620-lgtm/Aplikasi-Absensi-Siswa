@@ -312,6 +312,16 @@ export async function handleSaveNewStudents() {
                 studentsByClass: updatedStudentsByClass,
                 localVersion: response.newVersion
             });
+            
+            // CRITICAL: Reload User Profile to update roles (e.g. isParent status) if emails changed
+            try {
+                const { userProfile } = await apiService.getUserProfile();
+                await setState({ userProfile });
+                console.log("User profile refreshed after data save.");
+            } catch (pError) {
+                console.error("Failed to refresh profile:", pError);
+            }
+
             hideLoader();
         }
         
