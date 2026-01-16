@@ -3,7 +3,7 @@ import { sql, db } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 import { Redis } from '@upstash/redis';
 
-// Import Handlers
+// Import Handlers - Menggunakan folder handlers (tanpa garis bawah) sesuai nama folder proyek
 import handleLoginOrRegister, { handleInitializeDatabase } from './handlers/authHandler.js';
 import { handleGetUpdateSignal } from './handlers/configHandler.js';
 import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetInitialData } from './handlers/userHandler.js';
@@ -37,6 +37,76 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     console.log("Klien Upstash Redis (via Vercel KV) berhasil diinisialisasi.");
 } else {
     console.warn("Variabel lingkungan Vercel KV tidak diatur. Fitur sinyal pembaruan cepat akan dinonaktifkan.");
+}
+
+// --- LOGIKA FEEDBACK (DIGABUNGKAN UNTUK MENGHEMAT FUNCTION LIMIT) ---
+function sanitize(text) {
+    if (!text) return '';
+    return text.replace(/<[^>]*>/g, '').trim();
+}
+
+async function handleSubmitFeedback({ payload, sql, response }) {
+    const { name, email, type, message } = payload;
+    
+    const sanitizedName = sanitize(name);
+    const sanitizedEmail = sanitize(email);
+    const sanitizedMessage = sanitize(message);
+    const sanitizedType = sanitize(type);
+
+    if (!sanitizedName || !sanitizedEmail || !sanitizedMessage || !sanitizedType) {
+        return response.status(400).json({ error: 'Semua kolom wajib diisi.' });
+    }
+
+    try {
+        // Ensure table exists
+        await sql`
+            CREATE TABLE IF NOT EXISTS feedback (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255),
+                email VARCHAR(255),
+                type VARCHAR(50),
+                message TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        `;
+        await sql`
+            INSERT INTO feedback (name, email, type, message)
+            VALUES (${sanitizedName}, ${sanitizedEmail}, ${sanitizedType}, ${sanitizedMessage})
+        `;
+        return response.status(200).json({ success: true, message: 'Pesan Anda berhasil dikirim.' });
+    } catch (error) {
+        console.error("Failed to submit feedback:", error);
+        return response.status(500).json({ error: 'Gagal mengirim pesan. Silakan coba lagi.' });
+    }
+}
+
+async function handleGetFeedback({ user, sql, response }) {
+    if (user.role !== 'SUPER_ADMIN') {
+        return response.status(403).json({ error: 'Forbidden: Access denied' });
+    }
+
+    try {
+        await sql`
+            CREATE TABLE IF NOT EXISTS feedback (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255),
+                email VARCHAR(255),
+                type VARCHAR(50),
+                message TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        `;
+        const { rows: feedbackList } = await sql`
+            SELECT id, name, email, type, message, created_at
+            FROM feedback
+            ORDER BY created_at DESC
+            LIMIT 100;
+        `;
+        return response.status(200).json({ feedbackList });
+    } catch (error) {
+        console.error("Failed to fetch feedback:", error);
+        return response.status(500).json({ error: 'Gagal mengambil data pengaduan.' });
+    }
 }
 
 
@@ -84,6 +154,7 @@ export default async function handler(request, response) {
         const publicDbActions = {
             'loginOrRegister': () => handleLoginOrRegister(context),
             'initializeDatabase': () => handleInitializeDatabase(context),
+            'submitFeedback': () => handleSubmitFeedback(context), // Logic Local
         };
         if (publicDbActions[action]) {
             return await publicDbActions[action]();
@@ -156,6 +227,7 @@ export default async function handler(request, response) {
             'getSchoolsForJurisdiction': () => handleGetSchoolsForJurisdiction(context),
             'assignSchoolToJurisdiction': () => handleAssignSchoolToJurisdiction(context),
             'migrateLegacyData': () => handleMigrateLegacyData(context),
+            'getFeedback': () => handleGetFeedback(context), // Logic Local (Super Admin Only)
         };
 
         if (authenticatedActions[action]) {
@@ -174,12 +246,12 @@ export default async function handler(request, response) {
             });
         }
         
-        const criticalErrors = ['failed to connect', 'timeout', 'econnrefused', 'gagal terhubung', 'database initialization failed', 'cannot find package'];
+        const criticalErrors = ['failed to connect', 'timeout', 'econnrefused', 'gagal terhubung', 'database initialization failed', 'cannot find package', 'module not found'];
         const errorMessage = (error.message || '').toLowerCase();
         if (criticalErrors.some(keyword => errorMessage.includes(keyword))) {
             return response.status(503).json({
                 error: 'Gagal terhubung ke database atau dependensi server hilang.',
-                details: 'Server tidak dapat membuat koneksi ke database atau salah satu library penting tidak ditemukan. Pastikan semua dependensi telah diinstal di server.'
+                details: 'Server tidak dapat membuat koneksi atau file modul tidak ditemukan. Pastikan semua file telah dideploy dengan benar.'
             });
         }
 
