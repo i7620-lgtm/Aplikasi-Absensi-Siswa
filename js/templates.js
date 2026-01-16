@@ -41,133 +41,171 @@ function getWeekRange(date) {
 export const templates = {
     landingPage: () => `
         <div class="screen active">
-            <div class="max-w-5xl mx-auto text-center py-12 px-4 sm:px-6 lg:py-16 lg:px-8">
-                <h2 class="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+            <!-- Hero Section -->
+            <div class="max-w-5xl mx-auto text-center py-16 px-4 sm:px-6 lg:py-24 lg:px-8 animate-fade-in">
+                <h2 class="text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
+                    <span class="block text-blue-600 mb-2">GG-NEON 6</span>
                     <span class="block">
-                        ${state.logoutMessage ? encodeHTML(state.logoutMessage) : 'Manajemen Kehadiran Jadi Lebih Mudah'}
+                        ${state.logoutMessage ? encodeHTML(state.logoutMessage) : 'Manajemen Kehadiran Siswa'}
                     </span>
                 </h2>
-                <p class="mt-4 text-lg leading-6 text-slate-500 max-w-2xl mx-auto">
-                    ${state.logoutMessage ? 'Anda telah keluar dari sesi. Silakan masuk kembali untuk melanjutkan.' : 'Aplikasi absensi modern yang dirancang untuk efisiensi, transparansi, dan analisis cerdas bagi sekolah Anda.'}
+                <p class="mt-4 text-xl leading-8 text-slate-500 max-w-2xl mx-auto">
+                    ${state.logoutMessage ? 'Sesi Anda telah berakhir. Silakan masuk kembali.' : 'Sistem absensi cerdas, transparan, dan terintegrasi untuk masa depan pendidikan yang lebih baik.'}
                 </p>
-                <div class="mt-8 flex justify-center px-4">
+                <div class="mt-10 flex flex-col items-center justify-center gap-4">
                     <div id="gsi-button-container" class="min-h-[44px]">
-                        <!-- Placeholder Spinner while Google Script loads -->
                         <div class="flex items-center justify-center space-x-2 animate-pulse">
                             <div class="w-2 h-2 bg-blue-400 rounded-full"></div>
                             <div class="w-2 h-2 bg-blue-400 rounded-full"></div>
                             <div class="w-2 h-2 bg-blue-400 rounded-full"></div>
                         </div>
                     </div>
+                    <a href="#pusat-bantuan" class="text-sm font-semibold text-blue-600 hover:text-blue-800 transition flex items-center gap-1">
+                        Pelajari fitur & bantuan <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                    </a>
                 </div>
                  <div id="auth-error-container" class="text-center text-sm mt-4 hidden"></div>
             </div>
-            
-            <div class="mt-10 pb-12 bg-white">
-                <div class="relative">
-                    <div class="absolute inset-0 h-1/2 bg-slate-100"></div>
-                    <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                        <div class="max-w-4xl mx-auto">
-                            <dl class="rounded-lg bg-white shadow-lg sm:grid sm:grid-cols-3">
-                                <div class="flex flex-col border-b border-slate-100 p-6 text-center sm:border-0 sm:border-r">
-                                    <dt class="order-2 mt-2 text-lg leading-6 font-medium text-slate-500">Efisien</dt>
-                                    <dd class="order-1 text-4xl font-extrabold text-blue-600">Cepat</dd>
-                                </div>
-                                <div class="flex flex-col border-t border-b border-slate-100 p-6 text-center sm:border-0 sm:border-l sm:border-r">
-                                    <dt class="order-2 mt-2 text-lg leading-6 font-medium text-slate-500">Informatif</dt>
-                                    <dd class="order-1 text-4xl font-extrabold text-blue-600">Akurat</dd>
-                                </div>
-                                <div class="flex flex-col border-t border-slate-100 p-6 text-center sm:border-0 sm:border-l">
-                                    <dt class="order-2 mt-2 text-lg leading-6 font-medium text-slate-500">Modern</dt>
-                                    <dd class="order-1 text-4xl font-extrabold text-blue-600">Cerdas</dd>
-                                </div>
-                            </dl>
+
+            <!-- Role Section (Matriks Peran) -->
+            <div class="py-16 bg-white">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-12">
+                        <h2 class="text-base text-blue-600 font-semibold tracking-wide uppercase">Satu Aplikasi, Semua Pihak</h2>
+                        <p class="mt-2 text-3xl font-extrabold text-slate-900">Akses Sesuai Peran Anda</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div class="bg-slate-50 p-8 rounded-2xl border border-slate-100 hover:shadow-lg transition">
+                            <div class="w-12 h-12 bg-green-100 text-green-600 rounded-lg flex items-center justify-center mb-6">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 14l9-5-9-5-9 5 9 5z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                            </div>
+                            <h3 class="text-xl font-bold text-slate-800 mb-4">Guru</h3>
+                            <ul class="space-y-3 text-slate-600 text-sm">
+                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Catat kehadiran kelas harian dengan cepat.</li>
+                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Kelola daftar siswa per kelas secara mandiri.</li>
+                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Pantau riwayat absensi kelas Anda sendiri.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-slate-50 p-8 rounded-2xl border border-blue-100 shadow-sm hover:shadow-lg transition ring-2 ring-blue-500 ring-opacity-10">
+                            <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mb-6">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                            </div>
+                            <h3 class="text-xl font-bold text-slate-800 mb-4">Kepala Sekolah / Admin</h3>
+                            <ul class="space-y-3 text-slate-600 text-sm">
+                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Dasbor analitik visual seluruh sekolah.</li>
+                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Rekomendasi AI untuk pola absensi kritis.</li>
+                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Ekspor laporan rekapitulasi ke format Excel.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-slate-50 p-8 rounded-2xl border border-slate-100 hover:shadow-lg transition">
+                            <div class="w-12 h-12 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center mb-6">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                            </div>
+                            <h3 class="text-xl font-bold text-slate-800 mb-4">Orang Tua</h3>
+                            <ul class="space-y-3 text-slate-600 text-sm">
+                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-purple-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Pantau kehadiran anak secara real-time.</li>
+                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-purple-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Lihat riwayat ketidakhadiran (S/I/A).</li>
+                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-purple-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Akses aman hanya untuk data anak Anda.</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="py-12 bg-slate-50">
+            <!-- How it Works Section -->
+            <div class="py-16 bg-slate-50">
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div class="lg:text-center">
-                        <h2 class="text-base text-blue-600 font-semibold tracking-wide uppercase">Fitur Unggulan</h2>
-                        <p class="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 sm:text-4xl">
-                            Semua yang Anda Butuhkan untuk Manajemen Kehadiran
-                        </p>
+                    <div class="text-center mb-16">
+                        <h2 class="text-base text-blue-600 font-semibold tracking-wide uppercase">Panduan</h2>
+                        <p class="mt-2 text-3xl font-extrabold text-slate-900">Cara Menggunakan Aplikasi</p>
                     </div>
-
-                    <div class="mt-10">
-                        <dl class="space-y-10 md:space-y-0 md:grid md:grid-cols-2 md:gap-x-8 md:gap-y-10">
-                            <div class="relative">
-                                <dt>
-                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-                                    </div>
-                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Pencatatan Cepat & Mudah</p>
-                                </dt>
-                                <dd class="mt-2 ml-16 text-base text-gray-500">
-                                    Catat kehadiran (Hadir, Sakit, Izin, Alpa) hanya dengan beberapa klik. Antarmuka intuitif mempercepat pekerjaan guru.
-                                </dd>
+                    <div class="relative">
+                        <div class="absolute top-12 left-1/2 -translate-x-1/2 w-full max-w-4xl h-0.5 bg-blue-100 hidden md:block"></div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-12 relative">
+                            <div class="text-center">
+                                <div class="w-24 h-24 bg-blue-600 text-white rounded-full flex items-center justify-center text-3xl font-bold mx-auto mb-6 relative shadow-xl">1</div>
+                                <h4 class="text-lg font-bold text-slate-800 mb-2">Masuk dengan Google</h4>
+                                <p class="text-slate-500 text-sm">Gunakan akun belajar.id atau email pribadi untuk akses instan dan aman.</p>
                             </div>
-                            <div class="relative">
-                                <dt>
-                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" /></svg>
-                                    </div>
-                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Dasbor Analitik Visual</p>
-                                </dt>
-                                <dd class="mt-2 ml-16 text-base text-gray-500">
-                                    Pantau tren kehadiran sekolah atau regional secara real-time. Dapatkan wawasan mendalam dari data visual yang mudah dipahami.
-                                </dd>
+                            <div class="text-center">
+                                <div class="w-24 h-24 bg-blue-600 text-white rounded-full flex items-center justify-center text-3xl font-bold mx-auto mb-6 relative shadow-xl">2</div>
+                                <h4 class="text-lg font-bold text-slate-800 mb-2">Pilih/Daftar Sekolah</h4>
+                                <p class="text-slate-500 text-sm">Cari sekolah Anda yang sudah ada atau daftarkan sekolah baru jika belum terdata.</p>
                             </div>
-                            <div class="relative">
-                                <dt>
-                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
-                                       <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-                                    </div>
-                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Rekomendasi Cerdas AI</p>
-                                </dt>
-                                <dd class="mt-2 ml-16 text-base text-gray-500">
-                                    Manfaatkan kekuatan AI untuk mengidentifikasi pola absensi siswa yang memerlukan perhatian khusus dan dapatkan rekomendasi tindak lanjut.
-                                </dd>
+                            <div class="text-center">
+                                <div class="w-24 h-24 bg-blue-600 text-white rounded-full flex items-center justify-center text-3xl font-bold mx-auto mb-6 relative shadow-xl">3</div>
+                                <h4 class="text-lg font-bold text-slate-800 mb-2">Mulai Kelola Absensi</h4>
+                                <p class="text-slate-500 text-sm">Pilih kelas, masukkan data siswa, dan catat kehadiran dalam hitungan detik.</p>
                             </div>
-                            <div class="relative">
-                                <dt>
-                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21v-1.5a2.5 2.5 0 00-5 0V21M3 21v-1.5a2.5 2.5 0 015 0V21" /></svg>
-                                    </div>
-                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Sistem Multi-Peran</p>
-                                </dt>
-                                <dd class="mt-2 ml-16 text-base text-gray-500">
-                                    Akses disesuaikan untuk Guru, Kepala Sekolah, Admin, hingga Orang Tua, memastikan setiap pihak mendapatkan informasi yang relevan.
-                                </dd>
-                            </div>
-                             <div class="relative">
-                                <dt>
-                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                    </div>
-                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Bekerja Secara Offline</p>
-                                </dt>
-                                <dd class="mt-2 ml-16 text-base text-gray-500">
-                                    Tetap produktif bahkan tanpa koneksi internet. Data akan disimpan secara lokal dan disinkronkan otomatis saat kembali online.
-                                </dd>
-                            </div>
-                             <div class="relative">
-                                <dt>
-                                    <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                    </div>
-                                    <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Laporan & Ekspor Data</p>
-                                </dt>
-                                <dd class="mt-2 ml-16 text-base text-gray-500">
-                                    Unduh rekapitulasi absensi dalam format Excel untuk keperluan arsip, pelaporan, atau analisis lebih lanjut.
-                                </dd>
-                            </div>
-                        </dl>
+                        </div>
                     </div>
                 </div>
             </div>
+
+            <!-- FAQ Section -->
+            <div id="pusat-bantuan" class="py-20 bg-white">
+                <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-12">
+                        <h2 class="text-base text-blue-600 font-semibold tracking-wide uppercase">Bantuan</h2>
+                        <p class="mt-2 text-3xl font-extrabold text-slate-900">Pertanyaan Umum (FAQ)</p>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="faq-item border border-slate-200 rounded-xl overflow-hidden">
+                            <button class="faq-trigger w-full flex items-center justify-between p-5 text-left bg-slate-50 hover:bg-slate-100 transition">
+                                <span class="font-bold text-slate-800">Apakah data absensi saya aman?</span>
+                                <svg class="w-5 h-5 text-slate-400 transform transition faq-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                            </button>
+                            <div class="faq-content hidden p-5 border-t border-slate-200 text-slate-600 text-sm leading-relaxed">
+                                Ya, data Anda disimpan di infrastruktur cloud yang aman. Kami tidak membagikan informasi pribadi atau data absensi sekolah Anda kepada pihak ketiga mana pun. Anda memiliki kontrol penuh atas data yang Anda masukkan.
+                            </div>
+                        </div>
+                        <div class="faq-item border border-slate-200 rounded-xl overflow-hidden">
+                            <button class="faq-trigger w-full flex items-center justify-between p-5 text-left bg-slate-50 hover:bg-slate-100 transition">
+                                <span class="font-bold text-slate-800">Bagaimana jika sekolah saya belum terdaftar?</span>
+                                <svg class="w-5 h-5 text-slate-400 transform transition faq-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                            </button>
+                            <div class="faq-content hidden p-5 border-t border-slate-200 text-slate-600 text-sm leading-relaxed">
+                                Jangan khawatir! Anda dapat mendaftarkan sekolah baru secara mandiri setelah login. Anda otomatis akan menjadi Admin pertama sekolah tersebut dan bisa mulai mengundang rekan guru lainnya.
+                            </div>
+                        </div>
+                        <div class="faq-item border border-slate-200 rounded-xl overflow-hidden">
+                            <button class="faq-trigger w-full flex items-center justify-between p-5 text-left bg-slate-50 hover:bg-slate-100 transition">
+                                <span class="font-bold text-slate-800">Dapatkah aplikasi bekerja secara offline?</span>
+                                <svg class="w-5 h-5 text-slate-400 transform transition faq-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                            </button>
+                            <div class="faq-content hidden p-5 border-t border-slate-200 text-slate-600 text-sm leading-relaxed">
+                                Tentu. Aplikasi ini menggunakan teknologi PWA yang memungkinkan pengisian absensi tetap berjalan meskipun koneksi internet terputus. Data akan otomatis tersinkron ke cloud saat Anda kembali online.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contact Section -->
+            <div class="py-16 bg-blue-600 text-white">
+                <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                    <h2 class="text-3xl font-extrabold mb-4">Masih Punya Pertanyaan?</h2>
+                    <p class="text-blue-100 mb-10 text-lg">Jika Anda memerlukan bantuan khusus atau pertanyaan mengenai kerja sama, tim pengembang kami siap membantu Anda.</p>
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-6">
+                        <a href="mailto:i7620@guru.sd.belajar.id?subject=Tanya%20Aplikasi%20Absensi" class="bg-white text-blue-600 px-8 py-4 rounded-xl font-bold hover:bg-blue-50 transition shadow-lg flex items-center gap-2">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                            Kirim Email Sekarang
+                        </a>
+                        <div class="text-sm text-blue-200 font-medium">
+                            i7620@guru.sd.belajar.id
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <footer class="bg-slate-900 py-12 text-center text-slate-400">
+                <p class="mb-4">© 2025 Aplikasi Absensi Siswa GG-NEON 6</p>
+                <div class="flex justify-center gap-6 text-sm font-semibold">
+                    <a href="/privacy.html" class="hover:text-white transition">Kebijakan Privasi</a>
+                    <a href="/terms.html" class="hover:text-white transition">Ketentuan Layanan</a>
+                </div>
+            </footer>
         </div>
     `,
     onboarding: () => `
