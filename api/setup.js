@@ -71,3 +71,4 @@ export default async function handler(request, response) {
         return response.status(500).json({ success: false, message: 'Database setup failed.', error: error.message });
     }
 }
+ 
