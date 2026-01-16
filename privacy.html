@@ -25,45 +25,49 @@
         <div class="bg-white p-6 md:p-10 rounded-2xl shadow-lg">
             <header class="pb-4 border-b border-slate-200 mb-6">
                 <h1 class="text-3xl font-bold text-slate-800">Kebijakan Privasi</h1>
-                <p class="text-slate-500 mt-1">Terakhir diperbarui: 05 September 2025</p>
+                <p class="text-slate-500 mt-1">Terakhir diperbarui: 01 Oktober 2025</p>
             </header>
             <article class="text-slate-600 leading-relaxed space-y-4">
-                <p>Aplikasi Absensi Siswa ("kami") berkomitmen untuk melindungi privasi Anda. Kebijakan Privasi ini menjelaskan bagaimana kami mengumpulkan, menggunakan, mengungkapkan, dan menjaga informasi Anda saat Anda menggunakan aplikasi kami ("Layanan").</p>
+                <p>Aplikasi Absensi Siswa ("kami") berkomitmen untuk melindungi privasi Anda. Kebijakan Privasi ini menjelaskan bagaimana kami mengumpulkan, menggunakan, menyimpan, dan melindungi informasi Anda saat menggunakan aplikasi berbasis web dan PWA ini ("Layanan").</p>
                 
-                <h3>Informasi yang Kami Kumpulkan</h3>
-                <p>Kami mengumpulkan jenis informasi berikut:</p>
+                <h3>1. Informasi yang Kami Kumpulkan</h3>
+                <p>Untuk mendukung fungsi manajemen sekolah yang komprehensif, kami mengumpulkan jenis informasi berikut:</p>
                 <ul>
-                    <li><strong>Informasi Profil Pengguna:</strong> Saat Anda memilih untuk masuk dengan akun Google Anda, kami mengumpulkan nama, alamat email, dan foto profil Anda. Informasi ini digunakan semata-mata untuk mengidentifikasi Anda di dalam aplikasi dan tidak dibagikan dengan pihak ketiga mana pun.</li>
-                    <li><strong>Data Aplikasi:</strong> Semua data yang Anda masukkan ke dalam aplikasi, termasuk nama siswa, daftar kelas, dan catatan kehadiran, akan disimpan. Data ini penting untuk fungsionalitas inti aplikasi.</li>
+                    <li><strong>Informasi Akun Pengguna:</strong> Saat Anda masuk menggunakan Google, kami menyimpan nama, alamat email, dan foto profil Anda untuk identifikasi, autentikasi, dan pengelolaan sesi pengguna.</li>
+                    <li><strong>Data Sekolah dan Wilayah:</strong> Kami menyimpan data struktur organisasi sekolah, termasuk nama sekolah, dan lokasi administratif dalam hierarki wilayah (Provinsi, Kabupaten/Kota, Kecamatan).</li>
+                    <li><strong>Data Siswa dan Orang Tua:</strong> Kami mengumpulkan nama siswa, kelas, dan alamat email orang tua yang diasosiasikan dengan siswa tersebut. Email orang tua digunakan khusus untuk memberikan akses ke fitur "Dasbor Orang Tua".</li>
+                    <li><strong>Data Absensi:</strong> Catatan kehadiran harian (Hadir, Sakit, Izin, Alpa) beserta metadata waktu pencatatan dan identitas pencatat data.</li>
                 </ul>
 
-                <h3>Bagaimana Kami Menggunakan Informasi Anda</h3>
-                <p>Kami menggunakan informasi yang kami kumpulkan untuk:</p>
+                <h3>2. Penggunaan Informasi</h3>
+                <p>Informasi yang dikumpulkan digunakan untuk:</p>
                 <ul>
-                    <li><strong>Menyediakan dan memelihara Layanan:</strong> Data Anda digunakan untuk mengoperasikan aplikasi, memungkinkan Anda mengelola daftar siswa dan melacak kehadiran.</li>
-                    <li><strong>Mengaktifkan pencadangan dan sinkronisasi data:</strong> Jika Anda masuk dengan Google, aplikasi akan membuat Google Sheet di Google Drive pribadi Anda untuk mencadangkan dan menyinkronkan data Anda. Ini memungkinkan Anda mengakses data Anda di berbagai perangkat dan memulihkannya jika Anda membersihkan data browser Anda. Aplikasi hanya mengakses file spesifik ini dan tidak mengakses file lain di Google Drive Anda.</li>
+                    <li><strong>Manajemen Operasional:</strong> Menyediakan fungsionalitas inti pencatatan kehadiran, pengelolaan kelas, dan administrasi sekolah.</li>
+                    <li><strong>Sinkronisasi dan Aksesibilitas:</strong> Memungkinkan sinkronisasi data antar perangkat dan mendukung mode offline (PWA) agar aplikasi tetap dapat digunakan tanpa internet.</li>
+                    <li><strong>Analisis dan Pelaporan:</strong> Menyajikan visualisasi grafik, laporan persentase kehadiran, dan rekapitulasi data bagi Guru, Kepala Sekolah, dan Dinas Pendidikan.</li>
+                    <li><strong>Analisis Kecerdasan Buatan (AI):</strong> Data kehadiran agregat diproses menggunakan teknologi Google Gemini API untuk menghasilkan wawasan otomatis, seperti deteksi dini wabah penyakit di kelas, pola ketidakhadiran berulang, atau anomali data, guna membantu pengambilan keputusan sekolah.</li>
+                    <li><strong>Pemantauan Orang Tua:</strong> Memberikan akses kepada orang tua siswa yang terverifikasi untuk memantau riwayat kehadiran anak mereka secara real-time.</li>
                 </ul>
 
-                <h3>Penyimpanan dan Keamanan Data</h3>
+                <h3>3. Penyimpanan dan Keamanan Data</h3>
                 <ul>
-                    <li><strong>Penyimpanan Lokal:</strong> Secara default, semua data aplikasi disimpan secara lokal di perangkat Anda dalam penyimpanan browser web Anda. Data ini bersifat pribadi bagi Anda dan tidak dikirimkan ke server kami.</li>
-                    <li><strong>Google Drive dan Google Sheets:</strong> Saat Anda menghubungkan akun Google Anda, sebuah spreadsheet bernama "Data Absensi Siswa" akan dibuat di Google Drive Anda. Semua data siswa dan kehadiran Anda disimpan di sheet ini. Anda memiliki kontrol penuh atas file ini, termasuk kemampuan untuk melihat, mengedit, atau menghapusnya kapan saja. Kami tidak memiliki akses ke Google Drive Anda atau file ini.</li>
+                    <li><strong>Database Cloud Terpusat:</strong> Seluruh data aplikasi disimpan secara aman di server database cloud (PostgreSQL) yang dikelola oleh penyedia layanan kami. Data <strong>tidak</strong> disimpan di Google Drive pribadi pengguna, melainkan di infrastruktur aplikasi terpusat untuk memungkinkan kolaborasi real-time dan analisis lintas sekolah.</li>
+                    <li><strong>Penyimpanan Lokal (Offline):</strong> Untuk mendukung fitur offline, salinan data terenkripsi sementara disimpan di browser perangkat Anda (IndexedDB/LocalStorage). Data ini akan disinkronkan secara aman ke server saat perangkat kembali terhubung ke internet.</li>
+                    <li><strong>Kontrol Akses:</strong> Kami menerapkan kontrol akses berbasis peran (Role-Based Access Control) yang ketat. Guru hanya dapat mengelola kelas yang ditugaskan, Admin Sekolah hanya dapat mengakses data sekolahnya, Dinas Pendidikan hanya dapat melihat data dalam yurisdiksinya, dan Orang Tua hanya dapat melihat data anaknya sendiri.</li>
                 </ul>
 
-                <h3>Berbagi Data</h3>
-                <p>Kami tidak membagikan, menjual, atau menyewakan informasi pribadi atau data aplikasi Anda kepada pihak ketiga mana pun untuk tujuan apa pun.</p>
-                
-                <h3>Hak Data Anda</h3>
+                <h3>4. Berbagi Data dan Pihak Ketiga</h3>
+                <p>Kami tidak menjual, menyewakan, atau memperdagangkan data pribadi Anda. Data mungkin diproses oleh pihak ketiga dalam konteks berikut:</p>
                 <ul>
-                    <li><strong>Akses dan Koreksi:</strong> Anda dapat mengakses dan mengubah data Anda kapan saja melalui antarmuka aplikasi.</li>
-                    <li><strong>Penghapusan Data:</strong> Anda dapat menghapus data Anda dengan membersihkan cache dan data situs browser Anda. Jika Anda menggunakan fitur sinkronisasi Google, Anda juga dapat menghapus spreadsheet dari Google Drive Anda untuk menghapus cadangan cloud Anda secara permanen.</li>
+                    <li><strong>Penyedia Layanan AI:</strong> Teks ringkasan data absensi (anonim atau pseudo-anonim) dikirim ke API Google Gemini untuk keperluan analisis pola. Google memproses data ini sesuai dengan standar privasi API enterprise mereka dan tidak menggunakannya untuk melatih model AI publik.</li>
+                    <li><strong>Otoritas Pendidikan:</strong> Data sekolah dan agregat kehadiran dapat diakses oleh akun tingkat Dinas Pendidikan yang menaungi wilayah sekolah tersebut untuk keperluan monitoring, evaluasi kebijakan, dan pelaporan daerah.</li>
                 </ul>
 
-                <h3>Privasi Anak</h3>
-                <p>Layanan ini tidak ditujukan untuk digunakan oleh individu di bawah usia 13 tahun. Kami tidak dengan sengaja mengumpulkan informasi pribadi dari anak-di bawah 13 tahun.</p>
+                <h3>5. Hak Pengguna</h3>
+                <p>Anda memiliki hak untuk meminta akses, koreksi, atau penghapusan data siswa atau sekolah yang Anda kelola. Hal ini dapat dilakukan melalui fitur manajemen di dalam aplikasi atau dengan menghubungi administrator sistem.</p>
 
-                <h3>Perubahan pada Kebijakan Privasi Ini</h3>
-                <p>Kami dapat memperbarui Kebijakan Privasi ini dari waktu ke waktu. Kami akan memberitahu Anda tentang perubahan apa pun dengan memposting Kebijakan Privasi baru di dalam aplikasi. Anda disarankan untuk meninjau Kebijakan Privasi ini secara berkala untuk setiap perubahan.</p>
+                <h3>6. Perubahan Kebijakan</h3>
+                <p>Kami dapat memperbarui Kebijakan Privasi ini seiring dengan penambahan fitur baru (seperti fitur AI atau integrasi regional). Perubahan akan diinformasikan melalui aplikasi. Kami menyarankan Anda meninjau halaman ini secara berkala.</p>
 
                 <h3>Hubungi Kami</h3>
                 <p>Jika Anda memiliki pertanyaan tentang Kebijakan Privasi ini, silakan hubungi kami di i7620@guru.sd.belajar.id.</p>
