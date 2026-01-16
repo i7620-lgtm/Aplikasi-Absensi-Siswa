@@ -24,6 +24,14 @@ export async function setupDatabase() {
                 payload JSONB NOT NULL,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
+            CREATE TABLE IF NOT EXISTS feedback (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                message TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            );
         `);
 
         // Pernyataan ALTER perlu dijalankan secara terpisah dengan penanganan error untuk idempotensi.
@@ -40,6 +48,7 @@ export async function setupDatabase() {
             CREATE INDEX IF NOT EXISTS idx_users_jurisdiction_id ON users (jurisdiction_id);
             CREATE INDEX IF NOT EXISTS idx_changelog_main_query ON change_log (school_id, event_type, ((payload->>'date')::date));
             CREATE INDEX IF NOT EXISTS idx_changelog_latest_student_list ON change_log (school_id, (payload->>'class'), id DESC) WHERE event_type = 'STUDENT_LIST_UPDATED';
+            CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback (created_at DESC);
         `);
 
         // Menyelesaikan transaksi
