@@ -3,7 +3,7 @@ import { sql, db } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 import { Redis } from '@upstash/redis';
 
-// Import Handlers - Menggunakan folder handlers (tanpa garis bawah) sesuai nama folder proyek
+// Import Handlers
 import handleLoginOrRegister, { handleInitializeDatabase } from './handlers/authHandler.js';
 import { handleGetUpdateSignal } from './handlers/configHandler.js';
 import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetInitialData } from './handlers/userHandler.js';
@@ -21,7 +21,6 @@ import {
     handleGetSchoolsForJurisdiction, 
     handleAssignSchoolToJurisdiction 
 } from './handlers/jurisdictionHandler.js';
-import handleMigrateLegacyData from './handlers/migrationHandler.js';
 
 
 // --- KONFIGURASI ---
@@ -37,76 +36,6 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     console.log("Klien Upstash Redis (via Vercel KV) berhasil diinisialisasi.");
 } else {
     console.warn("Variabel lingkungan Vercel KV tidak diatur. Fitur sinyal pembaruan cepat akan dinonaktifkan.");
-}
-
-// --- LOGIKA FEEDBACK (DIGABUNGKAN UNTUK MENGHEMAT FUNCTION LIMIT) ---
-function sanitize(text) {
-    if (!text) return '';
-    return text.replace(/<[^>]*>/g, '').trim();
-}
-
-async function handleSubmitFeedback({ payload, sql, response }) {
-    const { name, email, type, message } = payload;
-    
-    const sanitizedName = sanitize(name);
-    const sanitizedEmail = sanitize(email);
-    const sanitizedMessage = sanitize(message);
-    const sanitizedType = sanitize(type);
-
-    if (!sanitizedName || !sanitizedEmail || !sanitizedMessage || !sanitizedType) {
-        return response.status(400).json({ error: 'Semua kolom wajib diisi.' });
-    }
-
-    try {
-        // Ensure table exists
-        await sql`
-            CREATE TABLE IF NOT EXISTS feedback (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255),
-                email VARCHAR(255),
-                type VARCHAR(50),
-                message TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW()
-            );
-        `;
-        await sql`
-            INSERT INTO feedback (name, email, type, message)
-            VALUES (${sanitizedName}, ${sanitizedEmail}, ${sanitizedType}, ${sanitizedMessage})
-        `;
-        return response.status(200).json({ success: true, message: 'Pesan Anda berhasil dikirim.' });
-    } catch (error) {
-        console.error("Failed to submit feedback:", error);
-        return response.status(500).json({ error: 'Gagal mengirim pesan. Silakan coba lagi.' });
-    }
-}
-
-async function handleGetFeedback({ user, sql, response }) {
-    if (user.role !== 'SUPER_ADMIN') {
-        return response.status(403).json({ error: 'Forbidden: Access denied' });
-    }
-
-    try {
-        await sql`
-            CREATE TABLE IF NOT EXISTS feedback (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(255),
-                email VARCHAR(255),
-                type VARCHAR(50),
-                message TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW()
-            );
-        `;
-        const { rows: feedbackList } = await sql`
-            SELECT id, name, email, type, message, created_at
-            FROM feedback
-            ORDER BY created_at DESC
-            LIMIT 100;
-        `;
-        return response.status(200).json({ feedbackList });
-    } catch (error) {
-        console.error("Failed to fetch feedback:", error);
-        return response.status(500).json({ error: 'Gagal mengambil data pengaduan.' });
-    }
 }
 
 
@@ -154,7 +83,6 @@ export default async function handler(request, response) {
         const publicDbActions = {
             'loginOrRegister': () => handleLoginOrRegister(context),
             'initializeDatabase': () => handleInitializeDatabase(context),
-            'submitFeedback': () => handleSubmitFeedback(context), // Logic Local
         };
         if (publicDbActions[action]) {
             return await publicDbActions[action]();
@@ -172,18 +100,13 @@ export default async function handler(request, response) {
             WHERE u.email = ${userEmail}`;
 
         // NEW: Independently check if the user is a parent, regardless of their primary role.
-        // Uses CTE to inspect only the LATEST student list state to avoid historical false positives.
         const { rows: parentCheck } = await context.sql`
-            WITH latest_logs AS (
-                SELECT DISTINCT ON (school_id, payload->>'class')
-                    payload->'students' as students
-                FROM change_log
-                WHERE event_type = 'STUDENT_LIST_UPDATED'
-                ORDER BY school_id, payload->>'class', id DESC
+            SELECT 1 FROM change_log
+            WHERE event_type = 'STUDENT_LIST_UPDATED'
+            AND EXISTS (
+                SELECT 1 FROM jsonb_array_elements(payload->'students') as s
+                WHERE s->>'parentEmail' = ${userEmail}
             )
-            SELECT 1 
-            FROM latest_logs, jsonb_array_elements(students) as student
-            WHERE student->>'parentEmail' = ${userEmail}
             LIMIT 1;
         `;
         const isParent = parentCheck.length > 0;
@@ -226,8 +149,6 @@ export default async function handler(request, response) {
             'deleteJurisdiction': () => handleDeleteJurisdiction(context),
             'getSchoolsForJurisdiction': () => handleGetSchoolsForJurisdiction(context),
             'assignSchoolToJurisdiction': () => handleAssignSchoolToJurisdiction(context),
-            'migrateLegacyData': () => handleMigrateLegacyData(context),
-            'getFeedback': () => handleGetFeedback(context), // Logic Local (Super Admin Only)
         };
 
         if (authenticatedActions[action]) {
@@ -246,12 +167,12 @@ export default async function handler(request, response) {
             });
         }
         
-        const criticalErrors = ['failed to connect', 'timeout', 'econnrefused', 'gagal terhubung', 'database initialization failed', 'cannot find package', 'module not found'];
+        const criticalErrors = ['failed to connect', 'timeout', 'econnrefused', 'gagal terhubung', 'database initialization failed', 'cannot find package'];
         const errorMessage = (error.message || '').toLowerCase();
         if (criticalErrors.some(keyword => errorMessage.includes(keyword))) {
             return response.status(503).json({
                 error: 'Gagal terhubung ke database atau dependensi server hilang.',
-                details: 'Server tidak dapat membuat koneksi atau file modul tidak ditemukan. Pastikan semua file telah dideploy dengan benar.'
+                details: 'Server tidak dapat membuat koneksi ke database atau salah satu library penting tidak ditemukan. Pastikan semua dependensi telah diinstal di server.'
             });
         }
 
