@@ -151,8 +151,45 @@ async function handleSchoolAnalysis(schoolId, startDate, endDate, rangeLabel, sq
         classes[className].dailySick[date] = dailySickCount;
     });
 
-    // 3. Apply Rules
-    const warnings = []; // { type: 'STUDENT'|'CLASS', priority: 'HIGH'|'MED', msg: '' }
+    // 3. Apply Rules & Group Warnings
+    // Structure: Key = Issue Title, Value = { priority, recommendation, items: [] }
+    const issueGroups = {
+        'Waspada Penularan (Outbreak)': { 
+            priority: 1, 
+            rec: 'Koordinasi segera dengan UKS/Puskesmas dan pertimbangkan sterilisasi kelas.', 
+            items: [] 
+        },
+        'Alpa Berulang': { 
+            priority: 2, 
+            rec: 'Wali kelas wajib menghubungi orang tua siswa untuk klarifikasi.', 
+            items: [] 
+        },
+        'Pola Weekend Panjang': { 
+            priority: 3, 
+            rec: 'Cek indikasi siswa membolos untuk memperpanjang libur.', 
+            items: [] 
+        },
+        'Alpa Hari Tertentu': { 
+            priority: 3, 
+            rec: 'Cek jadwal pelajaran pada hari tersebut, ada kemungkinan siswa menghindari mapel tertentu.', 
+            items: [] 
+        },
+        'Pemulihan Medis': { 
+            priority: 3, 
+            rec: 'Disarankan Home Visit atau konfirmasi surat keterangan medis.', 
+            items: [] 
+        },
+        'Anomali Izin Kelas': { 
+            priority: 4, 
+            rec: 'Evaluasi administrasi pemberian izin di kelas tersebut.', 
+            items: [] 
+        },
+        'Frekuensi Izin Tinggi': { 
+            priority: 5, 
+            rec: 'Evaluasi kewajaran alasan izin (urusan keluarga/kepentingan lain).', 
+            items: [] 
+        }
+    };
     
     // -- R2: Performance Indicator --
     const totalEntriesAll = Object.values(classes).reduce((sum, c) => sum + c.totalEntries, 0);
@@ -168,10 +205,7 @@ async function handleSchoolAnalysis(schoolId, startDate, endDate, rangeLabel, sq
     Object.values(students).forEach(s => {
         // A1: Alpa Berulang (>= 3 times)
         if (s.A.length >= 3) {
-            warnings.push({
-                type: 'STUDENT', priority: 'HIGH',
-                text: `**${s.name} (${s.class})**: Status **Alpa Berulang** (${s.A.length} kali). Wali kelas disarankan menghubungi orang tua.`
-            });
+            issueGroups['Alpa Berulang'].items.push(`${s.name} (${s.class} - ${s.A.length}x)`);
         }
 
         // A2: Pola Weekend (Mon/Fri Alpa >= 3)
@@ -180,10 +214,7 @@ async function handleSchoolAnalysis(schoolId, startDate, endDate, rangeLabel, sq
             return day === 1 || day === 5; // Mon or Fri
         });
         if (weekendAlpas.length >= 3) {
-            warnings.push({
-                type: 'STUDENT', priority: 'MED',
-                text: `**${s.name} (${s.class})**: Status **Pola Weekend Panjang** (Alpa pada Senin/Jumat ${weekendAlpas.length} kali). Indikasi memperpanjang libur.`
-            });
+            issueGroups['Pola Weekend Panjang'].items.push(`${s.name} (${s.class} - ${weekendAlpas.length}x)`);
         }
 
         // A3: Alpa Hari Tertentu (3 consecutive specific days)
@@ -202,15 +233,12 @@ async function handleSchoolAnalysis(schoolId, startDate, endDate, rangeLabel, sq
                     let consec = 1;
                     for (let i = 1; i < dates.length; i++) {
                         const diff = getDayDiff(dates[i-1], dates[i]);
-                        if (diff >= 6 && diff <= 8) consec++; // Allow 1 day variance for shifting calendars
+                        if (diff >= 6 && diff <= 8) consec++; 
                         else consec = 1;
                         
                         if (consec >= 3) {
                             const dayName = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][day];
-                            warnings.push({
-                                type: 'STUDENT', priority: 'MED',
-                                text: `**${s.name} (${s.class})**: Status **Alpa Hari Tertentu** (3x berturut-turut hari ${dayName}). Cek jadwal pelajaran hari tersebut.`
-                            });
+                            issueGroups['Alpa Hari Tertentu'].items.push(`${s.name} (${s.class} - Hari ${dayName})`);
                             break;
                         }
                     }
@@ -224,14 +252,11 @@ async function handleSchoolAnalysis(schoolId, startDate, endDate, rangeLabel, sq
             let consec = 1;
             for (let i = 1; i < s.S.length; i++) {
                 const diff = getDayDiff(s.S[i-1], s.S[i]);
-                if (diff <= 3) consec++; // Allow weekend gap (Fri->Mon is 3 days)
+                if (diff <= 3) consec++; 
                 else consec = 1;
 
-                if (consec === 3) { // Trigger once per sequence
-                    warnings.push({
-                        type: 'STUDENT', priority: 'MED',
-                        text: `**${s.name} (${s.class})**: Status **Pemulihan Medis** (Sakit ≥ 3 hari beruntun). Disarankan Home Visit/konfirmasi medis.`
-                    });
+                if (consec === 3) { 
+                    issueGroups['Pemulihan Medis'].items.push(`${s.name} (${s.class} - 3 Hari+)`);
                     break;
                 }
             }
@@ -239,42 +264,31 @@ async function handleSchoolAnalysis(schoolId, startDate, endDate, rangeLabel, sq
 
         // A6: Izin Berlebihan (> 5 times)
         if (s.I.length > 5) {
-            warnings.push({
-                type: 'STUDENT', priority: 'LOW',
-                text: `**${s.name} (${s.class})**: Status **Frekuensi Izin Tinggi** (${s.I.length} kali). Evaluasi alasan izin.`
-            });
+            issueGroups['Frekuensi Izin Tinggi'].items.push(`${s.name} (${s.class} - ${s.I.length}x)`);
         }
     });
 
     // -- Class Rules --
     Object.values(classes).forEach(c => {
-        // A5: Outbreak (Increase > 15% of total students in 3 days)
+        // A5: Outbreak
         const dates = Object.keys(c.dailySick).sort();
         if (dates.length >= 3) {
             const threshold = c.totalStudents * 0.15;
             for (let i = 0; i < dates.length - 2; i++) {
-                // Simple trend: Check if day i+2 is significantly higher than day i
-                // and exceeds threshold
                 const sickStart = c.dailySick[dates[i]];
                 const sickEnd = c.dailySick[dates[i+2]];
                 if (sickEnd > sickStart && (sickEnd - sickStart) > threshold) {
-                    warnings.push({
-                        type: 'CLASS', priority: 'HIGH',
-                        text: `**Kelas ${c.name}**: Status **Waspada Penularan**. Lonjakan siswa sakit >15% dalam 3 hari. Koordinasi dengan UKS.`
-                    });
+                    issueGroups['Waspada Penularan (Outbreak)'].items.push(`Kelas ${c.name} (Lonjakan >15%)`);
                     break; 
                 }
             }
         }
 
-        // A7: Anomali Izin Kelas (> 15% of total entries)
+        // A7: Anomali Izin Kelas
         if (c.totalEntries > 0) {
             const izinRate = c.I / c.totalEntries;
             if (izinRate > 0.15) {
-                warnings.push({
-                    type: 'CLASS', priority: 'MED',
-                    text: `**Kelas ${c.name}**: Status **Anomali Izin Kelas** (Tingkat Izin ${(izinRate*100).toFixed(1)}%). Evaluasi administrasi izin.`
-                });
+                issueGroups['Anomali Izin Kelas'].items.push(`Kelas ${c.name} (${(izinRate*100).toFixed(1)}%)`);
             }
         }
     });
@@ -292,16 +306,28 @@ async function handleSchoolAnalysis(schoolId, startDate, endDate, rangeLabel, sq
 *   **Izin:** ${sortedByI.length ? sortedByI.join(', ') : '-'}
 *   **Alpa:** ${sortedByA.length ? sortedByA.join(', ') : '-'}`;
 
-    const warningText = warnings.length > 0 
-        ? warnings.map(w => `- ${w.text}`).join('\n') 
-        : "Tidak ditemukan pola risiko signifikan pada periode ini.";
+    // Compile Grouped Warnings
+    let groupedWarningText = "";
+    let recommendations = new Set(); // Use Set to store unique recommendations
 
-    // Separate recommendations not really needed as they are embedded in warnings, 
-    // but we can add general ones if warnings exist.
-    let recommendationText = "- Lakukan pemantauan rutin pada siswa yang terdaftar di atas.";
-    if (warnings.some(w => w.text.includes("Waspada Penularan"))) {
-        recommendationText += "\n- **Prioritas:** Sterilisasi kelas yang terindikasi penularan.";
+    Object.entries(issueGroups)
+        .sort(([,a], [,b]) => a.priority - b.priority) // Sort by priority (1 is highest)
+        .forEach(([key, group]) => {
+            if (group.items.length > 0) {
+                groupedWarningText += `- **${key}**: ${group.items.join(', ')}.\n`;
+                recommendations.add({ rec: group.rec, priority: group.priority });
+            }
+        });
+
+    if (!groupedWarningText) {
+        groupedWarningText = "Tidak ditemukan pola risiko signifikan pada periode ini.";
     }
+
+    // Compile Sorted Recommendations
+    const recText = Array.from(recommendations)
+        .sort((a, b) => a.priority - b.priority)
+        .map((r, index) => `${index + 1}. ${r.rec}`)
+        .join('\n');
 
     const markdown = `### Ringkasan
 Tingkat kehadiran sekolah pada periode **${rangeLabel}** adalah **${presenceRate.toFixed(1)}%**. Status performa: **${summaryStatus}**.
@@ -310,10 +336,12 @@ ${topListText}
 ### Peringatan Dini & Analisis Pola
 Berikut adalah deteksi otomatis berdasarkan aturan perilaku siswa dan kelas:
 
-${warningText}
+${groupedWarningText}
 
 ### Rekomendasi Tindak Lanjut
-${recommendationText}
+Kesimpulan langkah yang perlu diambil (diurutkan dari prioritas tinggi):
+
+${recText || "- Lakukan pemantauan rutin."}
     `;
 
     return response.status(200).json({ recommendation: markdown });
@@ -344,8 +372,22 @@ async function handleRegionalAnalysis(jurisdictionId, startDate, endDate, rangeL
         return response.status(200).json({ recommendation: `### Ringkasan Regional\nTidak ada data absensi yang ditemukan di yurisdiksi ini untuk periode **${rangeLabel}**.` });
     }
 
-    // 2. Analyze
-    const schoolReports = [];
+    // 2. Analyze using Groups
+    const issueGroups = {
+        'Tingkat Alpa Kritis (>10%)': { 
+            items: [], 
+            rec: 'Instruksikan pengawas sekolah untuk inspeksi kedisiplinan ke sekolah terkait.' 
+        },
+        'Tingkat Izin Tinggi (>15%)': { 
+            items: [], 
+            rec: 'Lakukan evaluasi manajemen izin sekolah untuk standardisasi aturan.' 
+        },
+        'Dominasi Sakit (>20%)': { 
+            items: [], 
+            rec: 'Cek kondisi kesehatan lingkungan di sekitar sekolah tersebut.' 
+        }
+    };
+
     let regionS = 0, regionI = 0, regionA = 0, regionH = 0;
 
     stats.forEach(sch => {
@@ -357,26 +399,34 @@ async function handleRegionalAnalysis(jurisdictionId, startDate, endDate, rangeL
         
         regionS += S; regionI += I; regionA += A; regionH += H;
 
-        // A7 Equivalent: Anomali Izin Sekolah
         const izinRate = total > 0 ? (I / total) * 100 : 0;
         const alpaRate = total > 0 ? (A / total) * 100 : 0;
+        const sickRate = total > 0 ? (S / total) * 100 : 0;
 
-        if (izinRate > 15) {
-            schoolReports.push(`- **${sch.school_name}**: Status **Tingkat Izin Tinggi** (${izinRate.toFixed(1)}%). Evaluasi manajemen izin.`);
-        }
-        if (alpaRate > 10) { // Arbitrary threshold for regional alert
-             schoolReports.push(`- **${sch.school_name}**: Status **Tingkat Alpa Kritis** (${alpaRate.toFixed(1)}%). Perlu inspeksi kedisiplinan.`);
-        }
+        if (alpaRate > 10) issueGroups['Tingkat Alpa Kritis (>10%)'].items.push(`${sch.school_name} (${alpaRate.toFixed(1)}%)`);
+        if (izinRate > 15) issueGroups['Tingkat Izin Tinggi (>15%)'].items.push(`${sch.school_name} (${izinRate.toFixed(1)}%)`);
+        if (sickRate > 20) issueGroups['Dominasi Sakit (>20%)'].items.push(`${sch.school_name} (${sickRate.toFixed(1)}%)`);
     });
 
     const totalRegion = regionS + regionI + regionA + regionH;
     const regionRate = totalRegion > 0 ? (regionH / totalRegion) * 100 : 0;
 
-    // A5 Equivalent (Simple): Top Sick Rate
-    const topSickSchool = stats.sort((a,b) => (parseInt(b.count_s)/totalRegion) - (parseInt(a.count_s)/totalRegion))[0];
-    if (topSickSchool && parseInt(topSickSchool.count_s) > 20) { // Only if significant
-         schoolReports.push(`- **${topSickSchool.school_name}**: Tertinggi dalam absensi Sakit (${topSickSchool.count_s} kasus). Cek kondisi kesehatan lingkungan.`);
-    }
+    // Compile Output
+    let groupedWarningText = "";
+    let recommendations = new Set();
+
+    Object.entries(issueGroups).forEach(([key, group]) => {
+        if (group.items.length > 0) {
+            groupedWarningText += `- **${key}**: ${group.items.join(', ')}.\n`;
+            recommendations.add(group.rec);
+        }
+    });
+
+    if (!groupedWarningText) groupedWarningText = "- Tidak ada anomali signifikan pada tingkat sekolah.";
+
+    const recText = Array.from(recommendations)
+        .map((r, i) => `${i + 1}. ${r}`)
+        .join('\n');
 
     const markdown = `### Ringkasan Regional
 Rata-rata kehadiran wilayah pada periode **${rangeLabel}** adalah **${regionRate.toFixed(1)}%**.
@@ -385,11 +435,10 @@ Total data yang dianalisis: **${stats.length} Sekolah**.
 ### Identifikasi Masalah & Manajemen (A5, A6, A7)
 Daftar sekolah yang terdeteksi memiliki pola anomali berdasarkan aturan dinas:
 
-${schoolReports.length > 0 ? schoolReports.join('\n') : "- Tidak ada anomali signifikan pada tingkat sekolah."}
+${groupedWarningText}
 
-### Rekomendasi
-- Lakukan inspeksi pada sekolah dengan tingkat Alpa > 10%.
-- Koordinasikan dengan sekolah yang memiliki tingkat Izin tinggi untuk standarisasi aturan.
+### Rekomendasi Tindak Lanjut
+${recText || "- Lanjutkan pemantauan berkala."}
     `;
 
     return response.status(200).json({ recommendation: markdown });
