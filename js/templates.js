@@ -43,10 +43,10 @@ export const templates = {
         <div class="screen active">
             <!-- Hero Section -->
             <div class="max-w-5xl mx-auto text-center py-16 px-4 sm:px-6 lg:py-24 lg:px-8 animate-fade-in">
-                <h2 class="text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
-                    <span class="block text-blue-600 mb-2">GG-NEON 6</span>
+                <h2 class="text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl text-center">
+                    <span class="block text-blue-600 mb-2">Absensi Online Siswa</span>
                     <span class="block">
-                        ${state.logoutMessage ? encodeHTML(state.logoutMessage) : 'Manajemen Kehadiran Siswa'}
+                        ${state.logoutMessage ? encodeHTML(state.logoutMessage) : 'Manajemen Kehadiran Modern'}
                     </span>
                 </h2>
                 <p class="mt-4 text-xl leading-8 text-slate-500 max-w-2xl mx-auto">
@@ -74,38 +74,49 @@ export const templates = {
                         <h2 class="text-base text-blue-600 font-semibold tracking-wide uppercase">Satu Aplikasi, Semua Pihak</h2>
                         <p class="mt-2 text-3xl font-extrabold text-slate-900">Akses Sesuai Peran Anda</p>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        <div class="bg-slate-50 p-8 rounded-2xl border border-slate-100 hover:shadow-lg transition">
-                            <div class="w-12 h-12 bg-green-100 text-green-600 rounded-lg flex items-center justify-center mb-6">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 14l9-5-9-5-9 5 9 5z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div class="bg-slate-50 p-6 rounded-2xl border border-slate-100 hover:shadow-lg transition">
+                            <div class="w-10 h-10 bg-green-100 text-green-600 rounded-lg flex items-center justify-center mb-4">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 14l9-5-9-5-9 5 9 5z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
                             </div>
-                            <h3 class="text-xl font-bold text-slate-800 mb-4">Guru</h3>
-                            <ul class="space-y-3 text-slate-600 text-sm">
-                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Catat kehadiran kelas harian dengan cepat.</li>
-                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Kelola daftar siswa per kelas secara mandiri.</li>
-                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Pantau riwayat absensi kelas Anda sendiri.</li>
+                            <h3 class="text-lg font-bold text-slate-800 mb-3">Guru</h3>
+                            <ul class="space-y-2 text-slate-600 text-xs">
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Catat kehadiran kelas harian dengan cepat.</li>
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Kelola daftar siswa per kelas mandiri.</li>
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Pantau riwayat absensi kelas sendiri.</li>
                             </ul>
                         </div>
-                        <div class="bg-slate-50 p-8 rounded-2xl border border-blue-100 shadow-sm hover:shadow-lg transition ring-2 ring-blue-500 ring-opacity-10">
-                            <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mb-6">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                        <div class="bg-slate-50 p-6 rounded-2xl border border-blue-100 shadow-sm hover:shadow-lg transition ring-1 ring-blue-500 ring-opacity-10">
+                            <div class="w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mb-4">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
                             </div>
-                            <h3 class="text-xl font-bold text-slate-800 mb-4">Kepala Sekolah / Admin</h3>
-                            <ul class="space-y-3 text-slate-600 text-sm">
-                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Dasbor analitik visual seluruh sekolah.</li>
-                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Rekomendasi AI untuk pola absensi kritis.</li>
-                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Ekspor laporan rekapitulasi ke format Excel.</li>
+                            <h3 class="text-lg font-bold text-slate-800 mb-3">Kepala Sekolah</h3>
+                            <ul class="space-y-2 text-slate-600 text-xs">
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Dasbor analitik visual seluruh sekolah.</li>
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Rekomendasi AI pola absensi kritis.</li>
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Ekspor laporan rekapitulasi ke Excel.</li>
                             </ul>
                         </div>
-                        <div class="bg-slate-50 p-8 rounded-2xl border border-slate-100 hover:shadow-lg transition">
-                            <div class="w-12 h-12 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center mb-6">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                        <div class="bg-slate-50 p-6 rounded-2xl border border-slate-100 hover:shadow-lg transition">
+                            <div class="w-10 h-10 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center mb-4">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
                             </div>
-                            <h3 class="text-xl font-bold text-slate-800 mb-4">Orang Tua</h3>
-                            <ul class="space-y-3 text-slate-600 text-sm">
-                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-purple-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Pantau kehadiran anak secara real-time.</li>
-                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-purple-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Lihat riwayat ketidakhadiran (S/I/A).</li>
-                                <li class="flex items-start gap-2"><svg class="w-4 h-4 text-purple-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Akses aman hanya untuk data anak Anda.</li>
+                            <h3 class="text-lg font-bold text-slate-800 mb-3">Orang Tua</h3>
+                            <ul class="space-y-2 text-slate-600 text-xs">
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-purple-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Pantau kehadiran anak real-time.</li>
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-purple-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Lihat riwayat ketidakhadiran (S/I/A).</li>
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-purple-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Akses aman data spesifik anak sendiri.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-slate-50 p-6 rounded-2xl border border-slate-100 hover:shadow-lg transition">
+                            <div class="w-10 h-10 bg-cyan-100 text-cyan-600 rounded-lg flex items-center justify-center mb-4">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                            </div>
+                            <h3 class="text-lg font-bold text-slate-800 mb-3">Dinas Pendidikan</h3>
+                            <ul class="space-y-2 text-slate-600 text-xs">
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-cyan-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Pantau tren absensi regional.</li>
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-cyan-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Agregasi data lintas sekolah.</li>
+                                <li class="flex items-start gap-2"><svg class="w-3.5 h-3.5 text-cyan-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Laporan gabungan tingkat wilayah.</li>
                             </ul>
                         </div>
                     </div>
@@ -187,7 +198,7 @@ export const templates = {
                     <h2 class="text-3xl font-extrabold mb-4">Masih Punya Pertanyaan?</h2>
                     <p class="text-blue-100 mb-10 text-lg">Jika Anda memerlukan bantuan khusus atau pertanyaan mengenai kerja sama, tim pengembang kami siap membantu Anda.</p>
                     <div class="flex flex-col sm:flex-row items-center justify-center gap-6">
-                        <a href="mailto:i7620@guru.sd.belajar.id?subject=Tanya%20Aplikasi%20Absensi" class="bg-white text-blue-600 px-8 py-4 rounded-xl font-bold hover:bg-blue-50 transition shadow-lg flex items-center gap-2">
+                        <a id="contact-email-btn" href="mailto:i7620@guru.sd.belajar.id?subject=Tanya%20Aplikasi%20Absensi" class="bg-white text-blue-600 px-8 py-4 rounded-xl font-bold hover:bg-blue-50 transition shadow-lg flex items-center gap-2">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
                             Kirim Email Sekarang
                         </a>
@@ -200,7 +211,7 @@ export const templates = {
             
             <!-- Footer -->
             <footer class="bg-slate-900 py-12 text-center text-slate-400">
-                <p class="mb-4">© 2025 Aplikasi Absensi Siswa GG-NEON 6</p>
+                <p class="mb-4">© 2025 Aplikasi Absensi Online Siswa</p>
                 <div class="flex justify-center gap-6 text-sm font-semibold">
                     <a href="/privacy.html" class="hover:text-white transition">Kebijakan Privasi</a>
                     <a href="/terms.html" class="hover:text-white transition">Ketentuan Layanan</a>
@@ -1049,7 +1060,7 @@ export const templates = {
                             </div>
                         </div>
                     </div>
-                    <div id="db-view-ai" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md transition group">
+                    <div id="db-view-ai" class="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 cursor-pointer hover:shadow-md transition group">
                          <div class="flex items-center gap-4">
                             <div class="p-3 bg-purple-100 text-purple-600 rounded-full group-hover:bg-purple-600 group-hover:text-white transition">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
