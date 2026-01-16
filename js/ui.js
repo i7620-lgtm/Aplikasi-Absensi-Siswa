@@ -295,6 +295,33 @@ function renderLandingPageScreen() {
     appContainer.innerHTML = templates.landingPage();
     renderSignInButton();
 
+    // Logic for FAQ Accordion
+    const faqTriggers = document.querySelectorAll('.faq-trigger');
+    faqTriggers.forEach(trigger => {
+        trigger.addEventListener('click', () => {
+            const content = trigger.nextElementSibling;
+            const icon = trigger.querySelector('.faq-icon');
+            
+            // Toggle visibility
+            const isHidden = content.classList.toggle('hidden');
+            
+            // Animate Icon
+            if (isHidden) {
+                icon.style.transform = 'rotate(0deg)';
+            } else {
+                icon.style.transform = 'rotate(180deg)';
+            }
+            
+            // Optional: Close other FAQs
+            faqTriggers.forEach(other => {
+                if (other !== trigger) {
+                    other.nextElementSibling.classList.add('hidden');
+                    other.querySelector('.faq-icon').style.transform = 'rotate(0deg)';
+                }
+            });
+        });
+    });
+
     if (state.logoutMessage) {
         setTimeout(() => {
             setState({ logoutMessage: null });
