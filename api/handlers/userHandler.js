@@ -1,6 +1,4 @@
-
-// HAPUS IMPORT INI UNTUK MENCEGAH CIRCULAR DEPENDENCY
-// import { SUPER_ADMIN_EMAILS } from '../data.js';
+import { SUPER_ADMIN_EMAILS } from '../data.js';
 
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
@@ -125,7 +123,7 @@ export async function handleGetAllUsers({ user, sql, response }) {
 }
 
 
-export async function handleUpdateUserConfiguration({ payload, user, sql, response, SUPER_ADMIN_EMAILS }) {
+export async function handleUpdateUserConfiguration({ payload, user, sql, response }) {
     const authorizedRoles = ['SUPER_ADMIN', 'ADMIN_SEKOLAH', 'ADMIN_DINAS_PENDIDIKAN'];
     if (!authorizedRoles.includes(user.role)) {
          return response.status(403).json({ error: 'Forbidden: Access denied' });
@@ -174,7 +172,7 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
     }
     
     // Super Admin checks
-    if (user.role === 'SUPER_ADMIN' && SUPER_ADMIN_EMAILS && SUPER_ADMIN_EMAILS.includes(targetEmail) && newRole !== 'SUPER_ADMIN') {
+    if (user.role === 'SUPER_ADMIN' && SUPER_ADMIN_EMAILS.includes(targetEmail) && newRole !== 'SUPER_ADMIN') {
         return response.status(400).json({ error: 'Cannot demote a bootstrapped Super Admin.' });
     }
     
@@ -205,7 +203,7 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
 }
 
 
-export async function handleUpdateUsersBulk({ payload, user, sql, response, SUPER_ADMIN_EMAILS }) {
+export async function handleUpdateUsersBulk({ payload, user, sql, response }) {
     if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN_SEKOLAH') {
         return response.status(403).json({ error: 'Forbidden: Access denied' });
     }
@@ -230,7 +228,7 @@ export async function handleUpdateUsersBulk({ payload, user, sql, response, SUPE
         }
     }
 
-    if (user.role === 'SUPER_ADMIN' && newRole && newRole !== 'SUPER_ADMIN' && SUPER_ADMIN_EMAILS) {
+    if (user.role === 'SUPER_ADMIN' && newRole && newRole !== 'SUPER_ADMIN') {
         const demotingBootstrapped = targetEmails.some(email => SUPER_ADMIN_EMAILS.includes(email));
         if (demotingBootstrapped) {
             return response.status(400).json({ error: 'Tidak dapat menurunkan peran Super Admin bawaan.' });
