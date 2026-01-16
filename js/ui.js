@@ -322,6 +322,17 @@ function renderLandingPageScreen() {
         });
     });
 
+    // --- NEW: Smart Device Detection for Email Link ---
+    const contactBtn = document.getElementById('contact-email-btn');
+    if (contactBtn) {
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        if (!isMobile) {
+            // If on PC/Laptop, open mailto in a new tab to facilitate webmail
+            contactBtn.setAttribute('target', '_blank');
+            contactBtn.setAttribute('rel', 'noopener noreferrer');
+        }
+    }
+
     if (state.logoutMessage) {
         setTimeout(() => {
             setState({ logoutMessage: null });
