@@ -1,3 +1,4 @@
+
 import { setupDatabase } from '../setup.js';
 
 /**
@@ -24,14 +25,19 @@ async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
         primaryRole = 'SUPER_ADMIN';
     }
 
-    // 2. Independently check if the user is a parent
+    // 2. Independently check if the user is a parent (using latest snapshot only)
     const { rows: parentCheck } = await sql`
-        SELECT 1 FROM change_log
-        WHERE event_type = 'STUDENT_LIST_UPDATED'
-        AND EXISTS (
-            SELECT 1 FROM jsonb_array_elements(payload->'students') as s
-            WHERE s->>'parentEmail' = ${email}
-        ) LIMIT 1;
+        WITH latest_logs AS (
+            SELECT DISTINCT ON (school_id, payload->>'class')
+                payload->'students' as students
+            FROM change_log
+            WHERE event_type = 'STUDENT_LIST_UPDATED'
+            ORDER BY school_id, payload->>'class', id DESC
+        )
+        SELECT 1 
+        FROM latest_logs, jsonb_array_elements(students) as student
+        WHERE student->>'parentEmail' = ${email}
+        LIMIT 1;
     `;
     const isParent = parentCheck.length > 0;
 
