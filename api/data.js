@@ -3,16 +3,16 @@ import { sql, db } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 import { Redis } from '@upstash/redis';
 
-// Import Handlers - Menggunakan folder _handlers agar tidak dihitung sebagai endpoint API oleh Vercel
-import handleLoginOrRegister, { handleInitializeDatabase } from './_handlers/authHandler.js';
-import { handleGetUpdateSignal } from './_handlers/configHandler.js';
-import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetInitialData } from './_handlers/userHandler.js';
-import { handleGetAllSchools, handleCreateSchool, handleSearchSchools } from './_handlers/schoolHandler.js';
-import { handleSaveData, handleGetHistoryData, handleGetSchoolStudentData, handleGetChangesSince } from './_handlers/attendanceHandler.js';
-import handleGetDashboardData from './_handlers/dashboardHandler.js';
-import handleGetRecapData from './_handlers/recapHandler.js';
-import handleAiRecommendation from './_handlers/aiHandler.js';
-import handleGetParentData from './_handlers/parentHandler.js';
+// Import Handlers
+import handleLoginOrRegister, { handleInitializeDatabase } from './handlers/authHandler.js';
+import { handleGetUpdateSignal } from './handlers/configHandler.js';
+import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetInitialData } from './handlers/userHandler.js';
+import { handleGetAllSchools, handleCreateSchool, handleSearchSchools } from './handlers/schoolHandler.js';
+import { handleSaveData, handleGetHistoryData, handleGetSchoolStudentData, handleGetChangesSince } from './handlers/attendanceHandler.js';
+import handleGetDashboardData from './handlers/dashboardHandler.js';
+import handleGetRecapData from './handlers/recapHandler.js';
+import handleAiRecommendation from './handlers/aiHandler.js';
+import handleGetParentData from './handlers/parentHandler.js';
 import { 
     handleGetJurisdictionTree, 
     handleCreateJurisdiction, 
@@ -20,8 +20,7 @@ import {
     handleDeleteJurisdiction, 
     handleGetSchoolsForJurisdiction, 
     handleAssignSchoolToJurisdiction 
-} from './_handlers/jurisdictionHandler.js';
-import handleMigrateLegacyData from './_handlers/migrationHandler.js';
+} from './handlers/jurisdictionHandler.js';
 
 
 // --- KONFIGURASI ---
@@ -37,56 +36,6 @@ if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     console.log("Klien Upstash Redis (via Vercel KV) berhasil diinisialisasi.");
 } else {
     console.warn("Variabel lingkungan Vercel KV tidak diatur. Fitur sinyal pembaruan cepat akan dinonaktifkan.");
-}
-
-// --- LOGIKA FEEDBACK (DIGABUNGKAN UNTUK MENGHEMAT FUNCTION LIMIT) ---
-
-function sanitize(text) {
-    if (!text) return '';
-    return text.replace(/<[^>]*>/g, '').trim();
-}
-
-async function handleSubmitFeedback({ payload, sql, response }) {
-    const { name, email, type, message } = payload;
-    
-    const sanitizedName = sanitize(name);
-    const sanitizedEmail = sanitize(email);
-    const sanitizedMessage = sanitize(message);
-    const sanitizedType = sanitize(type);
-
-    if (!sanitizedName || !sanitizedEmail || !sanitizedMessage || !sanitizedType) {
-        return response.status(400).json({ error: 'Semua kolom wajib diisi.' });
-    }
-
-    try {
-        await sql`
-            INSERT INTO feedback (name, email, type, message)
-            VALUES (${sanitizedName}, ${sanitizedEmail}, ${sanitizedType}, ${sanitizedMessage})
-        `;
-        return response.status(200).json({ success: true, message: 'Pesan Anda berhasil dikirim.' });
-    } catch (error) {
-        console.error("Failed to submit feedback:", error);
-        return response.status(500).json({ error: 'Gagal mengirim pesan. Silakan coba lagi.' });
-    }
-}
-
-async function handleGetFeedback({ user, sql, response }) {
-    if (user.role !== 'SUPER_ADMIN') {
-        return response.status(403).json({ error: 'Forbidden: Access denied' });
-    }
-
-    try {
-        const { rows: feedbackList } = await sql`
-            SELECT id, name, email, type, message, created_at
-            FROM feedback
-            ORDER BY created_at DESC
-            LIMIT 100;
-        `;
-        return response.status(200).json({ feedbackList });
-    } catch (error) {
-        console.error("Failed to fetch feedback:", error);
-        return response.status(500).json({ error: 'Gagal mengambil data pengaduan.' });
-    }
 }
 
 
@@ -134,7 +83,6 @@ export default async function handler(request, response) {
         const publicDbActions = {
             'loginOrRegister': () => handleLoginOrRegister(context),
             'initializeDatabase': () => handleInitializeDatabase(context),
-            'submitFeedback': () => handleSubmitFeedback(context), // Logic Local
         };
         if (publicDbActions[action]) {
             return await publicDbActions[action]();
@@ -201,8 +149,6 @@ export default async function handler(request, response) {
             'deleteJurisdiction': () => handleDeleteJurisdiction(context),
             'getSchoolsForJurisdiction': () => handleGetSchoolsForJurisdiction(context),
             'assignSchoolToJurisdiction': () => handleAssignSchoolToJurisdiction(context),
-            'migrateLegacyData': () => handleMigrateLegacyData(context),
-            'getFeedback': () => handleGetFeedback(context), // Logic Local (Super Admin Only)
         };
 
         if (authenticatedActions[action]) {
@@ -236,4 +182,3 @@ export default async function handler(request, response) {
         });
     }
 }
- 
