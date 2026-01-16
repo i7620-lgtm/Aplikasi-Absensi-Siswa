@@ -188,6 +188,33 @@ export const templates = {
                                 Tentu. Aplikasi ini menggunakan teknologi PWA yang memungkinkan pengisian absensi tetap berjalan meskipun koneksi internet terputus. Data akan otomatis tersinkron ke cloud saat Anda kembali online.
                             </div>
                         </div>
+                        <div class="faq-item border border-slate-200 rounded-xl overflow-hidden">
+                            <button class="faq-trigger w-full flex items-center justify-between p-5 text-left bg-slate-50 hover:bg-slate-100 transition">
+                                <span class="font-bold text-slate-800">Bagaimana cara agar orang tua dapat melihat absensi anak secara real-time?</span>
+                                <svg class="w-5 h-5 text-slate-400 transform transition faq-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                            </button>
+                            <div class="faq-content hidden p-5 border-t border-slate-200 text-slate-600 text-sm leading-relaxed">
+                                Sekolah (melalui akun Guru atau Admin) perlu mendaftarkan email Google orang tua pada saat mengelola daftar siswa. Setelah terdaftar, orang tua cukup login ke aplikasi ini menggunakan email tersebut, dan sistem akan otomatis menampilkan dasbor riwayat kehadiran khusus untuk anak mereka.
+                            </div>
+                        </div>
+                        <div class="faq-item border border-slate-200 rounded-xl overflow-hidden">
+                            <button class="faq-trigger w-full flex items-center justify-between p-5 text-left bg-slate-50 hover:bg-slate-100 transition">
+                                <span class="font-bold text-slate-800">Apakah aplikasi dapat digunakan secara gratis?</span>
+                                <svg class="w-5 h-5 text-slate-400 transform transition faq-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                            </button>
+                            <div class="faq-content hidden p-5 border-t border-slate-200 text-slate-600 text-sm leading-relaxed">
+                                Ya, fitur utama absensi harian dan rekap kelas dapat digunakan secara gratis. Kami berkomitmen mendukung digitalisasi pendidikan di Indonesia dengan menyediakan alat bantu yang mudah diakses oleh seluruh guru dan sekolah.
+                            </div>
+                        </div>
+                        <div class="faq-item border border-slate-200 rounded-xl overflow-hidden">
+                            <button class="faq-trigger w-full flex items-center justify-between p-5 text-left bg-slate-50 hover:bg-slate-100 transition">
+                                <span class="font-bold text-slate-800">Apa yang harus saya siapkan agar dapat bekerja sama dengan pengembang?</span>
+                                <svg class="w-5 h-5 text-slate-400 transform transition faq-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                            </button>
+                            <div class="faq-content hidden p-5 border-t border-slate-200 text-slate-600 text-sm leading-relaxed">
+                                Untuk kerja sama tingkat sekolah atau wilayah (Dinas), Anda cukup menyiapkan daftar nama siswa dan kelas dalam format Excel/CSV. Silakan hubungi kami melalui email yang tertera di bawah untuk mendapatkan panduan implementasi khusus atau fitur analisis data regional yang lebih mendalam.
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1052,7 +1079,7 @@ export const templates = {
                     <div id="db-view-percentage" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:shadow-md transition group">
                          <div class="flex items-center gap-4">
                             <div class="p-3 bg-cyan-100 text-cyan-600 rounded-full group-hover:bg-cyan-600 group-hover:text-white transition">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
                             </div>
                             <div>
                                 <h3 class="font-bold text-slate-800 text-lg">Persentase & Tren</h3>
@@ -1063,7 +1090,7 @@ export const templates = {
                     <div id="db-view-ai" class="bg-white p-6 rounded-2xl shadow-lg border border-slate-200 cursor-pointer hover:shadow-md transition group">
                          <div class="flex items-center gap-4">
                             <div class="p-3 bg-purple-100 text-purple-600 rounded-full group-hover:bg-purple-600 group-hover:text-white transition">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                             </div>
                             <div>
                                 <h3 class="font-bold text-slate-800 text-lg">Analisis AI</h3>
