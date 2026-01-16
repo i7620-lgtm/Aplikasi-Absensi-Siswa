@@ -198,7 +198,7 @@ export const templates = {
                     <h2 class="text-3xl font-extrabold mb-4">Masih Punya Pertanyaan?</h2>
                     <p class="text-blue-100 mb-10 text-lg">Jika Anda memerlukan bantuan khusus atau pertanyaan mengenai kerja sama, tim pengembang kami siap membantu Anda.</p>
                     <div class="flex flex-col sm:flex-row items-center justify-center gap-6">
-                        <a id="contact-email-btn" href="mailto:i7620@guru.sd.belajar.id?subject=Tanya%20Aplikasi%20Absensi" class="bg-white text-blue-600 px-8 py-4 rounded-xl font-bold hover:bg-blue-50 transition shadow-lg flex items-center gap-2">
+                        <a id="contact-email-btn" href="#" class="bg-white text-blue-600 px-8 py-4 rounded-xl font-bold hover:bg-blue-50 transition shadow-lg flex items-center gap-2">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
                             Kirim Email Sekarang
                         </a>
