@@ -1,3 +1,4 @@
+
 export default async function handleGetParentData({ user, sql, response }) {
     // Check if the user has been identified as a parent, regardless of their primary role.
     if (!user.isParent) {
@@ -10,7 +11,7 @@ export default async function handleGetParentData({ user, sql, response }) {
         const { rows: parentData } = await sql`
             WITH
             latest_student_lists AS (
-                -- Find the most recent student list for each class in each school
+                -- Find the most recent student list for each class in each school (snapshot)
                 SELECT DISTINCT ON (school_id, payload->>'class')
                     id,
                     school_id,
@@ -18,11 +19,10 @@ export default async function handleGetParentData({ user, sql, response }) {
                     payload->'students' as students
                 FROM change_log
                 WHERE event_type = 'STUDENT_LIST_UPDATED'
-                  AND payload->'students' @> ${JSON.stringify([{parentEmail: parentEmail}])}
                 ORDER BY school_id, payload->>'class', id DESC
             ),
             parent_children AS (
-                -- Find the children of the logged-in parent from these latest lists
+                -- Find the children of the logged-in parent from these LATEST lists only
                 SELECT
                     l.school_id,
                     s.name as school_name,
