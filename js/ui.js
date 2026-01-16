@@ -322,12 +322,21 @@ function renderLandingPageScreen() {
         });
     });
 
-    // --- NEW: Smart Device Detection for Email Link ---
+    // --- NEW & IMPROVED: Smart Device Detection for Email Link ---
     const contactBtn = document.getElementById('contact-email-btn');
     if (contactBtn) {
+        const email = 'i7620@guru.sd.belajar.id';
+        const subject = 'Tanya Aplikasi Absensi';
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        if (!isMobile) {
-            // If on PC/Laptop, open mailto in a new tab to facilitate webmail
+        
+        if (isMobile) {
+            // Mobile: Direct mailto link (opens email app)
+            contactBtn.setAttribute('href', `mailto:${email}?subject=${encodeURIComponent(subject)}`);
+        } else {
+            // PC/Laptop: Gmail Web Compose URL (opens in new tab)
+            // This bypasses local Outlook/Mail apps
+            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${encodeURIComponent(subject)}`;
+            contactBtn.setAttribute('href', gmailUrl);
             contactBtn.setAttribute('target', '_blank');
             contactBtn.setAttribute('rel', 'noopener noreferrer');
         }
@@ -1860,7 +1869,7 @@ async function renderJurisdictionPanelScreen() {
                 return `<ul class="${level > 0 ? 'pl-4' : ''}">${nodes.map(node => `
                     <li class="my-1">
                         <div class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-200 cursor-pointer jur-node" data-id="${node.id}" data-node='${JSON.stringify(node)}'>
-                            <span class="font-semibold text-slate-700">${encodeHTML(node.name)} <span class="text-xs text-slate-400 font-normal">(${encodeHTML(node.type)})</span></span>
+                            <span class="font-semibold text-slate-700">${encodeHTML(node.name)} <span class="text-xs text-gray-400 font-normal">(${encodeHTML(node.type)})</span></span>
                             <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                         </div>
                         ${node.children.length > 0 ? renderTree(node.children, level + 1) : ''}
