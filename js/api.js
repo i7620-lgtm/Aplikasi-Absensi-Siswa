@@ -179,5 +179,13 @@ export const apiService = {
     },
     async assignSchoolToJurisdiction(schoolId, jurisdictionId) {
         return await _fetch('/api/data', 'assignSchoolToJurisdiction', { schoolId, jurisdictionId });
+    },
+
+    // Feedback APIs
+    async submitFeedback(name, email, type, message) {
+        return await _fetch('/api/data', 'submitFeedback', { name, email, type, message });
+    },
+    async getFeedback() {
+        return await _fetch('/api/data', 'getFeedback');
     }
 };
