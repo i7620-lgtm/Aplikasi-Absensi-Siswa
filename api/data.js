@@ -21,6 +21,7 @@ import {
     handleGetSchoolsForJurisdiction, 
     handleAssignSchoolToJurisdiction 
 } from './handlers/jurisdictionHandler.js';
+import handleMigrateLegacyData from './handlers/migrationHandler.js';
 
 
 // --- KONFIGURASI ---
@@ -100,13 +101,18 @@ export default async function handler(request, response) {
             WHERE u.email = ${userEmail}`;
 
         // NEW: Independently check if the user is a parent, regardless of their primary role.
+        // Uses CTE to inspect only the LATEST student list state to avoid historical false positives.
         const { rows: parentCheck } = await context.sql`
-            SELECT 1 FROM change_log
-            WHERE event_type = 'STUDENT_LIST_UPDATED'
-            AND EXISTS (
-                SELECT 1 FROM jsonb_array_elements(payload->'students') as s
-                WHERE s->>'parentEmail' = ${userEmail}
+            WITH latest_logs AS (
+                SELECT DISTINCT ON (school_id, payload->>'class')
+                    payload->'students' as students
+                FROM change_log
+                WHERE event_type = 'STUDENT_LIST_UPDATED'
+                ORDER BY school_id, payload->>'class', id DESC
             )
+            SELECT 1 
+            FROM latest_logs, jsonb_array_elements(students) as student
+            WHERE student->>'parentEmail' = ${userEmail}
             LIMIT 1;
         `;
         const isParent = parentCheck.length > 0;
@@ -149,6 +155,7 @@ export default async function handler(request, response) {
             'deleteJurisdiction': () => handleDeleteJurisdiction(context),
             'getSchoolsForJurisdiction': () => handleGetSchoolsForJurisdiction(context),
             'assignSchoolToJurisdiction': () => handleAssignSchoolToJurisdiction(context),
+            'migrateLegacyData': () => handleMigrateLegacyData(context),
         };
 
         if (authenticatedActions[action]) {
