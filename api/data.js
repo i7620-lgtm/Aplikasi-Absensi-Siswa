@@ -13,6 +13,7 @@ import handleGetDashboardData from './handlers/dashboardHandler.js';
 import handleGetRecapData from './handlers/recapHandler.js';
 import handleAiRecommendation from './handlers/aiHandler.js';
 import handleGetParentData from './handlers/parentHandler.js';
+import { handleSubmitFeedback, handleGetFeedback } from './handlers/feedbackHandler.js';
 import { 
     handleGetJurisdictionTree, 
     handleCreateJurisdiction, 
@@ -21,6 +22,7 @@ import {
     handleGetSchoolsForJurisdiction, 
     handleAssignSchoolToJurisdiction 
 } from './handlers/jurisdictionHandler.js';
+import handleMigrateLegacyData from './handlers/migrationHandler.js';
 
 
 // --- KONFIGURASI ---
@@ -83,6 +85,7 @@ export default async function handler(request, response) {
         const publicDbActions = {
             'loginOrRegister': () => handleLoginOrRegister(context),
             'initializeDatabase': () => handleInitializeDatabase(context),
+            'submitFeedback': () => handleSubmitFeedback(context), // Public Access
         };
         if (publicDbActions[action]) {
             return await publicDbActions[action]();
@@ -149,6 +152,8 @@ export default async function handler(request, response) {
             'deleteJurisdiction': () => handleDeleteJurisdiction(context),
             'getSchoolsForJurisdiction': () => handleGetSchoolsForJurisdiction(context),
             'assignSchoolToJurisdiction': () => handleAssignSchoolToJurisdiction(context),
+            'migrateLegacyData': () => handleMigrateLegacyData(context),
+            'getFeedback': () => handleGetFeedback(context), // Super Admin Only
         };
 
         if (authenticatedActions[action]) {
