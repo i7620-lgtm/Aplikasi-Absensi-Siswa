@@ -62,11 +62,13 @@ export async function handleGetInitialData({ user, sql, response }) {
     let schoolSettings = { workDays: [1, 2, 3, 4, 5, 6] }; // Default Monday-Saturday
     let holidays = [];
 
-    // 1. Fetch Attendance Data
+    // 1. Fetch Attendance Data & Settings (If School Assigned)
+    let applicableRegionalIds = [];
+    
     if (user && user.school_id) {
         schoolData = await reconstructStateFromLogs(user.school_id, sql);
         
-        // 2. Fetch School Settings
+        // Fetch School Settings
         // Use SELECT * to avoid crash if 'settings' column is missing in DB
         const { rows: sRows } = await sql`SELECT * FROM schools WHERE id = ${user.school_id}`;
         
@@ -75,10 +77,7 @@ export async function handleGetInitialData({ user, sql, response }) {
                 schoolSettings = { ...schoolSettings, ...sRows[0].settings };
             }
             
-            // 3. Fetch Applicable Holidays
-            // Logic: National + School Specific + Regional (Recursive based on jurisdiction)
-            let conditions = [sql`scope = 'NATIONAL'`, sql`(scope = 'SCHOOL' AND reference_id = ${user.school_id})`];
-            
+            // Calculate Applicable Regional IDs for this school
             if (sRows[0].jurisdiction_id) {
                 const { rows: jurIds } = await sql`
                     WITH RECURSIVE parents AS (
@@ -88,29 +87,20 @@ export async function handleGetInitialData({ user, sql, response }) {
                     )
                     SELECT id FROM parents
                 `;
-                const ids = jurIds.map(j => j.id);
-                if (ids.length > 0) {
-                    conditions.push(sql`(scope = 'REGIONAL' AND reference_id = ANY(${ids}))`);
-                }
+                applicableRegionalIds = jurIds.map(j => j.id);
             }
-            
-            // Execute Holiday Query manually constructed to avoid complicated dynamic SQL builder issues
-            // Fetch all and filter in code is safer for Vercel/Postgres simple usage or use generic Fetch
-            const { rows: allHolidays } = await sql`SELECT * FROM holidays`; // Fetching all is okay for small scale (<10k rows). 
-            // For scale, we should optimize, but staying within "12 functions" constraint implies simpler logic.
-            
-            // Filter Logic
-            const applicableRegionalIds = sRows[0].jurisdiction_id ? 
-                (await sql`WITH RECURSIVE p AS (SELECT id, parent_id FROM jurisdictions WHERE id = ${sRows[0].jurisdiction_id} UNION ALL SELECT j.id, j.parent_id FROM jurisdictions j JOIN p ON j.id = p.parent_id) SELECT id FROM p`).rows.map(i=>i.id) 
-                : [];
-                
-            holidays = allHolidays.filter(h => 
-                h.scope === 'NATIONAL' ||
-                (h.scope === 'SCHOOL' && h.reference_id === user.school_id) ||
-                (h.scope === 'REGIONAL' && applicableRegionalIds.includes(h.reference_id))
-            );
         }
     }
+
+    // 2. Fetch Applicable Holidays (National + School + Regional)
+    // Fetch all holidays first (optimized for low volume)
+    const { rows: allHolidays } = await sql`SELECT * FROM holidays`; 
+    
+    holidays = allHolidays.filter(h => 
+        h.scope === 'NATIONAL' ||
+        (user.school_id && h.scope === 'SCHOOL' && h.reference_id === user.school_id) ||
+        (h.scope === 'REGIONAL' && applicableRegionalIds.includes(h.reference_id))
+    );
     
     return response.status(200).json({ ...schoolData, schoolSettings, holidays });
 }
