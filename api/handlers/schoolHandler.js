@@ -163,22 +163,17 @@ export async function handleManageHoliday({ payload, user, sql, response }) {
 
 export async function handleGetHolidays({ user, sql, response }) {
     // Determine the scope of holidays to fetch for this user
-    let query = sql`SELECT * FROM holidays WHERE scope = 'NATIONAL'`;
-    
     const conditions = [];
     conditions.push(sql`scope = 'NATIONAL'`);
 
+    let myJurisdictionIds = [];
+
     if (user.school_id) {
-        // Fetch School specific
         conditions.push(sql`(scope = 'SCHOOL' AND reference_id = ${user.school_id})`);
         
-        // Fetch Regional (Need to know School's Jurisdiction)
-        // We do this via a join or subquery if we had school data handy, 
-        // but let's assume we fetch school's jurisdiction first.
         const { rows: schoolData } = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${user.school_id}`;
         if (schoolData[0] && schoolData[0].jurisdiction_id) {
-            // Get all parent jurisdictions (recursive) for the school
-            const { rows: jurIds } = await sql`
+            const { rows: ids } = await sql`
                 WITH RECURSIVE parents AS (
                     SELECT id, parent_id FROM jurisdictions WHERE id = ${schoolData[0].jurisdiction_id}
                     UNION ALL
@@ -186,14 +181,10 @@ export async function handleGetHolidays({ user, sql, response }) {
                 )
                 SELECT id FROM parents
             `;
-            const ids = jurIds.map(j => j.id);
-            if (ids.length > 0) {
-                 conditions.push(sql`(scope = 'REGIONAL' AND reference_id = ANY(${ids}))`);
-            }
+            myJurisdictionIds = ids.map(i => i.id);
         }
     } else if (user.jurisdiction_id) {
-        // For Dinas Users
-        const { rows: jurIds } = await sql`
+        const { rows: ids } = await sql`
             WITH RECURSIVE parents AS (
                 SELECT id, parent_id FROM jurisdictions WHERE id = ${user.jurisdiction_id}
                 UNION ALL
@@ -201,64 +192,22 @@ export async function handleGetHolidays({ user, sql, response }) {
             )
             SELECT id FROM parents
         `;
-        const ids = jurIds.map(j => j.id);
-        if (ids.length > 0) {
-             conditions.push(sql`(scope = 'REGIONAL' AND reference_id = ANY(${ids}))`);
-        }
+        myJurisdictionIds = ids.map(i => i.id);
     }
 
-    // Combine conditions with OR
-    // Since node-postgres templating for dynamic OR conditions is tricky, we'll do simpler separate queries or a UNION.
-    // Let's use a simpler approach: Fetch relevant sets.
-    
-    // Actually, `userHandler.getInitialData` logic will duplicate this partially. 
-    // This handler is for the "Manage Holidays" UI specifically.
-    
-    let whereClause;
-    if (conditions.length === 1) whereClause = conditions[0];
-    else {
-        // Construct composite query
-        // Note: Using `sql` template literal composition is safer.
-        // For simplicity in this constraints, we will fetch generic lists based on role.
-    }
-    
-    // Refined Query Strategy
-    const { rows: holidays } = await sql`
-        SELECT * FROM holidays
-        ORDER BY date DESC
-    `;
-    
-    // Filter in JS for simplicity regarding the dynamic jurisdiction tree
-    // (Optimization: In a massive DB, this should be SQL, but for < 10k holidays it's fine)
-    
-    const filteredHolidays = [];
-    
-    // Helper to check regional scope
-    let myJurisdictionIds = [];
-    if (user.school_id) {
-         const { rows } = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${user.school_id}`;
-         if (rows[0]?.jurisdiction_id) {
-             const { rows: ids } = await sql`WITH RECURSIVE p AS (SELECT id, parent_id FROM jurisdictions WHERE id = ${rows[0].jurisdiction_id} UNION ALL SELECT j.id, j.parent_id FROM jurisdictions j JOIN p ON j.id = p.parent_id) SELECT id FROM p`;
-             myJurisdictionIds = ids.map(i => i.id);
-         }
-    } else if (user.jurisdiction_id) {
-             const { rows: ids } = await sql`WITH RECURSIVE p AS (SELECT id, parent_id FROM jurisdictions WHERE id = ${user.jurisdiction_id} UNION ALL SELECT j.id, j.parent_id FROM jurisdictions j JOIN p ON j.id = p.parent_id) SELECT id FROM p`;
-             myJurisdictionIds = ids.map(i => i.id);
+    if (myJurisdictionIds.length > 0) {
+         conditions.push(sql`(scope = 'REGIONAL' AND reference_id = ANY(${myJurisdictionIds}))`);
     }
 
-    for (const h of holidays) {
-        if (h.scope === 'NATIONAL') {
-            filteredHolidays.push(h);
-        } else if (h.scope === 'SCHOOL' && h.reference_id === user.school_id) {
-            filteredHolidays.push(h);
-        } else if (h.scope === 'REGIONAL' && myJurisdictionIds.includes(h.reference_id)) {
-            filteredHolidays.push(h);
-        }
-        // Admin View: See what they created
-        else if (h.created_by_email === user.email) {
-            if (!filteredHolidays.find(x => x.id === h.id)) filteredHolidays.push(h);
-        }
-    }
+    const { rows: holidays } = await sql`SELECT * FROM holidays ORDER BY date DESC`;
+    
+    const filteredHolidays = holidays.filter(h => {
+        if (h.scope === 'NATIONAL') return true;
+        if (h.scope === 'SCHOOL' && h.reference_id === user.school_id) return true;
+        if (h.scope === 'REGIONAL' && myJurisdictionIds.includes(h.reference_id)) return true;
+        if (h.created_by_email === user.email) return true; // Creator access
+        return false;
+    });
 
     return response.status(200).json({ holidays: filteredHolidays });
 }
@@ -272,12 +221,14 @@ export async function handleUpdateSchoolSettings({ payload, user, sql, response 
     const { workDays } = payload;
     if (!Array.isArray(workDays)) return response.status(400).json({ error: 'Invalid format' });
     
-    const schoolId = user.role === 'SUPER_ADMIN' ? payload.schoolId : user.school_id;
+    // Safety check: ensure schoolId is a Number
+    const schoolId = Number(user.role === 'SUPER_ADMIN' ? payload.schoolId : user.school_id);
     if (!schoolId) return response.status(400).json({ error: 'School ID required' });
 
-    const newSettings = { workDays: workDays.map(Number) }; // Ensure numbers
+    const newSettings = { workDays: workDays.map(Number) }; 
     
-    await sql`UPDATE schools SET settings = ${JSON.stringify(newSettings)} WHERE id = ${schoolId}`;
+    // Use JSON.stringify + cast to jsonb to ensure correct type handling in postgres
+    await sql`UPDATE schools SET settings = ${JSON.stringify(newSettings)}::jsonb WHERE id = ${schoolId}`;
     
     return response.status(200).json({ success: true, settings: newSettings });
 }
