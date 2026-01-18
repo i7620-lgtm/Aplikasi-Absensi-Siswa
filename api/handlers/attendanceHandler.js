@@ -186,8 +186,9 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
     });
 
     // --- NEW: Fetch School Settings with Robust Default Fallback ---
+    // Menggunakan SELECT * untuk menghindari error 'column does not exist' jika skema DB belum update.
     const { rows: settingsRows } = await sql`
-        SELECT settings FROM schools WHERE id = ${schoolId}
+        SELECT * FROM schools WHERE id = ${schoolId}
     `;
     
     // Default: Senin (1) s.d Sabtu (6). Jika data DB null atau kosong, gunakan default ini.
