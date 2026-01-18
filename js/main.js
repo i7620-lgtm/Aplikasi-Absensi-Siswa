@@ -128,6 +128,7 @@ export function navigateTo(screen) {
     const schoolContextScreens = ['setup', 'dashboard', 'add-students', 'attendance', 'data', 'recap', 'holidaySettings'];
     const adminContextScreens = ['dashboard', 'jurisdictionPanel', 'adminPanel', 'migrationTool', 'holidaySettings'];
     
+    // Logic to clear Super Admin context when leaving specific areas
     if (schoolContextScreens.includes(state.currentScreen) && !schoolContextScreens.includes(screen)) {
         if (state.adminActingAsSchool) {
             console.log("Leaving school context. Clearing Super Admin school context.");
@@ -223,12 +224,7 @@ export async function handleStartAttendance(overrideClass = null, overrideDate =
     
     const workDays = state.schoolSettings?.workDays || [1,2,3,4,5,6];
     
-    // Check if dayOfWeek is in workDays. 
-    // Usually settings use 1=Mon...6=Sat, 0=Sun.
-    // If workDays contains 0, it means Sunday is active.
     if (!workDays.includes(dayOfWeek) && !(dayOfWeek === 0 && workDays.includes(7))) {
-        // Handle potential mismatch if settings use 7 for Sunday, but Date.getDay() uses 0
-        // Our backend defaults to [1..6], implying Mon-Sat.
         const proceed = await showConfirmation(`Hari ini (${dateObj.toLocaleDateString('id-ID', {weekday:'long'})}) bukan hari sekolah aktif. Tetap lanjutkan?`);
         if (!proceed) return;
     }
@@ -387,11 +383,36 @@ export async function handleSaveAttendance() {
     }
 }
 
+// --- NEW FUNCTION: Select School specifically for Configuration ---
+export async function handleSelectSchoolForConfig() {
+    const selectedSchool = await showSchoolSelectorModal('Pilih Sekolah untuk Diatur');
+    if (selectedSchool) {
+        showLoader('Memuat data sekolah...');
+        try {
+            const { settings } = await apiService.getSchoolStudentData(selectedSchool.id);
+            await setState({ 
+                adminActingAsSchool: selectedSchool,
+                schoolSettings: settings || { workDays: [1, 2, 3, 4, 5, 6] }
+            });
+            renderScreen('holidaySettings'); // Re-render to show checkboxes
+        } catch (error) {
+            showNotification('Gagal memuat pengaturan sekolah: ' + error.message, 'error');
+        } finally {
+            hideLoader();
+        }
+    }
+}
+
 export async function handleSaveSchoolSettings(workDays) {
+    // Validation for Super Admin Context
+    if (state.userProfile.primaryRole === 'SUPER_ADMIN' && !state.adminActingAsSchool) {
+        showNotification('Silakan pilih sekolah terlebih dahulu.', 'error');
+        return;
+    }
+
     showLoader('Menyimpan pengaturan...');
     try {
-        // Fix: Use state.userProfile, not 'user' which is undefined
-        const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+        const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' ? state.adminActingAsSchool.id : state.userProfile.school_id;
         const { settings } = await apiService.updateSchoolSettings(workDays, schoolId);
         await setState({ schoolSettings: settings });
         showNotification('Pengaturan sekolah berhasil diperbarui.');
