@@ -24,21 +24,10 @@ export async function setupDatabase() {
                 payload JSONB NOT NULL,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             );
-            CREATE TABLE IF NOT EXISTS calendars (
-                id SERIAL PRIMARY KEY,
-                date DATE NOT NULL,
-                description TEXT,
-                type VARCHAR(20) NOT NULL, 
-                scope_id INTEGER, 
-                created_by VARCHAR(255),
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                UNIQUE(date, type, scope_id)
-            );
         `);
 
         // Pernyataan ALTER perlu dijalankan secara terpisah dengan penanganan error untuk idempotensi.
         await client.query('ALTER TABLE schools ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;');
-        await client.query('ALTER TABLE schools ADD COLUMN IF NOT EXISTS work_days INTEGER DEFAULT 6;'); -- 5 for Mon-Fri, 6 for Mon-Sat
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS jurisdiction_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL;');
         await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;');
         
@@ -51,8 +40,6 @@ export async function setupDatabase() {
             CREATE INDEX IF NOT EXISTS idx_users_jurisdiction_id ON users (jurisdiction_id);
             CREATE INDEX IF NOT EXISTS idx_changelog_main_query ON change_log (school_id, event_type, ((payload->>'date')::date));
             CREATE INDEX IF NOT EXISTS idx_changelog_latest_student_list ON change_log (school_id, (payload->>'class'), id DESC) WHERE event_type = 'STUDENT_LIST_UPDATED';
-            CREATE INDEX IF NOT EXISTS idx_calendars_date ON calendars (date);
-            CREATE INDEX IF NOT EXISTS idx_calendars_scope ON calendars (scope_id, type);
         `);
 
         // Menyelesaikan transaksi
@@ -84,3 +71,4 @@ export default async function handler(request, response) {
         return response.status(500).json({ success: false, message: 'Database setup failed.', error: error.message });
     }
 }
+ 
