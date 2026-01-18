@@ -348,39 +348,31 @@ export const templates = {
             : "Absensi Online Siswa";
         
         // The setup screen is now only for logged-in users.
-        // The login prompt is moved to the landing page.
         if (!state.userProfile) {
             return ``; // Should navigate to landing page instead.
         }
 
-        // --- NEW: Generate Dropdown Options Logic ---
+        // --- Generate Dropdown Options Logic ---
         let optionsHtml = '';
-        
         if (isAdmin) {
-            // Get active class keys from studentsByClass and sort alphanumerically
             const activeClassKeys = Object.keys(state.studentsByClass || {}).sort((a, b) => {
                 return a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'});
             });
-            
-            // Filter CLASSES to exclude active ones, creating the "Inactive" list
             const inactiveClasses = CLASSES.filter(c => !activeClassKeys.includes(c));
 
             if (activeClassKeys.length > 0) {
-                // Group 1: Active Classes (Prioritized)
                 optionsHtml += `<optgroup label="Kelas Aktif di Sekolah (Ada Data)">`;
                 activeClassKeys.forEach(c => {
                     optionsHtml += `<option value="${c}" ${c === state.selectedClass ? 'selected' : ''}>${c}</option>`;
                 });
                 optionsHtml += `</optgroup>`;
                 
-                // Group 2: All other classes (for creating new ones)
                 optionsHtml += `<optgroup label="Buat Kelas Baru (Pilih dari daftar)">`;
                 inactiveClasses.forEach(c => {
                     optionsHtml += `<option value="${c}" ${c === state.selectedClass ? 'selected' : ''}>${c}</option>`;
                 });
                 optionsHtml += `</optgroup>`;
             } else {
-                // Fallback for brand new schools with no data yet
                 optionsHtml += `<option disabled>Belum ada data kelas aktif</option>`;
                 optionsHtml += `<optgroup label="Silakan pilih kelas untuk memulai">`;
                 CLASSES.forEach(c => {
@@ -389,7 +381,6 @@ export const templates = {
                 optionsHtml += `</optgroup>`;
             }
         } else {
-            // Teacher Logic (unchanged, strictly assigned classes)
             if (assignedClasses.length > 0) {
                  assignedClasses.forEach(c => {
                     optionsHtml += `<option value="${c}" ${c === state.selectedClass ? 'selected' : ''}>${c}</option>`;
@@ -494,6 +485,9 @@ export const templates = {
         const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole);
         const reportCardRoles = ['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN', 'SUPER_ADMIN'];
 
+        // Can access Holidays?
+        const canManageHolidays = ['SUPER_ADMIN', 'ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'ADMIN_DINAS_PENDIDIKAN', 'DINAS_PENDIDIKAN'].includes(primaryRole);
+
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
             <div class="bg-white p-8 rounded-2xl shadow-lg max-w-2xl w-full">
@@ -518,28 +512,33 @@ export const templates = {
                 <div class="space-y-4">
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center">Pilih Aksi</h2>
                     
-                    <!-- Teacher & School Admin Actions -->
                     ${['GURU', 'ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN'].includes(primaryRole) ? `
                     <button id="go-to-attendance-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><div><p class="font-bold">Lakukan & Kelola Absensi</p><p class="text-sm font-normal opacity-90">Catat kehadiran, kelola siswa, dan lihat rekap.</p></div></button>
                     ` : ''}
 
-                    <!-- Dashboard Actions for Non-Super Admins -->
                      ${['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
                     <button id="view-dashboard-btn" class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg><div><p class="font-bold">Lihat Dasbor Analitik</p><p class="text-sm font-normal opacity-90">Analisis data kehadiran, persentase, dan dapatkan rekomendasi AI.</p></div></button>
                     ` : ''}
 
-                    <!-- Dashboard Actions for Super Admin -->
                     ${primaryRole === 'SUPER_ADMIN' ? `
                     <button id="view-school-dashboard-btn" class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg><div><p class="font-bold">Dasbor Analitik Sekolah</p><p class="text-sm font-normal opacity-90">Analisis data kehadiran mendalam per sekolah.</p></div></button>
                     <button id="view-jurisdiction-dashboard-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg><div><p class="font-bold">Dasbor Analitik Regional</p><p class="text-sm font-normal opacity-90">Analisis data agregat untuk seluruh wilayah.</p></div></button>
                     ` : ''}
 
-                    <!-- Parent Action -->
                     ${isParent ? `
                     <button id="view-parent-dashboard-btn" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg><div><p class="font-bold">Dasbor Orang Tua</p><p class="text-sm font-normal opacity-90">Lihat riwayat kehadiran anak Anda.</p></div></button>
                     ` : ''}
                     
-                    <!-- NEW REPORTING CARD -->
+                    ${canManageHolidays ? `
+                    <button id="manage-holidays-btn" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
+                        <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        <div>
+                            <p class="font-bold">Kalender & Pengaturan</p>
+                            <p class="text-sm font-normal opacity-90">Atur hari libur, hari sekolah, dan konfigurasi lainnya.</p>
+                        </div>
+                    </button>
+                    ` : ''}
+                    
                     ${reportCardRoles.includes(primaryRole) && primaryRole !== 'SUPER_ADMIN' ? `
                     <button id="download-scoped-report-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
                         <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
@@ -566,7 +565,6 @@ export const templates = {
                     </button>
                     ` : ''}
                     
-                    <!-- Admin Panels -->
                     ${['SUPER_ADMIN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
                     <button id="view-admin-panel-btn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.124-1.282-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.124-1.282.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg><div><p class="font-bold">Panel Manajemen Pengguna</p><p class="text-sm font-normal opacity-90">Kelola pengguna dan penetapan peran.</p></div></button>
                     ` : ''}
@@ -582,8 +580,154 @@ export const templates = {
         `;
     },
     
-    // --- MISSING TEMPLATES ADDED BELOW ---
+    // ... Existing templates ...
+    // Note: I will only append/replace changed templates below to keep the diff clean.
 
+    attendance: (className, date) => `
+        <div class="screen active min-h-screen bg-slate-100 p-4">
+            <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden flex flex-col min-h-[80vh]">
+                <div class="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center sticky top-0 z-10">
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${encodeHTML(className)}</h1>
+                        <p class="text-slate-500 text-sm mt-1">${new Date(date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                         <button id="mark-holiday-btn" class="text-sm bg-orange-100 text-orange-700 hover:bg-orange-200 font-bold py-2 px-3 rounded-lg transition flex items-center gap-1">
+                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                             Liburkan Kelas
+                         </button>
+                         <button id="back-to-setup-btn" class="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-200 transition">
+                              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                         </button>
+                    </div>
+                </div>
+                
+                <div class="flex-grow overflow-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-white sticky top-0 shadow-sm z-10">
+                            <tr>
+                                <th class="p-3 w-12 text-sm font-semibold text-slate-500 border-b">No</th>
+                                <th class="p-3 text-sm font-semibold text-slate-500 border-b">Nama Siswa</th>
+                                <th class="p-3 w-16 text-center text-sm font-semibold text-green-600 border-b">Hadir</th>
+                                <th class="p-3 w-16 text-center text-sm font-semibold text-yellow-600 border-b">Sakit</th>
+                                <th class="p-3 w-16 text-center text-sm font-semibold text-blue-600 border-b">Izin</th>
+                                <th class="p-3 w-16 text-center text-sm font-semibold text-red-600 border-b">Alpa</th>
+                                <th class="p-3 w-16 text-center text-sm font-semibold text-orange-600 border-b">Libur</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendance-table-body" class="divide-y divide-slate-100">
+                            <!-- Rows injected here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="p-4 border-t border-slate-200 bg-slate-50 sticky bottom-0 z-20">
+                    <button id="save-attendance-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg transition shadow-lg shadow-blue-500/30 text-lg">Simpan Absensi</button>
+                </div>
+            </div>
+        </div>
+    `,
+
+    // New Template for Settings & Holidays
+    holidaySettings: () => `
+        <div class="screen active min-h-screen bg-slate-100 p-4">
+             <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg flex flex-col min-h-[80vh]">
+                <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                    <h1 class="text-2xl font-bold text-slate-800">Kalender & Pengaturan</h1>
+                    <button id="settings-back-btn" class="text-slate-500 hover:text-blue-500 p-2 rounded-full hover:bg-slate-200 transition">
+                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                
+                <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                    
+                    <!-- Section 1: School Settings (Work Days) -->
+                    ${['ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN'].includes(state.userProfile?.primaryRole) ? `
+                    <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <h2 class="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
+                             <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                             Hari Sekolah Aktif
+                        </h2>
+                        <p class="text-sm text-slate-500 mb-4">Pilih hari-hari dimana kegiatan belajar mengajar dilaksanakan.</p>
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                             ${['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'].map((day, idx) => `
+                                <label class="flex items-center space-x-2 cursor-pointer">
+                                    <input type="checkbox" value="${idx + 1 === 7 ? 0 : idx + 1}" class="work-day-checkbox w-5 h-5 text-blue-600 rounded focus:ring-blue-500" ${(state.schoolSettings?.workDays || []).includes(idx + 1 === 7 ? 0 : idx + 1) ? 'checked' : ''}>
+                                    <span class="text-slate-700">${day}</span>
+                                </label>
+                             `).join('')}
+                        </div>
+                        <button id="save-school-settings-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition">Simpan Pengaturan</button>
+                    </div>
+                    ` : ''}
+
+                    <!-- Section 2: Holiday Management -->
+                    <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm md:col-span-2">
+                         <div class="flex justify-between items-center mb-4">
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                    Daftar Hari Libur
+                                </h2>
+                                <p class="text-sm text-slate-500">Libur Nasional, Daerah, dan Sekolah.</p>
+                            </div>
+                            <button id="add-holiday-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                Tambah Libur
+                            </button>
+                        </div>
+
+                        <div id="holiday-list-container" class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                            <!-- Holidays injected here -->
+                            ${state.holidays.length === 0 ? '<p class="text-slate-400 text-center py-4">Belum ada data libur.</p>' : ''}
+                            ${state.holidays.map(h => `
+                                <div class="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-bold text-slate-700">${new Date(h.date).toLocaleDateString('id-ID', {weekday: 'long', day:'numeric', month:'long', year:'numeric'})}</span>
+                                            <span class="text-xs px-2 py-0.5 rounded-full font-bold ${h.scope === 'NATIONAL' ? 'bg-red-100 text-red-800' : h.scope === 'REGIONAL' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}">${h.scope === 'NATIONAL' ? 'Nasional' : h.scope === 'REGIONAL' ? 'Daerah' : 'Sekolah'}</span>
+                                        </div>
+                                        <p class="text-sm text-slate-600">${encodeHTML(h.description)}</p>
+                                    </div>
+                                    <button class="delete-holiday-btn text-slate-400 hover:text-red-500 transition p-2" data-id="${h.id}" title="Hapus">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Modal Add Holiday -->
+            <div id="add-holiday-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 backdrop-blur-sm p-4">
+                <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">Tambah Hari Libur</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
+                            <input type="date" id="new-holiday-date" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Keterangan</label>
+                            <input type="text" id="new-holiday-desc" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Contoh: Rapat Guru / Galungan">
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-2 mt-6">
+                        <button id="cancel-holiday-modal" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Batal</button>
+                        <button id="confirm-add-holiday" class="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700">Simpan</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `,
+
+    // --- EXISTING TEMPLATES BELOW (Unchanged parts omitted for brevity, only showing re-declarations needed for context if any) ---
+    // Note: I'm reusing the structure but I must include the whole `templates` object to be valid replacement.
+    // However, to keep this response within limits and correct, I will assume the user merges or I provide the FULL file content if required.
+    // Given the instruction "Full content of file", I must provide the full file content.
+    
+    // ... [Rest of templates from original file] ...
     confirmation: (message) => `
         <div id="confirmation-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
             <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 text-center">
@@ -814,44 +958,6 @@ export const templates = {
                     <button id="save-students-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-lg shadow-blue-500/30">Simpan Daftar Siswa</button>
                 </div>
              </div>
-        </div>
-    `,
-
-    attendance: (className, date) => `
-        <div class="screen active min-h-screen bg-slate-100 p-4">
-            <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden flex flex-col min-h-[80vh]">
-                <div class="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center sticky top-0 z-10">
-                    <div>
-                        <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${encodeHTML(className)}</h1>
-                        <p class="text-slate-500 text-sm mt-1">${new Date(date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                    </div>
-                    <button id="back-to-setup-btn" class="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-200 transition">
-                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                </div>
-                
-                <div class="flex-grow overflow-auto">
-                    <table class="w-full text-left border-collapse">
-                        <thead class="bg-white sticky top-0 shadow-sm z-10">
-                            <tr>
-                                <th class="p-3 w-12 text-sm font-semibold text-slate-500 border-b">No</th>
-                                <th class="p-3 text-sm font-semibold text-slate-500 border-b">Nama Siswa</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-green-600 border-b">Hadir</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-yellow-600 border-b">Sakit</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-blue-600 border-b">Izin</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-red-600 border-b">Alpa</th>
-                            </tr>
-                        </thead>
-                        <tbody id="attendance-table-body" class="divide-y divide-slate-100">
-                            <!-- Rows injected here -->
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="p-4 border-t border-slate-200 bg-slate-50 sticky bottom-0 z-20">
-                    <button id="save-attendance-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg transition shadow-lg shadow-blue-500/30 text-lg">Simpan Absensi</button>
-                </div>
-            </div>
         </div>
     `,
 
