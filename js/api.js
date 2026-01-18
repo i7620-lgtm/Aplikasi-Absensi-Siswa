@@ -66,7 +66,13 @@ async function _fetch(url, action, payload = {}, retryCount = 0) {
                 }
             }
             
-            const errorMessage = errorData.error || `Server merespons dengan status ${response.status}`;
+            let errorMessage = errorData.error || `Server merespons dengan status ${response.status}`;
+            
+            // Perjelas pesan error jika ini adalah error skema persisten setelah retry
+            if (errorData.code === 'DATABASE_NOT_INITIALIZED') {
+                errorMessage = "Database sedang diperbarui. Silakan coba tekan tombol 'Simpan' sekali lagi.";
+            }
+
             const error = new Error(errorMessage);
             error.status = response.status; // Tambahkan status code ke objek error
             if (errorData.code) {
