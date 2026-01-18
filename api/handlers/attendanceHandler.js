@@ -142,6 +142,7 @@ export async function handleGetHistoryData({ payload, user, sql, response }) {
     }
 
     // --- IMPROVED LOGIC: Filter by class in SQL if requested, and always get DISTINCT per day/class ---
+    // Updated Order: Date DESC (Newest First)
     const { rows } = await sql`
         SELECT DISTINCT ON (cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date')
             cl.payload, u.name as "teacherName"
@@ -150,7 +151,7 @@ export async function handleGetHistoryData({ payload, user, sql, response }) {
         WHERE cl.school_id = ANY(${schoolIds}) 
           AND cl.event_type = 'ATTENDANCE_UPDATED'
           AND (${!isClassSpecific} OR TRIM(cl.payload->>'class') = TRIM(${classFilter}::text))
-        ORDER BY cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date', cl.id DESC
+        ORDER BY cl.school_id, TRIM(cl.payload->>'class'), (cl.payload->>'date')::date DESC, cl.id DESC
     `;
     
     const allLogs = rows.map(row => ({ ...row.payload, teacherName: row.teacherName }));
