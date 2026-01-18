@@ -7,7 +7,7 @@ import { Redis } from '@upstash/redis';
 import handleLoginOrRegister, { handleInitializeDatabase } from './handlers/authHandler.js';
 import { handleGetUpdateSignal } from './handlers/configHandler.js';
 import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetInitialData } from './handlers/userHandler.js';
-import { handleGetAllSchools, handleCreateSchool, handleSearchSchools } from './handlers/schoolHandler.js';
+import { handleGetAllSchools, handleCreateSchool, handleSearchSchools, handleManageHoliday, handleUpdateSchoolSettings, handleGetHolidays } from './handlers/schoolHandler.js';
 import { handleSaveData, handleGetHistoryData, handleGetSchoolStudentData, handleGetChangesSince } from './handlers/attendanceHandler.js';
 import handleGetDashboardData from './handlers/dashboardHandler.js';
 import handleGetRecapData from './handlers/recapHandler.js';
@@ -135,7 +135,7 @@ export default async function handler(request, response) {
             'updateUsersBulk': () => handleUpdateUsersBulk(context),
             'getAllSchools': () => handleGetAllSchools(context),
             'createSchool': () => handleCreateSchool(context),
-            'searchSchools': () => handleSearchSchools(context), // New Endpoint
+            'searchSchools': () => handleSearchSchools(context),
             'saveData': () => handleSaveData(context),
             'getHistoryData': () => handleGetHistoryData(context),
             'getDashboardData': () => handleGetDashboardData(context),
@@ -149,6 +149,11 @@ export default async function handler(request, response) {
             'deleteJurisdiction': () => handleDeleteJurisdiction(context),
             'getSchoolsForJurisdiction': () => handleGetSchoolsForJurisdiction(context),
             'assignSchoolToJurisdiction': () => handleAssignSchoolToJurisdiction(context),
+            
+            // New Holiday & Settings Actions
+            'manageHoliday': () => handleManageHoliday(context),
+            'updateSchoolSettings': () => handleUpdateSchoolSettings(context),
+            'getHolidays': () => handleGetHolidays(context),
         };
 
         if (authenticatedActions[action]) {
