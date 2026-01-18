@@ -229,11 +229,17 @@ export async function handleStartAttendance(overrideClass = null, overrideDate =
         if (!proceed) return;
     }
 
-    // --- FIX: Normalize date comparison for ISO strings ---
-    // state.selectedDate is "YYYY-MM-DD". h.date is often "YYYY-MM-DDTHH:mm:ss.sssZ"
+    // --- FIX: Robust Date Comparison ---
+    // Handle cases where 'date' from DB is "YYYY-MM-DDT00:00:00.000Z" (ISO string) or Date object.
+    // 'state.selectedDate' is strictly "YYYY-MM-DD" (from HTML input).
+    // Simple substring is sufficient as long as we force ISO string first.
     const holiday = state.holidays.find(h => {
-        const hDate = typeof h.date === 'string' ? h.date.substring(0, 10) : new Date(h.date).toISOString().split('T')[0];
-        return hDate === state.selectedDate;
+        let hDateStr = h.date;
+        if (hDateStr instanceof Date) hDateStr = hDateStr.toISOString();
+        if (typeof hDateStr === 'string') {
+            return hDateStr.substring(0, 10) === state.selectedDate;
+        }
+        return false;
     });
 
     if (holiday) {
