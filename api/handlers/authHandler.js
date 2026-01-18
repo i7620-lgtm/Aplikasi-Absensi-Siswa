@@ -150,7 +150,7 @@ export default async function handleLoginOrRegister({ payload, sql, response, SU
     }
 }
 
-/**
+/** 
  * Dedicated handler for initializing the database via api/data.js
  */
 export async function handleInitializeDatabase({ response, sql }) {
