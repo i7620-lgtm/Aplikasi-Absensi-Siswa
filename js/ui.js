@@ -1,5 +1,5 @@
 
-import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport, handleManageHoliday, handleSaveSchoolSettings, handleMarkClassAsHoliday } from './main.js';
+import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport, handleManageHoliday, handleSaveSchoolSettings, handleMarkClassAsHoliday, handleSelectSchoolForConfig } from './main.js';
 import { apiService } from './api.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignOut, renderSignInButton } from './auth.js';
@@ -514,11 +514,13 @@ async function renderMultiRoleHomeScreen() {
             if (selectedSchool) {
                 showLoader('Memuat data sekolah...');
                 try {
-                    const { aggregatedStudentsByClass } = await apiService.getSchoolStudentData(selectedSchool.id);
+                    const { aggregatedStudentsByClass, settings } = await apiService.getSchoolStudentData(selectedSchool.id);
                     await setState({ 
                         adminActingAsSchool: selectedSchool, 
                         adminActingAsJurisdiction: null,
-                        studentsByClass: aggregatedStudentsByClass || {}, 
+                        studentsByClass: aggregatedStudentsByClass || {},
+                        // Update settings state to reflect the target school
+                        schoolSettings: settings || { workDays: [1, 2, 3, 4, 5, 6] },
                         dashboard: { 
                             ...state.dashboard, 
                             data: null, 
@@ -1436,7 +1438,7 @@ async function filterAndRenderHistory() {
     try {
         const payload = { 
             isClassSpecific: !!historyClassFilter, 
-            classFilter: historyClassFilter,
+            classFilter: historyClassFilter, 
             isGlobalView: adminAllLogsView,
             schoolId: state.adminActingAsSchool?.id || state.userProfile.school_id
         };
@@ -1848,6 +1850,37 @@ function renderHolidaySettingsScreen() {
     appContainer.innerHTML = templates.holidaySettings();
     document.getElementById('settings-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
     
+    // --- Logic for Super Admin Context Selector ---
+    const settingsPanel = document.querySelector('.bg-white.rounded-xl.border.p-6.shadow-sm');
+    if (state.userProfile.primaryRole === 'SUPER_ADMIN') {
+        if (!state.adminActingAsSchool) {
+            if (settingsPanel) {
+                settingsPanel.innerHTML = `
+                    <h2 class="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
+                         <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                         Hari Sekolah Aktif
+                    </h2>
+                    <p class="text-sm text-slate-500 mb-4">Silakan pilih sekolah terlebih dahulu untuk mengatur hari kerja spesifik.</p>
+                    <button id="select-school-config-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition">Pilih Sekolah</button>
+                `;
+                document.getElementById('select-school-config-btn').addEventListener('click', handleSelectSchoolForConfig);
+            }
+        } else {
+            // Update Title to reflect context
+            const titleEl = settingsPanel.querySelector('h2');
+            if (titleEl) {
+                titleEl.innerHTML += ` <span class="ml-2 text-sm font-normal text-blue-600 bg-blue-50 px-2 py-1 rounded">(${encodeHTML(state.adminActingAsSchool.name)})</span>`;
+                // Add button to change school
+                const changeBtn = document.createElement('button');
+                changeBtn.className = "text-xs text-blue-500 hover:underline ml-auto block mt-2";
+                changeBtn.textContent = "Ganti Sekolah";
+                changeBtn.onclick = handleSelectSchoolForConfig;
+                titleEl.parentNode.insertBefore(changeBtn, titleEl.nextSibling);
+            }
+        }
+    }
+    // --- End Logic ---
+
     // School Settings (Work Days)
     const workDayCheckboxes = document.querySelectorAll('.work-day-checkbox');
     const saveSettingsBtn = document.getElementById('save-school-settings-btn');
