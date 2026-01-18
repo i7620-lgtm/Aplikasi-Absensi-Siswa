@@ -390,9 +390,14 @@ export async function handleSelectSchoolForConfig() {
         showLoader('Memuat data sekolah...');
         try {
             const { settings } = await apiService.getSchoolStudentData(selectedSchool.id);
+            // Defensive coding: If settings is unexpectedly null or incomplete, fallback to default.
+            const validSettings = (settings && Array.isArray(settings.workDays)) 
+                ? settings 
+                : { workDays: [1, 2, 3, 4, 5, 6] };
+
             await setState({ 
                 adminActingAsSchool: selectedSchool,
-                schoolSettings: settings || { workDays: [1, 2, 3, 4, 5, 6] }
+                schoolSettings: validSettings
             });
             renderScreen('holidaySettings'); // Re-render to show checkboxes
         } catch (error) {
