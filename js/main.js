@@ -47,6 +47,8 @@ export let state = {
     localVersion: 0, // NEW: Tracks the latest change ID processed by the client
     historyClassFilter: null,
     allHistoryLogs: [],
+    holidays: [], // NEW: Array of holiday objects
+    schoolSettings: { workDays: [1,2,3,4,5,6] }, // NEW: Default to Mon-Sat
     dataScreenFilters: {
         studentName: '',
         status: 'all',
@@ -122,7 +124,9 @@ export async function setState(newState) {
         await idb.set('userData', {
             studentsByClass: state.studentsByClass,
             savedLogs: state.savedLogs,
-            localVersion: state.localVersion
+            localVersion: state.localVersion,
+            holidays: state.holidays, // Save holidays locally
+            schoolSettings: state.schoolSettings // Save settings locally
         });
     }
 }
@@ -133,8 +137,8 @@ export function render() {
 }
 
 export function navigateTo(screen) {
-    const schoolContextScreens = ['setup', 'dashboard', 'add-students', 'attendance', 'data', 'recap'];
-    const adminContextScreens = ['dashboard', 'jurisdictionPanel', 'adminPanel', 'migrationTool'];
+    const schoolContextScreens = ['setup', 'dashboard', 'add-students', 'attendance', 'data', 'recap', 'holidaySettings'];
+    const adminContextScreens = ['dashboard', 'jurisdictionPanel', 'adminPanel', 'migrationTool', 'holidaySettings'];
     
     if (schoolContextScreens.includes(state.currentScreen) && !schoolContextScreens.includes(screen)) {
         if (state.adminActingAsSchool) {
@@ -230,6 +234,29 @@ export async function handleStartAttendance(overrideClass = null, overrideDate =
         if (dateInput) state.selectedDate = dateInput.value;
     }
     
+    // --- HOLIDAY & WORKDAY CHECK ---
+    const dateObj = new Date(state.selectedDate);
+    const dayOfWeek = dateObj.getDay(); // 0 (Sun) - 6 (Sat)
+    
+    // Check School Work Days
+    const workDays = state.schoolSettings?.workDays || [1,2,3,4,5,6];
+    // Adjust logic: JS getDay() returns 0 for Sunday. 
+    // Usually settings use 1=Mon...6=Sat, 0=Sun.
+    if (!workDays.includes(dayOfWeek === 0 ? 7 : dayOfWeek) && !workDays.includes(dayOfWeek)) {
+        // Handle Sunday 0 vs 7 ambiguity if needed, usually just need to match settings format
+        // Our API default is 1-6. Sunday is 0.
+        const proceed = await showConfirmation(`Hari ini (${dateObj.toLocaleDateString('id-ID', {weekday:'long'})}) bukan hari sekolah aktif. Tetap lanjutkan?`);
+        if (!proceed) return;
+    }
+
+    // Check Holidays
+    const holiday = state.holidays.find(h => h.date === state.selectedDate);
+    if (holiday) {
+        const proceed = await showConfirmation(`Tanggal ini terdaftar sebagai libur: ${holiday.description} (${holiday.scope}). Tetap ingin mengisi absensi?`);
+        if (!proceed) return;
+    }
+    // --- END CHECK ---
+
     let students = (state.studentsByClass[state.selectedClass] || {}).students || [];
     const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole);
 
@@ -242,13 +269,8 @@ export async function handleStartAttendance(overrideClass = null, overrideDate =
     state.students = students;
     
     // Check if logs already exist for this date/class
-    // Note: When clicking "Isi Sekarang" from Missing History, we expect this to be false/undefined,
-    // but checking doesn't hurt.
     const existingLog = state.savedLogs.find(log => log.class === state.selectedClass && log.date === state.selectedDate);
     
-    // Only prompt confirmation if we are NOT coming from the "Missing" button (which implies intention)
-    // OR if we strictly want to warn about overwrites.
-    // Let's keep the warning if data actually exists, to be safe.
     if (existingLog && !overrideClass) {
         const confirmed = await showConfirmation(`Absensi untuk kelas ${state.selectedClass} pada tanggal ini sudah ada. Ingin mengeditnya?`);
         if (!confirmed) return;
@@ -390,6 +412,70 @@ export async function handleSaveAttendance() {
         showNotification('Gagal menyimpan: ' + error.message, 'error');
         hideLoader();
     }
+}
+
+// --- NEW: Handlers for Holiday & Settings ---
+
+export async function handleSaveSchoolSettings(workDays) {
+    showLoader('Menyimpan pengaturan...');
+    try {
+        const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : user.school_id;
+        const { settings } = await apiService.updateSchoolSettings(workDays, schoolId);
+        await setState({ schoolSettings: settings });
+        showNotification('Pengaturan sekolah berhasil diperbarui.');
+    } catch (error) {
+        showNotification(error.message, 'error');
+    } finally {
+        hideLoader();
+    }
+}
+
+export async function handleManageHoliday(operation, date, description, id = null) {
+    if (operation === 'ADD' && (!date || !description)) {
+        showNotification('Tanggal dan deskripsi wajib diisi.', 'error');
+        return;
+    }
+    
+    showLoader(operation === 'ADD' ? 'Menambah libur...' : 'Menghapus libur...');
+    try {
+        const { holiday } = await apiService.manageHoliday(operation, id, date, description);
+        
+        // Optimistically update local state
+        let updatedHolidays = [...state.holidays];
+        if (operation === 'ADD') {
+            updatedHolidays.push(holiday);
+            updatedHolidays.sort((a,b) => new Date(b.date) - new Date(a.date)); // Keep sorted
+        } else {
+            updatedHolidays = updatedHolidays.filter(h => h.id !== parseInt(id));
+        }
+        
+        await setState({ holidays: updatedHolidays });
+        
+        if (operation === 'ADD') {
+            showNotification('Hari libur berhasil ditambahkan.');
+            return true; // Signal success to close modal
+        } else {
+            showNotification('Hari libur berhasil dihapus.');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    } finally {
+        hideLoader();
+    }
+}
+
+export async function handleMarkClassAsHoliday() {
+    const confirmed = await showConfirmation(`Tandai seluruh siswa di kelas ${state.selectedClass} sebagai LIBUR untuk hari ini?`);
+    if (!confirmed) return;
+    
+    // Set all students status to 'L'
+    state.students.forEach(student => {
+        state.attendance[student.name] = 'L';
+    });
+    
+    // Force re-render of attendance screen to show changes
+    renderScreen('attendance');
+    showNotification('Seluruh kelas ditandai Libur. Jangan lupa simpan absensi.', 'info');
 }
 
 
@@ -875,6 +961,8 @@ async function loadInitialData() {
             state.studentsByClass = userData.studentsByClass || {};
             state.savedLogs = Array.isArray(userData.savedLogs) ? userData.savedLogs : [];
             state.localVersion = typeof userData.localVersion === 'number' ? userData.localVersion : 0;
+            state.holidays = Array.isArray(userData.holidays) ? userData.holidays : [];
+            state.schoolSettings = userData.schoolSettings || { workDays: [1,2,3,4,5,6] };
             state.currentScreen = 'multiRoleHome';
             console.log(`Data dipulihkan dari penyimpanan offline. Versi lokal: ${state.localVersion}`);
         }
