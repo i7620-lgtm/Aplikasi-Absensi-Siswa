@@ -41,6 +41,9 @@ export async function setupDatabase() {
         // Tambahkan kolom settings untuk konfigurasi hari kerja (default 6 hari: Senin-Sabtu [1,2,3,4,5,6])
         await client.query(`ALTER TABLE schools ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{"workDays": [1, 2, 3, 4, 5, 6]}';`);
         
+        // Tambahkan kolom created_by_email ke holidays untuk pelacakan
+        await client.query('ALTER TABLE holidays ADD COLUMN IF NOT EXISTS created_by_email VARCHAR(255);');
+        
         console.log("Memeriksa dan membuat indeks database untuk optimasi...");
          // Semua pernyataan CREATE INDEX dalam satu query.
         await client.query(`
