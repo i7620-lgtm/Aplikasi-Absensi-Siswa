@@ -41,13 +41,16 @@ export async function handleSignIn(response) {
         
         // Langkah 3: Sekarang, ambil sisa data awal menggunakan state yang sudah terotentikasi.
         showLoader('Mengambil data sekolah...');
-        const { initialStudents, initialLogs, latestVersion } = await apiService.getInitialData();
+        const { initialStudents, initialLogs, latestVersion, holidays, schoolSettings } = await apiService.getInitialData();
         
         // Langkah 4: Atur sisa data di state.
+        // FIX: Pastikan holidays dan schoolSettings turut disimpan ke state.
         await setState({
             studentsByClass: initialStudents,
             savedLogs: initialLogs,
-            localVersion: latestVersion
+            localVersion: latestVersion,
+            holidays: holidays || [],
+            schoolSettings: schoolSettings || { workDays: [1, 2, 3, 4, 5, 6] }
         });
         
         hideLoader();
