@@ -6,14 +6,6 @@ import { apiService } from './api.js';
 import { idb } from './db.js';
 
 // --- CONFIGURATION ---
-/**
- * Generates an array of class names based on a grade and letter range.
- * @param {number} startGrade The starting grade number.
- * @param {number} endGrade The ending grade number.
- * @param {string} startLetterChar The starting letter (e.g., 'A').
- * @param {string} endLetterChar The ending letter (e.g., 'D').
- * @returns {string[]} An array of generated class names.
- */
 function generateClasses(startGrade, endGrade, startLetterChar, endLetterChar) {
     const classes = [];
     const startLetter = startLetterChar.charCodeAt(0);
@@ -28,15 +20,14 @@ function generateClasses(startGrade, endGrade, startLetterChar, endLetterChar) {
     return classes;
 }
 
-// Generate presets for Elementary (SD) and Junior High (SMP)
-const sdClasses = generateClasses(1, 6, 'A', 'D'); // Generates 1A-1D, 2A-2D, ..., 6A-6D
-const smpClasses = generateClasses(7, 9, 'A', 'P'); // Generates 7A-7P, 8A-8P, 9A-9P
+const sdClasses = generateClasses(1, 6, 'A', 'D'); 
+const smpClasses = generateClasses(7, 9, 'A', 'P'); 
 
 export const CLASSES = [...sdClasses, ...smpClasses];
 
 // --- APPLICATION STATE ---
 export let state = {
-    userProfile: null, // will contain { name, email, picture, primaryRole, isParent, school_id, ... }
+    userProfile: null, 
     currentScreen: 'landingPage',
     selectedClass: '',
     selectedDate: new Date().toISOString().split('T')[0],
@@ -44,20 +35,20 @@ export let state = {
     studentsByClass: {},
     attendance: {},
     savedLogs: [], 
-    localVersion: 0, // NEW: Tracks the latest change ID processed by the client
+    localVersion: 0, 
     historyClassFilter: null,
     allHistoryLogs: [],
-    holidays: [], // NEW: Array of holiday objects
-    schoolSettings: { workDays: [1,2,3,4,5,6] }, // NEW: Default to Mon-Sat
+    holidays: [], 
+    schoolSettings: { workDays: [1,2,3,4,5,6] }, 
     dataScreenFilters: {
         studentName: '',
         status: 'all',
         startDate: '',
         endDate: '',
     },
-    newStudents: [{ name: '', parentEmail: '' }], // Changed to object
+    newStudents: [{ name: '', parentEmail: '' }], 
     recapSortOrder: 'total',
-    recapPeriod: null, // NEW: Stores 'YYYY-1' (Odd/Ganjil) or 'YYYY-2' (Even/Genap)
+    recapPeriod: null, 
     adminPanel: {
         users: [],
         schools: [],
@@ -71,25 +62,25 @@ export let state = {
         selectedUsers: [],
     },
     dashboard: {
-        data: null, // Will store comprehensive payload from the server
+        data: null, 
         isLoading: true,
         selectedDate: new Date().toISOString().split('T')[0],
         polling: {
             timeoutId: null,
             interval: 10000,
         },
-        activeView: 'report', // 'report', 'percentage', 'ai'
-        chartViewMode: 'daily', // 'daily', 'weekly', 'monthly', 'yearly'
-        chartClassFilter: 'all', // 'all' or specific class name
-        chartSchoolFilter: 'all', // NEW: 'all' or specific school ID for regional dashboard
+        activeView: 'report', 
+        chartViewMode: 'daily', 
+        chartClassFilter: 'all', 
+        chartSchoolFilter: 'all', 
         aiRecommendation: {
             isLoading: false,
             result: null,
             error: null,
-            selectedRange: 'last30days', // 'last30days', 'semester', 'year'
+            selectedRange: 'last30days', 
         },
     },
-    parentDashboard: { // New state for parent view
+    parentDashboard: { 
         isLoading: true,
         data: null,
     },
@@ -99,34 +90,31 @@ export let state = {
             interval: 10000,
         },
     },
-    adminActingAsSchool: null, // Stores {id, name} for SUPER_ADMIN context
-    adminActingAsJurisdiction: null, // NEW: Stores {id, name} for SUPER_ADMIN/DINAS context
-    lastSaveContext: null, // Stores { savedBy, className } for success message
-    logoutMessage: null, // NEW: Stores a one-time message after logout
+    adminActingAsSchool: null, 
+    adminActingAsJurisdiction: null, 
+    lastSaveContext: null, 
+    logoutMessage: null, 
 };
 
 // Function to update state and persist it
 export async function setState(newState) {
-    // --- NEW: Centralized context clearing logic ---
-    // Ensures a Super Admin can only be in one context (school or jurisdiction) at a time.
     if ('adminActingAsSchool' in newState && newState.adminActingAsSchool) {
         newState.adminActingAsJurisdiction = null;
     } else if ('adminActingAsJurisdiction' in newState && newState.adminActingAsJurisdiction) {
         newState.adminActingAsSchool = null;
     }
-    // --- END of new logic ---
     
     state = { ...state, ...newState };
 
-    if (newState.userProfile !== undefined || newState.studentsByClass !== undefined || newState.savedLogs !== undefined || newState.localVersion !== undefined) {
+    if (newState.userProfile !== undefined || newState.studentsByClass !== undefined || newState.savedLogs !== undefined || newState.localVersion !== undefined || newState.holidays !== undefined || newState.schoolSettings !== undefined) {
         await idb.set('userProfile', state.userProfile);
         
         await idb.set('userData', {
             studentsByClass: state.studentsByClass,
             savedLogs: state.savedLogs,
             localVersion: state.localVersion,
-            holidays: state.holidays, // Save holidays locally
-            schoolSettings: state.schoolSettings // Save settings locally
+            holidays: state.holidays, 
+            schoolSettings: state.schoolSettings 
         });
     }
 }
@@ -178,8 +166,6 @@ export function navigateTo(screen) {
         }
     }
 
-    // Stop any active polling when navigating away from a screen.
-    // This is now the primary mechanism for stopping pollers.
     stopAllPollers();
     
     state.currentScreen = screen;
@@ -221,8 +207,6 @@ async function findAndLoadClassDataForAdmin(className) {
 
 // --- EVENT HANDLERS & LOGIC ---
 export async function handleStartAttendance(overrideClass = null, overrideDate = null) {
-    // If overrides are provided (e.g. from Missing History), use them.
-    // Otherwise, read from the DOM elements (Setup screen).
     if (overrideClass && overrideDate) {
         state.selectedClass = overrideClass;
         state.selectedDate = overrideDate;
@@ -234,28 +218,21 @@ export async function handleStartAttendance(overrideClass = null, overrideDate =
         if (dateInput) state.selectedDate = dateInput.value;
     }
     
-    // --- HOLIDAY & WORKDAY CHECK ---
     const dateObj = new Date(state.selectedDate);
-    const dayOfWeek = dateObj.getDay(); // 0 (Sun) - 6 (Sat)
+    const dayOfWeek = dateObj.getDay(); 
     
-    // Check School Work Days
     const workDays = state.schoolSettings?.workDays || [1,2,3,4,5,6];
-    // Adjust logic: JS getDay() returns 0 for Sunday. 
-    // Usually settings use 1=Mon...6=Sat, 0=Sun.
+    
     if (!workDays.includes(dayOfWeek === 0 ? 7 : dayOfWeek) && !workDays.includes(dayOfWeek)) {
-        // Handle Sunday 0 vs 7 ambiguity if needed, usually just need to match settings format
-        // Our API default is 1-6. Sunday is 0.
         const proceed = await showConfirmation(`Hari ini (${dateObj.toLocaleDateString('id-ID', {weekday:'long'})}) bukan hari sekolah aktif. Tetap lanjutkan?`);
         if (!proceed) return;
     }
 
-    // Check Holidays
     const holiday = state.holidays.find(h => h.date === state.selectedDate);
     if (holiday) {
         const proceed = await showConfirmation(`Tanggal ini terdaftar sebagai libur: ${holiday.description} (${holiday.scope}). Tetap ingin mengisi absensi?`);
         if (!proceed) return;
     }
-    // --- END CHECK ---
 
     let students = (state.studentsByClass[state.selectedClass] || {}).students || [];
     const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile.primaryRole);
@@ -268,7 +245,6 @@ export async function handleStartAttendance(overrideClass = null, overrideDate =
     }
     state.students = students;
     
-    // Check if logs already exist for this date/class
     const existingLog = state.savedLogs.find(log => log.class === state.selectedClass && log.date === state.selectedDate);
     
     if (existingLog && !overrideClass) {
@@ -319,27 +295,22 @@ export async function handleSaveNewStudents() {
     try {
         const response = await apiService.saveData(newStudentLog);
         
-        // Optimistic update for both online and offline
         const updatedStudentsByClass = { ...state.studentsByClass };
         updatedStudentsByClass[state.selectedClass] = { students: finalStudentList };
 
         if (response.queued) {
-            // Offline case: Only update local state, NOT localVersion
             await setState({ studentsByClass: updatedStudentsByClass });
             hideLoader();
             showNotification('Anda sedang offline. Daftar siswa disimpan lokal dan akan disinkronkan nanti.', 'info');
         } else {
-            // Online case: Update state AND localVersion from server
             await setState({ 
                 studentsByClass: updatedStudentsByClass,
                 localVersion: response.newVersion
             });
             
-            // CRITICAL: Reload User Profile to update roles (e.g. isParent status) if emails changed
             try {
                 const { userProfile } = await apiService.getUserProfile();
                 await setState({ userProfile });
-                console.log("User profile refreshed after data save.");
             } catch (pError) {
                 console.error("Failed to refresh profile:", pError);
             }
@@ -374,7 +345,6 @@ export async function handleSaveAttendance() {
     try {
         const response = await apiService.saveData(newLogEvent);
 
-        // Optimistically update local state on success (for both online and offline)
         const existingLogIndex = state.savedLogs.findIndex(log => log.class === state.selectedClass && log.date === state.selectedDate);
         const updatedLogs = [...state.savedLogs];
         if (existingLogIndex > -1) { 
@@ -389,7 +359,6 @@ export async function handleSaveAttendance() {
         };
         
         if (response.queued) {
-             // Offline Case: Update local data, but NOT the version number
             await setState({ 
                 savedLogs: updatedLogs, 
                 lastSaveContext: newContext,
@@ -397,7 +366,6 @@ export async function handleSaveAttendance() {
             hideLoader();
             showNotification('Anda sedang offline. Absensi disimpan lokal dan akan disinkronkan nanti.', 'info');
         } else {
-            // Online Case: Update local data AND the version number
             await setState({ 
                 savedLogs: updatedLogs, 
                 lastSaveContext: newContext,
@@ -414,12 +382,10 @@ export async function handleSaveAttendance() {
     }
 }
 
-// --- NEW: Handlers for Holiday & Settings ---
-
 export async function handleSaveSchoolSettings(workDays) {
     showLoader('Menyimpan pengaturan...');
     try {
-        const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : user.school_id;
+        const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
         const { settings } = await apiService.updateSchoolSettings(workDays, schoolId);
         await setState({ schoolSettings: settings });
         showNotification('Pengaturan sekolah berhasil diperbarui.');
@@ -440,11 +406,10 @@ export async function handleManageHoliday(operation, date, description, id = nul
     try {
         const { holiday } = await apiService.manageHoliday(operation, id, date, description);
         
-        // Optimistically update local state
         let updatedHolidays = [...state.holidays];
         if (operation === 'ADD') {
             updatedHolidays.push(holiday);
-            updatedHolidays.sort((a,b) => new Date(b.date) - new Date(a.date)); // Keep sorted
+            updatedHolidays.sort((a,b) => new Date(b.date) - new Date(a.date)); 
         } else {
             updatedHolidays = updatedHolidays.filter(h => h.id !== parseInt(id));
         }
@@ -453,7 +418,7 @@ export async function handleManageHoliday(operation, date, description, id = nul
         
         if (operation === 'ADD') {
             showNotification('Hari libur berhasil ditambahkan.');
-            return true; // Signal success to close modal
+            return true; 
         } else {
             showNotification('Hari libur berhasil dihapus.');
         }
@@ -468,12 +433,10 @@ export async function handleMarkClassAsHoliday() {
     const confirmed = await showConfirmation(`Tandai seluruh siswa di kelas ${state.selectedClass} sebagai LIBUR untuk hari ini?`);
     if (!confirmed) return;
     
-    // Set all students status to 'L'
     state.students.forEach(student => {
         state.attendance[student.name] = 'L';
     });
     
-    // Force re-render of attendance screen to show changes
     renderScreen('attendance');
     showNotification('Seluruh kelas ditandai Libur. Jangan lupa simpan absensi.', 'info');
 }
@@ -486,7 +449,7 @@ export async function handleViewHistory(isClassSpecific = false) {
     await setState({ 
         dataScreenFilters: { studentName: '', status: 'all', startDate: '', endDate: '' },
         historyClassFilter: isClassSpecific ? document.getElementById('class-select').value : null,
-        adminAllLogsView: isGlobalView, // Simplified flag
+        adminAllLogsView: isGlobalView, 
     });
     
     navigateTo('data');
@@ -503,7 +466,6 @@ export async function handleGenerateAiRecommendation() {
     await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: true, result: null, error: null } } });
     render();
 
-    // Determine the correct context for the current dashboard view.
     const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' 
         ? state.adminActingAsSchool?.id 
         : state.userProfile.school_id;
@@ -524,7 +486,7 @@ export async function handleGenerateAiRecommendation() {
             aiRange, 
             schoolId, 
             jurisdictionId,
-            selectedDate: state.dashboard.selectedDate // Pass the dashboard's date context
+            selectedDate: state.dashboard.selectedDate 
         });
         await setState({ dashboard: { ...state.dashboard, aiRecommendation: { ...state.dashboard.aiRecommendation, isLoading: false, result: recommendation, error: null } } });
     
@@ -590,7 +552,7 @@ export async function handleMigrateLegacyData() {
         resultEl.textContent = response.message;
         resultEl.classList.remove('text-red-500');
         resultEl.classList.add('text-green-600');
-        legacyDataEl.value = ''; // Clear on success
+        legacyDataEl.value = ''; 
     } catch (error) {
         showNotification(`Migrasi gagal: ${error.message}`, 'error');
         resultEl.textContent = `Error: ${error.message}`;
@@ -675,7 +637,6 @@ async function downloadRecapData(params) {
 
         const workbook = XLSX.utils.book_new();
 
-        // --- NEW: Add Monthly Summary Sheet for Regional Reports ---
         if (reportType === 'regional' && hasSummaryData) {
             const header1 = ["Nama Sekolah"];
             const header2 = [""];
@@ -718,7 +679,6 @@ async function downloadRecapData(params) {
             XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Rekapitulasi Kehadiran');
         }
 
-        // --- Existing Logic for Detail Sheets ---
         if (hasRecapData) {
             const header = ['Nama Lengkap', 'Kelas', 'Sakit (S)', 'Izin (I)', 'Alpa (A)', 'Total Absen'];
             const createSheetFromData = (dataArray, includeClassCol = true) => {
@@ -762,7 +722,7 @@ async function downloadRecapData(params) {
                     const worksheet = createSheetFromData(recapData[className], false);
                     XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(`Kelas ${className}`));
                 }
-            } else { // 'class' report type (fallback)
+            } else { 
                 const worksheet = createSheetFromData(recapData, true);
                 XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Absensi');
             }
@@ -785,31 +745,28 @@ export async function handleDownloadData() {
     const schoolId = state.adminActingAsSchool?.id || state.userProfile.school_id;
     const fileName = `Rekap_Absensi_Kelas_${state.selectedClass}.xlsx`;
     
-    // --- NEW: Calculate dates based on current state.recapPeriod ---
     let startDate, endDate;
     if (state.recapPeriod) {
         const [year, sem] = state.recapPeriod.split('-').map(Number);
-        if (sem === 1) { // Ganjil: July - Dec
+        if (sem === 1) { 
             startDate = `${year}-07-01`;
             endDate = `${year}-12-31`;
-        } else { // Genap: Jan - June
+        } else { 
             startDate = `${year}-01-01`;
             endDate = `${year}-06-30`;
         }
     } else {
-        // Default to current semester if not set
         const today = new Date();
-        const currentMonth = today.getMonth(); // 0-11
+        const currentMonth = today.getMonth(); 
         const currentYear = today.getFullYear();
-        if (currentMonth >= 6) { // Jul-Dec
+        if (currentMonth >= 6) { 
             startDate = `${currentYear}-07-01`;
             endDate = `${currentYear}-12-31`;
-        } else { // Jan-Jun
+        } else { 
             startDate = `${currentYear}-01-01`;
             endDate = `${currentYear}-06-30`;
         }
     }
-    // --- END: Date Calculation ---
 
     await downloadRecapData({ classFilter: state.selectedClass, schoolId, fileName, startDate, endDate });
 }
@@ -829,18 +786,14 @@ export async function handleDownloadFullSchoolReport(schoolId, schoolName) {
     
     const fileName = `Laporan_Absensi_Lengkap_${finalSchoolName.replace(/\s+/g, '_')}.xlsx`;
     
-    // Default to current semester for bulk download if specific range not easily accessible
-    // or we could use the same logic if we track global dashboard semester state.
-    // For now, let's use the dashboard's selected date context to imply the year?
-    // Safer to default to "current semester" logic unless we add a specific selector for bulk downloads.
     const today = new Date();
-    const currentMonth = today.getMonth(); // 0-11
+    const currentMonth = today.getMonth(); 
     const currentYear = today.getFullYear();
     let startDate, endDate;
-    if (currentMonth >= 6) { // Jul-Dec
+    if (currentMonth >= 6) { 
         startDate = `${currentYear}-07-01`;
         endDate = `${currentYear}-12-31`;
-    } else { // Jan-Jun
+    } else { 
         startDate = `${currentYear}-01-01`;
         endDate = `${currentYear}-06-30`;
     }
@@ -856,7 +809,6 @@ export async function handleDownloadJurisdictionReport(jurisdictionId, jurisdict
     const finalJurisdictionName = jurisdictionName || `Yurisdiksi_ID_${jurisdictionId}`;
     const fileName = `Laporan_Absensi_Regional_${finalJurisdictionName.replace(/\s+/g, '_')}.xlsx`;
     
-    // Default to current semester
     const today = new Date();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
@@ -872,9 +824,6 @@ export async function handleDownloadJurisdictionReport(jurisdictionId, jurisdict
     await downloadRecapData({ jurisdictionId, fileName, startDate, endDate });
 }
 
-
-
-// --- DATA SYNC LOGIC ---
 async function syncWithServer() {
     if (!navigator.onLine) {
         console.log("Offline, skipping server sync.");
@@ -905,7 +854,6 @@ async function syncWithServer() {
         showNotification(`Gagal menyinkronkan ${failedActions.length} perubahan. Akan dicoba lagi nanti.`, 'error');
     } else {
         showNotification('Semua data offline berhasil disinkronkan!', 'success');
-        // If sync is successful, we should probably fetch the latest state
         await fetchChangesFromServer();
     }
 }
@@ -941,7 +889,7 @@ async function fetchChangesFromServer() {
             });
             
             showNotification('Data telah diperbarui dari server.', 'info');
-            render(); // Re-render the current screen with fresh data
+            render(); 
         }
     } catch (error) {
         console.error("Failed to fetch changes from server:", error);
@@ -949,8 +897,6 @@ async function fetchChangesFromServer() {
     }
 }
 
-
-// --- INITIALIZATION ---
 async function loadInitialData() {
     try {
         const userProfile = await idb.get('userProfile');
@@ -972,13 +918,11 @@ async function loadInitialData() {
 }
 
 async function initApp() {
-    // Clean up old localStorage data if it exists
     if (localStorage.getItem('attendanceApp')) {
         localStorage.removeItem('attendanceApp');
         console.log('Data lama dari localStorage telah dihapus.');
     }
 
-    // Registrasi Service Worker untuk kapabilitas Offline
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('/service-worker.js').then(registration => {
@@ -989,10 +933,8 @@ async function initApp() {
         });
     }
 
-    // Simplified flow: load local data, render, then init GSI.
     updateLoaderText('Memuat Aplikasi Absensi...'); 
     
-    // Add timeout to IDB loading to prevent infinite loader
     const loadPromise = loadInitialData();
     const timeoutPromise = new Promise(r => setTimeout(() => r('timeout'), 2000));
     
@@ -1001,22 +943,15 @@ async function initApp() {
         console.warn("Pemuatan data lokal timeout. Melanjutkan rendering.");
     }
     
-    // --- CRITICAL FIX: Render UI immediately before initializing GSI ---
-    // This ensures the DOM exists (including error containers) and users see the app
-    // while the Google script loads in the background.
     render(); 
 
     try {
-        await initializeGsi(); // This now loads the script and sets up the client.
+        await initializeGsi(); 
     } catch (e) {
         console.warn("GSI Initialization deferred or failed:", e);
-        // We do NOT stop here; the app is already rendered.
-        // The user can retry login if they are on the landing page.
     }
 
-    // This part only runs if the user was already logged in (from IndexedDB)
     if (state.userProfile) {
-        // Run sync in background
         syncWithServer().then(() => fetchChangesFromServer()).catch(console.error);
     }
     
@@ -1029,19 +964,15 @@ async function initApp() {
     
     updateOnlineStatus(navigator.onLine);
 
-    // --- NEW: Page Visibility API handler ---
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
-            // Stop all pollers when the page is not visible
             stopAllPollers();
         } else if (document.visibilityState === 'visible') {
-            // Resume polling for the current screen when the page becomes visible
             resumePollingForCurrentScreen();
         }
     });
 }
 
-// Wrap initApp in a catch block to handle startup failures gracefull
 initApp().catch(error => {
     console.error("Failed to initialize app:", error);
     const loader = document.getElementById('loader-wrapper');
