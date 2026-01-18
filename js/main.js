@@ -219,20 +219,26 @@ export async function handleStartAttendance(overrideClass = null, overrideDate =
         if (dateInput) state.selectedDate = dateInput.value;
     }
     
-    const dateObj = new Date(state.selectedDate);
+    // --- FIX: Robust Day of Week Calculation ---
+    // Parsing string "YYYY-MM-DD" directly to Date object can yield different results based on browser timezone (UTC vs Local).
+    // Explicitly constructing the date using Year, Month, Day components ensures we check the exact date selected.
+    const [y, m, d] = state.selectedDate.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d); // Month is 0-indexed
     const dayOfWeek = dateObj.getDay(); // 0 (Sun) - 6 (Sat)
     
-    const workDays = state.schoolSettings?.workDays || [1,2,3,4,5,6];
+    const workDays = (state.schoolSettings?.workDays || [1,2,3,4,5,6]).map(Number); // Ensure numbers
     
-    if (!workDays.includes(dayOfWeek) && !(dayOfWeek === 0 && workDays.includes(7))) {
+    // Check if dayOfWeek is in workDays. 
+    // dayOfWeek 0 is Sunday. If Sunday (7 in UI setup, usually 0 in JS) is not in workDays, warn.
+    // If UI saves Sunday as 0, this logic works directly. If UI saves Sunday as 7, handle conversion.
+    const isWorkDay = workDays.includes(dayOfWeek) || (dayOfWeek === 0 && workDays.includes(7));
+
+    if (!isWorkDay) {
         const proceed = await showConfirmation(`Hari ini (${dateObj.toLocaleDateString('id-ID', {weekday:'long'})}) bukan hari sekolah aktif. Tetap lanjutkan?`);
         if (!proceed) return;
     }
 
-    // --- FIX: Robust Date Comparison ---
-    // Handle cases where 'date' from DB is "YYYY-MM-DDT00:00:00.000Z" (ISO string) or Date object.
-    // 'state.selectedDate' is strictly "YYYY-MM-DD" (from HTML input).
-    // Simple substring is sufficient as long as we force ISO string first.
+    // --- FIX: Robust Date Comparison for Holidays ---
     const holiday = state.holidays.find(h => {
         let hDateStr = h.date;
         if (hDateStr instanceof Date) hDateStr = hDateStr.toISOString();
