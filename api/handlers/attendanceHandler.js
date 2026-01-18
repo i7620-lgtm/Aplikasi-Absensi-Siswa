@@ -185,11 +185,16 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
         aggregatedStudentsByClass[row.payload.class] = row.payload.students;
     });
 
-    // --- NEW: Fetch School Settings as well ---
+    // --- NEW: Fetch School Settings with Robust Default Fallback ---
     const { rows: settingsRows } = await sql`
         SELECT settings FROM schools WHERE id = ${schoolId}
     `;
-    const settings = settingsRows[0]?.settings || { workDays: [1, 2, 3, 4, 5, 6] };
+    
+    // Default: Senin (1) s.d Sabtu (6). Jika data DB null atau kosong, gunakan default ini.
+    let settings = settingsRows[0]?.settings;
+    if (!settings || typeof settings !== 'object' || !Array.isArray(settings.workDays)) {
+        settings = { workDays: [1, 2, 3, 4, 5, 6] };
+    }
 
     return response.status(200).json({ aggregatedStudentsByClass, settings });
 }
