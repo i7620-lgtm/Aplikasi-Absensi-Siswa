@@ -1,4 +1,5 @@
 
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport, handleManageHoliday, handleSaveSchoolSettings, handleMarkClassAsHoliday, handleSelectSchoolForConfig } from './main.js';
 import { apiService } from './api.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
@@ -257,7 +258,6 @@ export function displayAuthError(message, error = null) {
 
 async function teacherProfilePoller() {
     if (state.currentScreen !== 'setup' || state.userProfile?.primaryRole !== 'GURU') return;
-    console.log(`Teacher profile polling...`);
     
     if (state.setup.polling.timeoutId) clearTimeout(state.setup.polling.timeoutId);
     let nextInterval = getNextInterval(state.setup.polling.interval);
@@ -519,7 +519,6 @@ async function renderMultiRoleHomeScreen() {
                         adminActingAsSchool: selectedSchool, 
                         adminActingAsJurisdiction: null,
                         studentsByClass: aggregatedStudentsByClass || {},
-                        // Update settings state to reflect the target school
                         schoolSettings: settings || { workDays: [1, 2, 3, 4, 5, 6] },
                         dashboard: { 
                             ...state.dashboard, 
@@ -1833,14 +1832,34 @@ function renderAttendanceScreen() {
     const tbody = document.getElementById('attendance-table-body');
     tbody.innerHTML = state.students.map((student, index) => {
         const status = state.attendance[student.name] || 'H';
-        return `<tr class="border-b hover:bg-slate-50">
-            <td class="p-3 text-sm text-slate-500">${index + 1}</td>
-            <td class="p-3 font-medium text-slate-800">${encodeHTML(student.name)}</td>
-            ${['H', 'S', 'I', 'A', 'L'].map(s => `
-                <td class="p-3 text-center">
-                    <input type="radio" name="status-${index}" value="${s}" class="w-5 h-5 accent-blue-500" ${status === s ? 'checked' : ''} data-student-name="${student.name}">
+        return `<tr class="border-b border-slate-100 hover:bg-slate-50 transition">
+            <td class="px-6 py-4 text-sm text-slate-500 border-r border-slate-100">${index + 1}</td>
+            <td class="px-6 py-4 font-bold text-slate-700 border-r border-slate-100">${encodeHTML(student.name)}</td>
+            ${['H', 'S', 'I', 'A', 'L'].map(s => {
+                let bgClass = '';
+                if(s === 'H') bgClass = 'bg-green-50/30';
+                if(s === 'S') bgClass = 'bg-yellow-50/30';
+                if(s === 'I') bgClass = 'bg-blue-50/30';
+                if(s === 'A') bgClass = 'bg-red-50/30';
+                if(s === 'L') bgClass = 'bg-orange-50/30';
+                
+                let accentClass = '';
+                if(s === 'H') accentClass = 'accent-green-600';
+                if(s === 'S') accentClass = 'accent-yellow-600';
+                if(s === 'I') accentClass = 'accent-blue-600';
+                if(s === 'A') accentClass = 'accent-red-600';
+                if(s === 'L') accentClass = 'accent-orange-600';
+
+                return `
+                <td class="px-4 py-4 text-center border-r border-slate-100 last:border-r-0 ${bgClass}">
+                    <div class="flex items-center justify-center h-full">
+                        <input type="radio" name="status-${index}" value="${s}" 
+                            class="w-6 h-6 cursor-pointer ${accentClass} transition-transform hover:scale-110" 
+                            ${status === s ? 'checked' : ''} 
+                            data-student-name="${encodeHTML(student.name)}">
+                    </div>
                 </td>
-            `).join('')}
+            `}).join('')}
         </tr>`;
     }).join('');
 
