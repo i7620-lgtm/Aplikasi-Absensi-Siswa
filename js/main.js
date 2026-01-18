@@ -229,7 +229,13 @@ export async function handleStartAttendance(overrideClass = null, overrideDate =
         if (!proceed) return;
     }
 
-    const holiday = state.holidays.find(h => h.date === state.selectedDate);
+    // --- FIX: Normalize date comparison for ISO strings ---
+    // state.selectedDate is "YYYY-MM-DD". h.date is often "YYYY-MM-DDTHH:mm:ss.sssZ"
+    const holiday = state.holidays.find(h => {
+        const hDate = typeof h.date === 'string' ? h.date.substring(0, 10) : new Date(h.date).toISOString().split('T')[0];
+        return hDate === state.selectedDate;
+    });
+
     if (holiday) {
         const proceed = await showConfirmation(`Tanggal ini terdaftar sebagai libur: ${holiday.description} (${holiday.scope}). Tetap ingin mengisi absensi?`);
         if (!proceed) return;
