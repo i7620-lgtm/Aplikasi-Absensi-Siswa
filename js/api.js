@@ -2,7 +2,7 @@
 import { state } from './main.js';
 import { idb } from './db.js';
 
-async function _fetch(url, action, payload = {}) {
+async function _fetch(url, action, payload = {}, retryCount = 0) {
     const body = {
         action,
         payload,
@@ -48,6 +48,24 @@ async function _fetch(url, action, payload = {}) {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: 'Gagal mem-parsing JSON error dari server.' }));
+            
+            // --- AUTO HEAL: If DB/Schema is missing, try to init and retry once ---
+            if (errorData.code === 'DATABASE_NOT_INITIALIZED' && retryCount < 1) {
+                console.warn("Schema mismatch detected. Auto-running database initialization...");
+                try {
+                    await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'initializeDatabase' })
+                    });
+                    console.log("Database initialized. Retrying original request...");
+                    return await _fetch(url, action, payload, retryCount + 1);
+                } catch (initErr) {
+                    console.error("Failed to auto-heal database:", initErr);
+                    // Fall through to throw original error
+                }
+            }
+            
             const errorMessage = errorData.error || `Server merespons dengan status ${response.status}`;
             const error = new Error(errorMessage);
             error.status = response.status; // Tambahkan status code ke objek error
