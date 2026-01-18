@@ -67,7 +67,9 @@ export async function handleGetInitialData({ user, sql, response }) {
         schoolData = await reconstructStateFromLogs(user.school_id, sql);
         
         // 2. Fetch School Settings
-        const { rows: sRows } = await sql`SELECT settings, jurisdiction_id FROM schools WHERE id = ${user.school_id}`;
+        // Use SELECT * to avoid crash if 'settings' column is missing in DB
+        const { rows: sRows } = await sql`SELECT * FROM schools WHERE id = ${user.school_id}`;
+        
         if (sRows.length > 0) {
             if (sRows[0].settings) {
                 schoolSettings = { ...schoolSettings, ...sRows[0].settings };
