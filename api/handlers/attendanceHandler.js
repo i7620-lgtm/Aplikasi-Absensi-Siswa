@@ -172,6 +172,7 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
         return response.status(400).json({ error: 'School ID is required' });
     }
 
+    // Fetch Student Lists
     const { rows } = await sql`
         SELECT DISTINCT ON (payload->>'class') payload
         FROM change_log
@@ -184,5 +185,11 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
         aggregatedStudentsByClass[row.payload.class] = row.payload.students;
     });
 
-    return response.status(200).json({ aggregatedStudentsByClass });
+    // --- NEW: Fetch School Settings as well ---
+    const { rows: settingsRows } = await sql`
+        SELECT settings FROM schools WHERE id = ${schoolId}
+    `;
+    const settings = settingsRows[0]?.settings || { workDays: [1, 2, 3, 4, 5, 6] };
+
+    return response.status(200).json({ aggregatedStudentsByClass, settings });
 }
