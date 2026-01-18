@@ -1,30 +1,24 @@
 
-import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport, handleManageHoliday, handleSaveSchoolSettings, handleMarkClassAsHoliday } from './main.js';
+import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport, handleManageHoliday, handleSaveSchoolSettings, handleMarkClassAsHoliday, apiService } from './main.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignOut, renderSignInButton } from './auth.js';
-import { apiService } from './api.js';
 
 const appContainer = document.getElementById('app-container');
-// Don't cache loaderWrapper here to ensure it's found even if DOM updates strangely, though ID should be stable.
 const notificationEl = document.getElementById('notification');
 const offlineIndicator = document.getElementById('offline-indicator');
 
 // --- POLLING & PAGINATION CONFIGURATION ---
-// New: Exponential backoff sequence for polling intervals as requested.
 const POLLING_BACKOFF_SEQUENCE = [10000, 20000, 40000, 80000, 150000, 300000];
-const INITIAL_POLLING_INTERVAL = POLLING_BACKOFF_SEQUENCE[0]; // Start with 10 seconds
+const INITIAL_POLLING_INTERVAL = POLLING_BACKOFF_SEQUENCE[0]; 
 const USERS_PER_PAGE = 10;
 
 function getNextInterval(currentInterval) {
     const currentIndex = POLLING_BACKOFF_SEQUENCE.indexOf(currentInterval);
-    // If the current interval isn't found, or if it's already the last one, stay at the max interval.
     if (currentIndex === -1 || currentIndex >= POLLING_BACKOFF_SEQUENCE.length - 1) {
         return POLLING_BACKOFF_SEQUENCE[POLLING_BACKOFF_SEQUENCE.length - 1];
     }
-    // Return the next interval in the sequence.
     return POLLING_BACKOFF_SEQUENCE[currentIndex + 1];
 }
-
 
 export function showLoader(message) {
     const loaderWrapper = document.getElementById('loader-wrapper');
@@ -75,7 +69,6 @@ export function updateOnlineStatus(isOnline) {
         offlineIndicator.classList.add('show');
     }
 }
-
 
 export function showConfirmation(message) {
     return new Promise(resolve => {
@@ -185,7 +178,6 @@ function showJurisdictionSelectorModal(title) {
     });
 }
 
-
 function showRoleSelectorModal() {
     return new Promise((resolve) => {
         const currentUserRole = state.userProfile.primaryRole;
@@ -223,7 +215,6 @@ function showRoleSelectorModal() {
         };
     });
 }
-
 
 export function displayAuthError(message, error = null) {
     const errorContainer = document.getElementById('auth-error-container');
@@ -290,29 +281,23 @@ async function teacherProfilePoller() {
     state.setup.polling.interval = nextInterval;
 }
 
-
 function renderLandingPageScreen() {
     appContainer.innerHTML = templates.landingPage();
     renderSignInButton();
 
-    // Logic for FAQ Accordion
     const faqTriggers = document.querySelectorAll('.faq-trigger');
     faqTriggers.forEach(trigger => {
         trigger.addEventListener('click', () => {
             const content = trigger.nextElementSibling;
             const icon = trigger.querySelector('.faq-icon');
-            
-            // Toggle visibility
             const isHidden = content.classList.toggle('hidden');
             
-            // Animate Icon
             if (isHidden) {
                 icon.style.transform = 'rotate(0deg)';
             } else {
                 icon.style.transform = 'rotate(180deg)';
             }
             
-            // Optional: Close other FAQs
             faqTriggers.forEach(other => {
                 if (other !== trigger) {
                     other.nextElementSibling.classList.add('hidden');
@@ -322,7 +307,6 @@ function renderLandingPageScreen() {
         });
     });
 
-    // --- NEW & IMPROVED: Smart Device Detection for Email Link ---
     const contactBtn = document.getElementById('contact-email-btn');
     if (contactBtn) {
         const email = 'i7620@guru.sd.belajar.id';
@@ -330,11 +314,8 @@ function renderLandingPageScreen() {
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         
         if (isMobile) {
-            // Mobile: Direct mailto link (opens email app)
             contactBtn.setAttribute('href', `mailto:${email}?subject=${encodeURIComponent(subject)}`);
         } else {
-            // PC/Laptop: Gmail Web Compose URL (opens in new tab)
-            // This bypasses local Outlook/Mail apps
             const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${encodeURIComponent(subject)}`;
             contactBtn.setAttribute('href', gmailUrl);
             contactBtn.setAttribute('target', '_blank');
@@ -350,7 +331,6 @@ function renderLandingPageScreen() {
 }
 
 function renderSetupScreen() {
-    // --- NEW LOGIC: Check for School Assignment ---
     if (state.userProfile && !state.userProfile.school_id && !state.userProfile.jurisdiction_id && !state.userProfile.isParent && state.userProfile.primaryRole !== 'SUPER_ADMIN') {
         appContainer.innerHTML = templates.onboarding();
         document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
@@ -359,22 +339,18 @@ function renderSetupScreen() {
         const searchView = document.getElementById('onboarding-search-view');
         const createView = document.getElementById('onboarding-create-view');
         
-        // Navigation Logic
         const showView = (view) => {
             [choiceView, searchView, createView].forEach(v => v.classList.add('hidden'));
             view.classList.remove('hidden');
         };
 
-        // 1. Choice: Create New
         document.getElementById('btn-create-school').addEventListener('click', () => showView(createView));
         document.getElementById('back-to-choice-from-create').addEventListener('click', () => showView(choiceView));
         
-        // 1. Choice: Join (Search)
         document.getElementById('btn-join-school').addEventListener('click', () => showView(searchView));
         document.getElementById('back-to-choice-from-search').addEventListener('click', () => showView(choiceView));
         document.getElementById('btn-redirect-create').addEventListener('click', () => showView(createView));
 
-        // 2. Search Logic
         const searchInput = document.getElementById('school-search-input');
         const resultsContainer = document.getElementById('school-search-results');
         let searchTimeout;
@@ -429,7 +405,7 @@ function renderSetupScreen() {
                                 }
                                 
                                 document.getElementById('school-found-msg').classList.remove('hidden');
-                                resultsContainer.innerHTML = ''; // Clear list
+                                resultsContainer.innerHTML = ''; 
                             };
                             resultsContainer.appendChild(btn);
                         });
@@ -441,7 +417,6 @@ function renderSetupScreen() {
             }, 500);
         });
 
-        // 3. Create Logic
         document.getElementById('btn-confirm-create').addEventListener('click', async () => {
             const name = document.getElementById('new-school-name').value.trim();
             if (!name) {
@@ -451,25 +426,22 @@ function renderSetupScreen() {
             
             showLoader("Mendaftarkan sekolah...");
             try {
-                // This call creates the school AND updates the user's role/school_id
                 await apiService.createSchool(name);
                 
-                // Refresh profile to get the new role/school_id
                 const { userProfile } = await apiService.getUserProfile();
                 await setState({ userProfile });
                 
                 hideLoader();
                 showNotification("Sekolah berhasil dibuat! Anda sekarang adalah Admin.", 'success');
-                renderScreen('setup'); // Refresh to show the main app
+                renderScreen('setup'); 
             } catch (error) {
                 hideLoader();
                 showNotification(error.message, 'error');
             }
         });
 
-        return; // Stop execution of standard setup render
+        return; 
     }
-    // --- END NEW LOGIC ---
 
     appContainer.innerHTML = templates.setup();
     if (!state.userProfile) {
@@ -526,7 +498,6 @@ function renderSetupScreen() {
         teacherProfilePoller();
     }
 }
-
 
 async function renderMultiRoleHomeScreen() {
     appContainer.innerHTML = templates.multiRoleHome();
@@ -642,9 +613,128 @@ async function renderMultiRoleHomeScreen() {
     }
 }
 
-// ... (renderStructuredAiResponse, calculatePercentageData, updateDashboardContent, etc. preserved implicitly) ...
-// Note: To keep the response concise, I am omitting repeating big chunks of code if they are unchanged.
-// However, since I must provide the *full content* for the file replacement, I will include the unchanged functions below.
+// --- DASHBOARD LOGIC ---
+
+function getWeekRange(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const dayOfWeek = d.getDay(); 
+    const diffToMonday = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    const monday = new Date(d.setDate(diffToMonday));
+    const sunday = new Date(new Date(monday).setDate(monday.getDate() + 6));
+    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+    return `${monday.toLocaleDateString('id-ID', options)} - ${sunday.toLocaleDateString('id-ID', options)}`;
+}
+
+function updateDashboardDateDisplay() {
+    const dateDisplay = document.getElementById('dashboard-header-date');
+    if (!dateDisplay) return;
+    const { chartViewMode, selectedDate } = state.dashboard;
+    const dateObj = new Date(selectedDate);
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    
+    if (chartViewMode === 'weekly') {
+        dateDisplay.textContent = getWeekRange(selectedDate);
+    } else if (chartViewMode === 'monthly') {
+        dateDisplay.textContent = dateObj.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    } else if (chartViewMode === 'yearly') {
+        dateDisplay.textContent = `Tahun ${dateObj.getFullYear()}`;
+    } else if (chartViewMode.startsWith('semester')) {
+        const year = dateObj.getFullYear();
+        dateDisplay.textContent = chartViewMode === 'semester1' ? `Semester I (${year})` : `Semester II (${year})`;
+    } else {
+        dateDisplay.textContent = dateObj.toLocaleDateString('id-ID', options);
+    }
+    
+    const pickerDisplay = document.getElementById('date-picker-display');
+    if (pickerDisplay) pickerDisplay.textContent = dateObj.toLocaleDateString('id-ID', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function renderCalendar(container, currentDate, onSelect) {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    
+    let html = `
+        <div class="flex justify-between items-center mb-4">
+            <button id="prev-month" class="p-1 hover:bg-slate-100 rounded">&lt;</button>
+            <span class="font-bold text-slate-700">${monthNames[month]} ${year}</span>
+            <button id="next-month" class="p-1 hover:bg-slate-100 rounded">&gt;</button>
+        </div>
+        <div class="grid grid-cols-7 gap-1 text-center text-xs font-medium text-slate-500 mb-2">
+            <div>Min</div><div>Sen</div><div>Sel</div><div>Rab</div><div>Kam</div><div>Jum</div><div>Sab</div>
+        </div>
+        <div class="grid grid-cols-7 gap-1 text-sm">
+    `;
+    
+    for (let i = 0; i < firstDay; i++) {
+        html += `<div></div>`;
+    }
+    
+    const today = new Date();
+    for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day);
+        const isToday = date.toDateString() === today.toDateString();
+        const isSelected = date.toDateString() === currentDate.toDateString();
+        const dayClass = `calendar-day p-2 rounded cursor-pointer ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`;
+        html += `<div class="${dayClass}" data-date="${date.toISOString().split('T')[0]}">${day}</div>`;
+    }
+    
+    html += `</div>`;
+    container.innerHTML = html;
+    
+    container.querySelectorAll('.calendar-day').forEach(el => {
+        el.onclick = () => onSelect(el.dataset.date);
+    });
+    
+    container.querySelector('#prev-month').onclick = (e) => {
+        e.stopPropagation();
+        onSelect(new Date(year, month - 1, 1).toISOString().split('T')[0], true);
+    };
+    container.querySelector('#next-month').onclick = (e) => {
+        e.stopPropagation();
+        onSelect(new Date(year, month + 1, 1).toISOString().split('T')[0], true);
+    };
+}
+
+function attachDatePickerListeners() {
+    const trigger = document.getElementById('date-picker-trigger');
+    const popover = document.getElementById('date-picker-popover');
+    
+    if (!trigger || !popover) return;
+    
+    const togglePicker = () => {
+        const isHidden = popover.classList.contains('hidden');
+        if (isHidden) {
+            popover.classList.remove('hidden');
+            renderCalendar(popover, new Date(state.dashboard.selectedDate), async (newDate, keepOpen = false) => {
+                await setState({ dashboard: { ...state.dashboard, selectedDate: newDate, aiRecommendation: { ...state.dashboard.aiRecommendation, result: null, error: null } } });
+                updateDashboardDateDisplay();
+                if (!keepOpen) popover.classList.add('hidden');
+                else renderCalendar(popover, new Date(newDate), arguments.callee);
+                
+                updateDashboardContent(state.dashboard.data);
+                dashboardPoller(); 
+            });
+        } else {
+            popover.classList.add('hidden');
+        }
+    };
+    
+    trigger.onclick = (e) => {
+        e.stopPropagation();
+        togglePicker();
+    };
+    
+    document.addEventListener('click', (e) => {
+        if (!trigger.contains(e.target) && !popover.contains(e.target)) {
+            popover.classList.add('hidden');
+        }
+    });
+}
 
 function renderStructuredAiResponse(markdownText) {
     const icons = {
@@ -708,12 +798,12 @@ function calculatePercentageData(logs, viewMode, filterValue, schoolInfo, select
             break;
         }
         case 'semester1':
-            startDate = new Date(d.getFullYear(), 6, 1); // July 1
-            endDate = new Date(d.getFullYear(), 11, 31); // Dec 31
+            startDate = new Date(d.getFullYear(), 6, 1); 
+            endDate = new Date(d.getFullYear(), 11, 31); 
             break;
         case 'semester2':
-            startDate = new Date(d.getFullYear(), 0, 1); // Jan 1
-            endDate = new Date(d.getFullYear(), 5, 30); // June 30
+            startDate = new Date(d.getFullYear(), 0, 1); 
+            endDate = new Date(d.getFullYear(), 5, 30); 
             break;
         case 'yearly': {
             let yearStart = new Date(d.getFullYear(), 6, 1);
@@ -775,15 +865,11 @@ function calculatePercentageData(logs, viewMode, filterValue, schoolInfo, select
 
     return {
         finalCounts,
-        percentageDenominator: percentageDenominator > 0 ? percentageDenominator : numStudentsInScope, // Fallback for empty ranges
+        percentageDenominator: percentageDenominator > 0 ? percentageDenominator : numStudentsInScope, 
     };
 }
 
 function updateDashboardContent(data) {
-    // ... [Content unchanged, keeping brevity for the diff] ...
-    // Note: In a real environment, I would include the full function.
-    // Assuming context is preserved. If not, paste the original function here.
-    // For this strict output format, I must provide full content.
     const { activeView, selectedDate, aiRecommendation, chartViewMode, chartClassFilter, chartSchoolFilter } = state.dashboard;
     
     const reportContent = document.getElementById('dashboard-content-report');
@@ -957,158 +1043,773 @@ function updateDashboardContent(data) {
     }
 }
 
-// ... (getWeekRange, updateDashboardDateDisplay, renderCalendar, attachDatePickerListeners, renderDashboardScreen, dashboardPoller, renderBulkActionsBar, renderAdminPanelTable, adminPanelPoller, renderAdminPanelScreen, showManageUserModal, renderAddStudentsScreen, renderStudentInputRows, addStudentInputRow, removeStudentInputRow, filterAndRenderHistory, renderDataScreen, generateSemesterOptions, getDatesFromPeriod, getCurrentSemesterKey, renderRecapScreen, renderJurisdictionPanelScreen, renderParentDashboardScreen, renderMigrationToolScreen preserved) ...
+async function dashboardPoller() {
+    if (state.currentScreen !== 'dashboard') return;
+    if (state.dashboard.polling.timeoutId) clearTimeout(state.dashboard.polling.timeoutId);
+    let nextInterval = getNextInterval(state.dashboard.polling.interval);
 
-// --- MODIFIED RENDER FUNCTIONS ---
+    try {
+        const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
+        const jurisdictionId = (state.userProfile.primaryRole === 'SUPER_ADMIN' && state.adminActingAsJurisdiction) 
+            ? state.adminActingAsJurisdiction.id 
+            : (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(state.userProfile.primaryRole) ? state.userProfile.jurisdiction_id : null);
 
-function renderAttendanceScreen() {
-    appContainer.innerHTML = templates.attendance(state.selectedClass, state.selectedDate);
-    const tbody = document.getElementById('attendance-table-body');
-    tbody.innerHTML = state.students.map((student, index) => {
-        const status = state.attendance[student.name] || 'H';
-        return `<tr class="border-b hover:bg-slate-50">
-            <td class="p-3 text-sm text-slate-500">${index + 1}</td>
-            <td class="p-3 font-medium text-slate-800">${encodeHTML(student.name)}</td>
-            ${['H', 'S', 'I', 'A', 'L'].map(s => `
-                <td class="p-3 text-center">
-                    <input type="radio" name="status-${index}" value="${s}" class="w-5 h-5 accent-blue-500" ${status === s ? 'checked' : ''} data-student-name="${student.name}">
-                </td>
-            `).join('')}
-        </tr>`;
-    }).join('');
-
-    tbody.addEventListener('change', (e) => {
-        if (e.target.type === 'radio') {
-            state.attendance[e.target.dataset.studentName] = e.target.value;
+        if (!schoolId && !jurisdictionId) {
+            updateDashboardContent({ isUnassigned: true });
+            return;
         }
-    });
 
-    document.getElementById('back-to-setup-btn').addEventListener('click', () => navigateTo('setup'));
-    document.getElementById('save-attendance-btn').addEventListener('click', handleSaveAttendance);
-    document.getElementById('mark-holiday-btn').addEventListener('click', handleMarkClassAsHoliday);
-}
-
-function renderHolidaySettingsScreen() {
-    appContainer.innerHTML = templates.holidaySettings();
-    document.getElementById('settings-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
-    
-    // School Settings (Work Days)
-    const workDayCheckboxes = document.querySelectorAll('.work-day-checkbox');
-    const saveSettingsBtn = document.getElementById('save-school-settings-btn');
-    if (saveSettingsBtn) {
-        saveSettingsBtn.addEventListener('click', () => {
-            const selectedDays = Array.from(workDayCheckboxes)
-                .filter(cb => cb.checked)
-                .map(cb => parseInt(cb.value));
-            handleSaveSchoolSettings(selectedDays);
+        const dashboardData = await apiService.getDashboardData({ 
+            schoolId,
+            jurisdictionId,
+            selectedDate: state.dashboard.selectedDate 
         });
+        
+        await setState({ 
+            dashboard: { 
+                ...state.dashboard, 
+                data: dashboardData, 
+                isLoading: false,
+                polling: { ...state.dashboard.polling, interval: INITIAL_POLLING_INTERVAL } 
+            } 
+        });
+        updateDashboardContent(dashboardData);
+        updateDashboardDateDisplay();
+    } catch (error) {
+        console.error("Polling failed:", error);
     }
 
-    // Holiday Management
-    document.getElementById('add-holiday-btn').addEventListener('click', () => {
-        document.getElementById('add-holiday-modal').classList.remove('hidden');
-    });
-    document.getElementById('cancel-holiday-modal').addEventListener('click', () => {
-        document.getElementById('add-holiday-modal').classList.add('hidden');
-    });
+    const newTimeoutId = setTimeout(dashboardPoller, state.dashboard.polling.interval);
+    state.dashboard.polling.timeoutId = newTimeoutId;
+    state.dashboard.polling.interval = nextInterval;
+}
+
+function renderDashboardScreen() {
+    appContainer.innerHTML = templates.dashboard();
+    updateDashboardDateDisplay();
+    attachDatePickerListeners();
+    document.getElementById('dashboard-back-btn')?.addEventListener('click', () => navigateTo('multiRoleHome'));
+    document.getElementById('logoutBtn-ks')?.addEventListener('click', handleSignOut);
     
-    document.getElementById('confirm-add-holiday').addEventListener('click', async () => {
-        const date = document.getElementById('new-holiday-date').value;
-        const desc = document.getElementById('new-holiday-desc').value;
-        const success = await handleManageHoliday('ADD', date, desc);
-        if (success) {
-            document.getElementById('add-holiday-modal').classList.add('hidden');
-            renderScreen('holidaySettings'); // Re-render to show new holiday
+    document.getElementById('db-view-report')?.addEventListener('click', async () => { await setState({ dashboard: { ...state.dashboard, activeView: 'report' } }); updateDashboardContent(state.dashboard.data); });
+    document.getElementById('db-view-percentage')?.addEventListener('click', async () => { await setState({ dashboard: { ...state.dashboard, activeView: 'percentage' } }); updateDashboardContent(state.dashboard.data); });
+    document.getElementById('db-view-ai')?.addEventListener('click', async () => { await setState({ dashboard: { ...state.dashboard, activeView: 'ai' } }); updateDashboardContent(state.dashboard.data); });
+
+    dashboardPoller();
+}
+
+function renderBulkActionsBar() {
+    const container = document.getElementById('admin-bulk-actions-container');
+    if (!container) return;
+    
+    const selectedCount = state.adminPanel.selectedUsers.length;
+    if (selectedCount === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.innerHTML = templates.bulkActionsBar(selectedCount);
+    
+    document.getElementById('bulk-change-role-btn')?.addEventListener('click', async () => {
+        const newRole = await showRoleSelectorModal();
+        if (newRole) {
+            const confirmed = await showConfirmation(`Ubah peran untuk ${selectedCount} pengguna menjadi ${getRoleDisplayName(newRole)}?`);
+            if (confirmed) {
+                showLoader('Memproses...');
+                try {
+                    await apiService.updateUsersBulkConfiguration({ targetEmails: state.adminPanel.selectedUsers, newRole });
+                    showNotification('Peran berhasil diperbarui.');
+                    state.adminPanel.selectedUsers = [];
+                    adminPanelPoller();
+                } catch (e) {
+                    showNotification(e.message, 'error');
+                } finally {
+                    hideLoader();
+                }
+            }
         }
     });
 
-    document.querySelectorAll('.delete-holiday-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const id = e.currentTarget.dataset.id;
-            const confirmed = await showConfirmation('Anda yakin ingin menghapus libur ini?');
+    document.getElementById('bulk-assign-school-btn')?.addEventListener('click', async () => {
+        const school = await showSchoolSelectorModal('Pilih Sekolah Baru');
+        if (school) {
+            const confirmed = await showConfirmation(`Pindahkan ${selectedCount} pengguna ke ${school.name}?`);
             if (confirmed) {
-                await handleManageHoliday('DELETE', null, null, id);
-                renderScreen('holidaySettings');
+                showLoader('Memproses...');
+                try {
+                    await apiService.updateUsersBulkConfiguration({ targetEmails: state.adminPanel.selectedUsers, newSchoolId: school.id });
+                    showNotification('Sekolah pengguna berhasil diperbarui.');
+                    state.adminPanel.selectedUsers = [];
+                    adminPanelPoller();
+                } catch (e) {
+                    showNotification(e.message, 'error');
+                } finally {
+                    hideLoader();
+                }
             }
+        }
+    });
+}
+
+function renderAdminPanelTable() {
+    const container = document.getElementById('admin-panel-container');
+    const paginationContainer = document.getElementById('admin-pagination-container');
+    if (!container || !paginationContainer) return;
+
+    let users = state.adminPanel.users;
+    if (state.adminPanel.groupBySchool) {
+        users.sort((a, b) => (a.school_name || '').localeCompare(b.school_name || ''));
+    }
+
+    const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
+    const startIndex = (state.adminPanel.currentPage - 1) * USERS_PER_PAGE;
+    const paginatedUsers = users.slice(startIndex, startIndex + USERS_PER_PAGE);
+
+    const isAllSelected = paginatedUsers.length > 0 && paginatedUsers.every(u => state.adminPanel.selectedUsers.includes(u.email));
+
+    let html = `
+        <table class="min-w-full divide-y divide-slate-200">
+            <thead class="bg-slate-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider w-10">
+                        <input type="checkbox" id="select-all-users" class="rounded text-blue-600 focus:ring-blue-500" ${isAllSelected ? 'checked' : ''}>
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nama & Email</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Peran</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Sekolah / Yurisdiksi</th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Aksi</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-slate-200">
+    `;
+
+    if (paginatedUsers.length === 0) {
+        html += `<tr><td colspan="5" class="px-6 py-4 text-center text-sm text-slate-500">Tidak ada pengguna ditemukan.</td></tr>`;
+    } else {
+        html += paginatedUsers.map(u => {
+            const isSelected = state.adminPanel.selectedUsers.includes(u.email);
+            return `
+            <tr class="hover:bg-slate-50 transition">
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <input type="checkbox" class="user-checkbox rounded text-blue-600 focus:ring-blue-500" data-email="${u.email}" ${isSelected ? 'checked' : ''}>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="flex items-center">
+                        <img class="h-8 w-8 rounded-full" src="${encodeHTML(u.picture)}" alt="">
+                        <div class="ml-4">
+                            <div class="text-sm font-medium text-slate-900">${encodeHTML(u.name)}</div>
+                            <div class="text-sm text-slate-500">${encodeHTML(u.email)}</div>
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">${getRoleDisplayName(u.role)}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                    ${u.school_name ? encodeHTML(u.school_name) : (u.jurisdiction_name ? encodeHTML(u.jurisdiction_name) : '-')}
+                    ${u.is_unmanaged ? '<span class="ml-2 text-red-500 text-xs">(Perlu Tindakan)</span>' : ''}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button class="text-indigo-600 hover:text-indigo-900 manage-user-btn" data-email="${u.email}">Kelola</button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+
+    // Pagination Controls
+    paginationContainer.innerHTML = `
+        <button id="prev-page-btn" class="px-3 py-1 rounded border ${state.adminPanel.currentPage === 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}" ${state.adminPanel.currentPage === 1 ? 'disabled' : ''}>Sebelumnya</button>
+        <span class="text-sm text-slate-600">Halaman ${state.adminPanel.currentPage} dari ${totalPages || 1}</span>
+        <button id="next-page-btn" class="px-3 py-1 rounded border ${state.adminPanel.currentPage >= totalPages ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}" ${state.adminPanel.currentPage >= totalPages ? 'disabled' : ''}>Berikutnya</button>
+    `;
+
+    document.getElementById('prev-page-btn').onclick = () => { if(state.adminPanel.currentPage > 1) { state.adminPanel.currentPage--; renderAdminPanelTable(); renderBulkActionsBar(); } };
+    document.getElementById('next-page-btn').onclick = () => { if(state.adminPanel.currentPage < totalPages) { state.adminPanel.currentPage++; renderAdminPanelTable(); renderBulkActionsBar(); } };
+
+    document.getElementById('select-all-users')?.addEventListener('change', (e) => {
+        const isChecked = e.target.checked;
+        const pageEmails = paginatedUsers.map(u => u.email);
+        if (isChecked) {
+            state.adminPanel.selectedUsers = [...new Set([...state.adminPanel.selectedUsers, ...pageEmails])];
+        } else {
+            state.adminPanel.selectedUsers = state.adminPanel.selectedUsers.filter(email => !pageEmails.includes(email));
+        }
+        renderAdminPanelTable();
+        renderBulkActionsBar();
+    });
+
+    document.querySelectorAll('.user-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            const email = e.target.dataset.email;
+            if (e.target.checked) state.adminPanel.selectedUsers.push(email);
+            else state.adminPanel.selectedUsers = state.adminPanel.selectedUsers.filter(e => e !== email);
+            renderAdminPanelTable(); // Re-render to update "select all" state
+            renderBulkActionsBar();
+        });
+    });
+
+    document.querySelectorAll('.manage-user-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const user = state.adminPanel.users.find(u => u.email === e.target.dataset.email);
+            showManageUserModal(user);
         });
     });
 }
 
-// --- MAIN RENDERER (Updated Switch) ---
+async function adminPanelPoller() {
+    if (state.currentScreen !== 'adminPanel') return;
+    if (state.adminPanel.polling.timeoutId) clearTimeout(state.adminPanel.polling.timeoutId);
+    let nextInterval = getNextInterval(state.adminPanel.polling.interval);
 
-export function renderScreen(screen) {
-    appContainer.innerHTML = '';
+    try {
+        const { allUsers } = await apiService.getAllUsers();
+        const { allSchools } = await apiService.getAllSchools();
+        
+        await setState({ 
+            adminPanel: { 
+                ...state.adminPanel, 
+                users: allUsers, 
+                schools: allSchools, 
+                isLoading: false,
+                polling: { ...state.adminPanel.polling, interval: INITIAL_POLLING_INTERVAL }
+            } 
+        });
+        renderAdminPanelTable();
+    } catch (error) {
+        console.error("Admin polling failed:", error);
+    }
+
+    const newTimeoutId = setTimeout(adminPanelPoller, state.adminPanel.polling.interval);
+    state.adminPanel.polling.timeoutId = newTimeoutId;
+    state.adminPanel.polling.interval = nextInterval;
+}
+
+function renderAdminPanelScreen() {
+    appContainer.innerHTML = templates.adminPanel();
+    document.getElementById('admin-panel-back-btn')?.addEventListener('click', () => navigateTo('multiRoleHome'));
+    document.getElementById('group-by-school-toggle')?.addEventListener('change', (e) => {
+        state.adminPanel.groupBySchool = e.target.checked;
+        state.adminPanel.currentPage = 1;
+        renderAdminPanelTable();
+    });
+    document.getElementById('add-school-btn')?.addEventListener('click', handleCreateSchool);
     
-    const screenRenderers = {
-        'landingPage': renderLandingPageScreen,
-        'setup': renderSetupScreen,
-        'multiRoleHome': renderMultiRoleHomeScreen,
-        'dashboard': renderDashboardScreen,
-        'parentDashboard': renderParentDashboardScreen,
-        'adminPanel': renderAdminPanelScreen,
-        'jurisdictionPanel': renderJurisdictionPanelScreen,
-        'migrationTool': renderMigrationToolScreen,
-        'add-students': renderAddStudentsScreen,
-        'attendance': renderAttendanceScreen,
-        'holidaySettings': renderHolidaySettingsScreen, // New Screen
-        'success': () => {
-             appContainer.innerHTML = templates.success();
-             document.getElementById('success-back-to-start-btn').addEventListener('click', () => {
-                 setState({ lastSaveContext: null }); 
-                 navigateTo('setup');
-             });
-             document.getElementById('success-view-data-btn').addEventListener('click', () => {
-                 setState({ lastSaveContext: null }); 
-                 handleViewHistory(false);
-             });
-        },
-        'data': renderDataScreen,
-        'recap': renderRecapScreen,
+    renderAdminPanelTable(); 
+    renderBulkActionsBar();
+    adminPanelPoller(); 
+}
+
+async function showManageUserModal(user) {
+    // We need fresh jurisdiction tree and school list
+    showLoader('Memuat data...');
+    let jurisdictions = [];
+    try {
+        const { tree } = await apiService.getJurisdictionTree();
+        jurisdictions = tree;
+    } catch(e) { console.error(e); }
+    hideLoader();
+
+    const existingModal = document.getElementById('manage-user-modal');
+    if (existingModal) existingModal.remove();
+
+    const modalContainer = document.createElement('div');
+    modalContainer.innerHTML = templates.manageUserModal(user, state.adminPanel.schools, jurisdictions);
+    document.body.appendChild(modalContainer);
+
+    const roleSelect = document.getElementById('role-select-modal');
+    const schoolContainer = document.getElementById('school-assignment-container');
+    const jurContainer = document.getElementById('jurisdiction-assignment-container');
+    const classContainer = document.getElementById('manage-classes-container');
+
+    roleSelect.addEventListener('change', (e) => {
+        const newRole = e.target.value;
+        if (['GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(newRole)) {
+            schoolContainer.classList.remove('hidden');
+            jurContainer.classList.add('hidden');
+        } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(newRole)) {
+            schoolContainer.classList.add('hidden');
+            jurContainer.classList.remove('hidden');
+        } else {
+            schoolContainer.classList.add('hidden');
+            jurContainer.classList.add('hidden');
+        }
+        
+        if (newRole === 'GURU') classContainer.classList.remove('hidden');
+        else classContainer.classList.add('hidden');
+    });
+
+    document.getElementById('manage-user-cancel-btn').onclick = () => {
+        modalContainer.remove();
     };
 
-    (screenRenderers[screen] || renderLandingPageScreen)();
-    hideLoader();
+    document.getElementById('manage-user-save-btn').onclick = async () => {
+        const newRole = roleSelect.value;
+        const newSchoolId = document.getElementById('school-select-modal').value;
+        const newJurId = document.getElementById('jurisdiction-select-modal').value;
+        
+        const newClasses = [];
+        document.querySelectorAll('.class-checkbox:checked').forEach(cb => newClasses.push(cb.value));
+
+        showLoader('Menyimpan konfigurasi pengguna...');
+        try {
+            await apiService.updateUserConfiguration(user.email, newRole, newSchoolId, newClasses, newJurId);
+            showNotification('Pengguna berhasil diperbarui.');
+            modalContainer.remove();
+            adminPanelPoller(); 
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            hideLoader();
+        }
+    };
 }
 
-export function stopAllPollers() {
-    if (state.dashboard.polling.timeoutId) {
-        clearTimeout(state.dashboard.polling.timeoutId);
-        setState({ dashboard: { ...state.dashboard, polling: { ...state.dashboard.polling, timeoutId: null } } });
-        console.log('Dashboard polling stopped.');
-    }
-    if (state.adminPanel.polling.timeoutId) {
-        clearTimeout(state.adminPanel.polling.timeoutId);
-        setState({ adminPanel: { ...state.adminPanel, polling: { ...state.adminPanel.polling, timeoutId: null } } });
-        console.log('Admin Panel polling stopped.');
-    }
-    if (state.setup.polling.timeoutId) {
-        clearTimeout(state.setup.polling.timeoutId);
-        setState({ setup: { ...state.setup, polling: { ...state.setup.polling, timeoutId: null } } });
-        console.log('Setup Screen (Teacher) polling stopped.');
-    }
-}
-
-export function resumePollingForCurrentScreen() {
-    if (!state.userProfile) return; 
-
-    console.log(`Page is visible again. Resuming polling for screen: ${state.currentScreen}`);
+function renderAddStudentsScreen() {
+    appContainer.innerHTML = templates.addStudents(state.selectedClass);
+    renderStudentInputRows();
+    document.getElementById('add-student-row-btn').addEventListener('click', addStudentInputRow);
+    document.getElementById('cancel-add-students-btn').addEventListener('click', () => navigateTo('setup'));
+    document.getElementById('save-students-btn').addEventListener('click', handleSaveNewStudents);
     
-    switch (state.currentScreen) {
-        case 'dashboard':
-            setState({ dashboard: { ...state.dashboard, polling: { ...state.dashboard.polling, interval: INITIAL_POLLING_INTERVAL } } });
-            dashboardPoller();
-            break;
-        case 'adminPanel':
-            setState({ adminPanel: { ...state.adminPanel, polling: { ...state.adminPanel.polling, interval: INITIAL_POLLING_INTERVAL } } });
-            adminPanelPoller();
-            break;
-        case 'setup':
-             if (state.userProfile.primaryRole === 'GURU') {
-                setState({ setup: { ...state.setup, polling: { ...state.setup.polling, interval: INITIAL_POLLING_INTERVAL } } });
-                teacherProfilePoller();
-             }
-            break;
-        default:
-            break;
+    document.getElementById('download-template-btn').addEventListener('click', handleDownloadTemplate);
+    const fileInput = document.getElementById('excel-upload');
+    document.getElementById('import-excel-btn').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', handleExcelImport);
+}
+
+function renderStudentInputRows() {
+    const container = document.getElementById('manual-input-container');
+    container.innerHTML = '';
+    state.newStudents.forEach((student, index) => {
+        const div = document.createElement('div');
+        div.className = "flex gap-2 items-center";
+        div.innerHTML = `
+            <span class="text-slate-400 font-mono w-6 text-right">${index + 1}.</span>
+            <input type="text" placeholder="Nama Siswa" value="${encodeHTML(student.name)}" class="student-name-input flex-1 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition" data-index="${index}" />
+            <input type="email" placeholder="Email Orang Tua (Opsional)" value="${encodeHTML(student.parentEmail || '')}" class="student-email-input flex-1 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition" data-index="${index}" />
+            <button class="remove-student-btn text-red-400 hover:text-red-600 p-2" data-index="${index}" title="Hapus Baris"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+        `;
+        container.appendChild(div);
+    });
+
+    document.querySelectorAll('.student-name-input').forEach(input => {
+        input.addEventListener('input', (e) => {
+            const idx = e.target.dataset.index;
+            state.newStudents[idx].name = e.target.value;
+        });
+    });
+    
+    document.querySelectorAll('.student-email-input').forEach(input => {
+        input.addEventListener('input', (e) => {
+            const idx = e.target.dataset.index;
+            state.newStudents[idx].parentEmail = e.target.value;
+        });
+    });
+
+    document.querySelectorAll('.remove-student-btn').forEach(btn => {
+        btn.addEventListener('click', removeStudentInputRow);
+    });
+}
+
+function addStudentInputRow() {
+    state.newStudents.push({ name: '', parentEmail: '' });
+    renderStudentInputRows();
+}
+
+function removeStudentInputRow(e) {
+    const index = parseInt(e.currentTarget.dataset.index);
+    if (state.newStudents.length > 1) {
+        state.newStudents.splice(index, 1);
+        renderStudentInputRows();
+    } else {
+        showNotification('Minimal satu baris siswa diperlukan.', 'error');
     }
+}
+
+async function filterAndRenderHistory() {
+    const { historyClassFilter, dataScreenFilters, adminAllLogsView } = state;
+    
+    showLoader('Memuat data...');
+    try {
+        const payload = { 
+            isClassSpecific: !!historyClassFilter, 
+            classFilter: historyClassFilter,
+            isGlobalView: adminAllLogsView,
+            schoolId: state.adminActingAsSchool?.id || state.userProfile.school_id
+        };
+        const { allLogs } = await apiService.getHistoryData(payload);
+        
+        state.allHistoryLogs = allLogs;
+        
+        const filtered = allLogs.filter(log => {
+            const matchName = dataScreenFilters.studentName ? Object.keys(log.attendance).some(name => name.toLowerCase().includes(dataScreenFilters.studentName.toLowerCase())) : true;
+            const matchStatus = dataScreenFilters.status !== 'all' ? Object.values(log.attendance).includes(dataScreenFilters.status) : true;
+            const logDate = new Date(log.date);
+            const matchStart = dataScreenFilters.startDate ? logDate >= new Date(dataScreenFilters.startDate) : true;
+            const matchEnd = dataScreenFilters.endDate ? logDate <= new Date(dataScreenFilters.endDate) : true;
+            return matchName && matchStatus && matchStart && matchEnd;
+        });
+
+        const container = document.getElementById('data-container');
+        if (container) {
+            container.innerHTML = filtered.length ? filtered.map(log => {
+                const dateObj = new Date(log.date);
+                const dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                const statuses = Object.values(log.attendance);
+                const s = statuses.filter(x => x === 'S').length;
+                const i = statuses.filter(x => x === 'I').length;
+                const a = statuses.filter(x => x === 'A').length;
+                const h = statuses.filter(x => x === 'H').length;
+                const isHoliday = statuses.every(x => x === 'L');
+
+                return `
+                <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm hover:shadow-md transition mb-4">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-lg">Kelas ${encodeHTML(log.class)}</h3>
+                            <p class="text-slate-500 text-sm">${dateStr}</p>
+                            <p class="text-xs text-slate-400 mt-1">Dicatat oleh: ${encodeHTML(log.teacherName || 'Guru')}</p>
+                        </div>
+                        ${isHoliday 
+                            ? `<span class="bg-orange-100 text-orange-800 text-xs font-bold px-3 py-1 rounded-full">LIBUR</span>`
+                            : `<div class="flex gap-2 text-xs font-bold">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded">H: ${h}</span>
+                                <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded">S: ${s}</span>
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">I: ${i}</span>
+                                <span class="bg-red-100 text-red-800 px-2 py-1 rounded">A: ${a}</span>
+                               </div>`
+                        }
+                    </div>
+                    <div class="mt-3 border-t border-slate-100 pt-2">
+                        <button class="text-blue-600 hover:text-blue-800 text-sm font-semibold edit-log-btn" data-class="${log.class}" data-date="${log.date}">Edit Absensi</button>
+                    </div>
+                </div>`;
+            }).join('') : '<div class="text-center py-10 text-slate-500">Tidak ada data ditemukan.</div>';
+            
+            document.querySelectorAll('.edit-log-btn').forEach(btn => {
+                btn.onclick = () => {
+                    handleStartAttendance(btn.dataset.class, btn.dataset.date);
+                };
+            });
+        }
+    } catch(e) {
+        showNotification("Gagal memuat riwayat: " + e.message, 'error');
+    } finally {
+        hideLoader();
+    }
+}
+
+function renderDataScreen() {
+    appContainer.innerHTML = templates.data();
+    if (state.historyClassFilter) {
+        document.getElementById('data-title').textContent = `Riwayat Absensi Kelas ${state.historyClassFilter}`;
+    } else {
+        document.getElementById('data-title').textContent = `Riwayat Absensi Semua Kelas`;
+    }
+    
+    document.getElementById('data-back-to-start-btn').addEventListener('click', () => navigateTo(state.adminAllLogsView ? 'adminPanel' : 'setup'));
+    document.getElementById('clear-filters-btn').addEventListener('click', () => {
+        state.dataScreenFilters = { studentName: '', status: 'all', startDate: '', endDate: '' };
+        document.getElementById('filter-student-name').value = '';
+        document.getElementById('filter-status').value = 'all';
+        document.getElementById('filter-start-date').value = '';
+        document.getElementById('filter-end-date').value = '';
+        filterAndRenderHistory();
+    });
+
+    ['filter-student-name', 'filter-status', 'filter-start-date', 'filter-end-date'].forEach(id => {
+        document.getElementById(id).addEventListener('change', (e) => {
+            if (id === 'filter-student-name') state.dataScreenFilters.studentName = e.target.value;
+            if (id === 'filter-status') state.dataScreenFilters.status = e.target.value;
+            if (id === 'filter-start-date') state.dataScreenFilters.startDate = e.target.value;
+            if (id === 'filter-end-date') state.dataScreenFilters.endDate = e.target.value;
+            filterAndRenderHistory();
+        });
+    });
+
+    filterAndRenderHistory();
+}
+
+function generateSemesterOptions() {
+    const currentYear = new Date().getFullYear();
+    return [
+        { label: `Semester Ganjil ${currentYear}/${currentYear+1}`, value: `${currentYear}-1` },
+        { label: `Semester Genap ${currentYear}/${currentYear+1}`, value: `${currentYear}-2` },
+        { label: `Semester Genap ${currentYear-1}/${currentYear}`, value: `${currentYear-1}-2` },
+    ];
+}
+
+function renderRecapScreen() {
+    appContainer.innerHTML = templates.recap();
+    const container = document.getElementById('recap-container');
+    const headerEl = document.querySelector('h1'); // Find the H1
+    
+    // Add Period Selector
+    const periodSelect = document.createElement('select');
+    periodSelect.className = "ml-4 p-2 border rounded text-sm";
+    generateSemesterOptions().forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.label;
+        if (state.recapPeriod === opt.value) option.selected = true;
+        periodSelect.appendChild(option);
+    });
+    // Set default if null
+    if (!state.recapPeriod) {
+        const today = new Date();
+        const m = today.getMonth();
+        const y = today.getFullYear();
+        state.recapPeriod = (m >= 6) ? `${y}-1` : `${y}-2`;
+        periodSelect.value = state.recapPeriod;
+    }
+    
+    periodSelect.onchange = (e) => {
+        state.recapPeriod = e.target.value;
+        loadRecap();
+    };
+    headerEl.parentNode.insertBefore(periodSelect, headerEl.nextSibling);
+
+    const loadRecap = async () => {
+        showLoader('Menghitung rekap...');
+        try {
+            const [year, sem] = state.recapPeriod.split('-').map(Number);
+            let startDate, endDate;
+            if (sem === 1) { // Ganjil: July - Dec
+                startDate = `${year}-07-01`;
+                endDate = `${year}-12-31`;
+            } else { // Genap: Jan - June
+                startDate = `${year}-01-01`;
+                endDate = `${year}-06-30`;
+            }
+
+            const payload = { 
+                classFilter: state.selectedClass, 
+                schoolId: state.adminActingAsSchool?.id || state.userProfile.school_id,
+                startDate,
+                endDate
+            };
+            
+            const { recapData } = await apiService.getRecapData(payload);
+            
+            if (state.recapSortOrder === 'total') {
+                recapData.sort((a, b) => b.total - a.total);
+            } else {
+                recapData.sort((a, b) => (a.originalIndex || 0) - (b.originalIndex || 0));
+            }
+
+            if (recapData.length === 0) {
+                container.innerHTML = '<div class="text-center py-10 text-slate-500">Belum ada data absensi untuk periode ini.</div>';
+            } else {
+                let html = `
+                    <div class="overflow-x-auto rounded-lg border border-slate-200 shadow-sm">
+                    <table class="min-w-full bg-white text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="py-3 px-4 text-left font-semibold text-slate-600">No</th>
+                                <th class="py-3 px-4 text-left font-semibold text-slate-600">Nama Siswa</th>
+                                <th class="py-3 px-4 text-center font-semibold text-yellow-600">Sakit</th>
+                                <th class="py-3 px-4 text-center font-semibold text-blue-600">Izin</th>
+                                <th class="py-3 px-4 text-center font-semibold text-red-600">Alpa</th>
+                                <th class="py-3 px-4 text-center font-semibold text-slate-800">Total Absen</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                `;
+                html += recapData.map((s, i) => `
+                    <tr class="hover:bg-slate-50">
+                        <td class="py-2 px-4 text-slate-500">${i + 1}</td>
+                        <td class="py-2 px-4 font-medium text-slate-800">${encodeHTML(s.name)}</td>
+                        <td class="py-2 px-4 text-center">${s.S > 0 ? `<span class="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded font-bold">${s.S}</span>` : '-'}</td>
+                        <td class="py-2 px-4 text-center">${s.I > 0 ? `<span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold">${s.I}</span>` : '-'}</td>
+                        <td class="py-2 px-4 text-center">${s.A > 0 ? `<span class="bg-red-100 text-red-800 px-2 py-0.5 rounded font-bold">${s.A}</span>` : '-'}</td>
+                        <td class="py-2 px-4 text-center font-bold text-slate-700">${s.total}</td>
+                    </tr>
+                `).join('');
+                html += `</tbody></table></div>`;
+                container.innerHTML = html;
+            }
+        } catch (e) {
+            showNotification(e.message, 'error');
+        } finally {
+            hideLoader();
+        }
+    };
+
+    loadRecap();
+
+    document.getElementById('recap-back-to-start-btn').addEventListener('click', () => navigateTo('setup'));
+    document.getElementById('sort-by-total-btn').addEventListener('click', () => { state.recapSortOrder = 'total'; renderRecapScreen(); });
+    document.getElementById('sort-by-absen-btn').addEventListener('click', () => { state.recapSortOrder = 'absen'; renderRecapScreen(); });
+}
+
+function renderJurisdictionPanelScreen() {
+    appContainer.innerHTML = templates.jurisdictionPanel();
+    document.getElementById('jurisdiction-panel-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
+    
+    const treeContainer = document.getElementById('jurisdiction-tree-container');
+    const detailsContainer = document.getElementById('jurisdiction-details-container');
+    
+    // Load Tree
+    const loadTree = async () => {
+        try {
+            const { tree } = await apiService.getJurisdictionTree();
+            const renderNodes = (nodes, level = 0) => {
+                let html = '';
+                nodes.forEach(node => {
+                    html += `
+                        <div class="ml-${level * 2} mb-1">
+                            <button class="w-full text-left p-2 rounded hover:bg-white border border-transparent hover:border-slate-200 flex justify-between items-center group jur-node-btn" data-id="${node.id}">
+                                <span class="text-sm font-medium text-slate-700 group-hover:text-blue-600">${encodeHTML(node.name)}</span>
+                                <span class="text-xs text-slate-400 bg-slate-100 px-1 rounded">${node.type}</span>
+                            </button>
+                            ${node.children.length > 0 ? `<div class="border-l-2 border-slate-200 ml-2 pl-1 mt-1 space-y-1">${renderNodes(node.children, level + 1)}</div>` : ''}
+                        </div>
+                    `;
+                });
+                return html;
+            };
+            treeContainer.innerHTML = renderNodes(tree);
+            
+            document.querySelectorAll('.jur-node-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = e.currentTarget.dataset.id;
+                    loadDetails(id);
+                });
+            });
+        } catch (e) {
+            treeContainer.innerHTML = '<p class="text-red-500 text-xs">Gagal memuat data.</p>';
+        }
+    };
+
+    const loadDetails = async (id) => {
+        showLoader('Memuat detail...');
+        try {
+            // We reuse getJurisdictionTree to find the specific node for details (client-side find is simpler here)
+            // Ideally, an endpoint like getJurisdiction(id) exists, but we can search the tree.
+            // For now, let's fetch schools.
+            const { assignedSchools, unassignedSchools } = await apiService.getSchoolsForJurisdiction(id);
+            
+            detailsContainer.innerHTML = `
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">Detail Wilayah</h2>
+                        <p class="text-slate-500 text-sm">ID: ${id}</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="assign-school-modal-btn" class="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700">Kelola Sekolah</button>
+                        <button id="delete-jur-btn" class="bg-red-100 text-red-600 px-3 py-1.5 rounded text-sm hover:bg-red-200">Hapus Wilayah</button>
+                    </div>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <h3 class="font-bold text-slate-700 mb-2">Sekolah Terdaftar (${assignedSchools.length})</h3>
+                    ${assignedSchools.length === 0 ? '<p class="text-slate-400 text-sm">Belum ada sekolah.</p>' : 
+                        `<ul class="grid grid-cols-1 md:grid-cols-2 gap-2">${assignedSchools.map(s => `<li class="bg-white p-2 rounded border border-slate-200 text-sm text-slate-700">${encodeHTML(s.name)}</li>`).join('')}</ul>`
+                    }
+                </div>
+            `;
+            
+            document.getElementById('assign-school-modal-btn').onclick = () => {
+                const modal = document.createElement('div');
+                modal.innerHTML = templates.assignSchoolsModal('Wilayah Ini', assignedSchools, unassignedSchools);
+                document.body.appendChild(modal);
+                
+                document.getElementById('assign-schools-close-btn').onclick = () => { modal.remove(); loadDetails(id); };
+                
+                document.querySelectorAll('.assign-school-btn').forEach(btn => {
+                    btn.onclick = async (e) => {
+                        const sId = e.currentTarget.dataset.schoolId;
+                        await apiService.assignSchoolToJurisdiction(sId, id);
+                        e.currentTarget.parentElement.remove();
+                    };
+                });
+                
+                document.querySelectorAll('.unassign-school-btn').forEach(btn => {
+                    btn.onclick = async (e) => {
+                        const sId = e.currentTarget.dataset.schoolId;
+                        await apiService.assignSchoolToJurisdiction(sId, null); // Unassign
+                        e.currentTarget.parentElement.remove();
+                    };
+                });
+            };
+
+            document.getElementById('delete-jur-btn').onclick = async () => {
+                if (await showConfirmation('Hapus wilayah ini? Pastikan tidak ada sub-wilayah atau sekolah tertaut.')) {
+                    try {
+                        await apiService.deleteJurisdiction(id);
+                        showNotification('Berhasil dihapus.');
+                        loadTree();
+                        detailsContainer.innerHTML = '';
+                    } catch (e) {
+                        showNotification(e.message, 'error');
+                    }
+                }
+            };
+
+        } catch(e) {
+            console.error(e);
+        } finally {
+            hideLoader();
+        }
+    };
+
+    document.getElementById('add-jurisdiction-btn').addEventListener('click', async () => {
+        // Need to pass full flat list for parent selection?
+        // Using tree for now to flatten.
+        showLoader('Menyiapkan...');
+        const { tree } = await apiService.getJurisdictionTree();
+        hideLoader();
+        
+        const modal = document.createElement('div');
+        modal.innerHTML = templates.manageJurisdictionModal(null, tree); // Flatten logic inside template helper
+        document.body.appendChild(modal);
+        
+        document.getElementById('jur-modal-cancel-btn').onclick = () => modal.remove();
+        document.getElementById('jur-modal-save-btn').onclick = async () => {
+            const name = document.getElementById('jur-name').value;
+            const type = document.getElementById('jur-type').value;
+            const parentId = document.getElementById('jur-parent').value;
+            
+            try {
+                await apiService.createJurisdiction(name, type, parentId);
+                showNotification('Berhasil dibuat.');
+                modal.remove();
+                loadTree();
+            } catch(e) {
+                showNotification(e.message, 'error');
+            }
+        };
+    });
+
+    loadTree();
+}
+
+function renderParentDashboardScreen() {
+    appContainer.innerHTML = templates.parentDashboard();
+    document.getElementById('parent-dashboard-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
+    
+    const loadParentData = async () => {
+        try {
+            const { parentData } = await apiService.getParentData();
+            await setState({ parentDashboard: { isLoading: false, data: parentData } });
+            // Re-render only content part to avoid flicker? Or full screen.
+            // Simplified: Re-render screen content logic is inside template via state check, so re-call render.
+            appContainer.innerHTML = templates.parentDashboard();
+            document.getElementById('parent-dashboard-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
+        } catch (e) {
+            console.error(e);
+            showNotification("Gagal memuat data anak.", 'error');
+        }
+    };
+    
+    if (state.parentDashboard.isLoading) {
+        loadParentData();
+    }
+}
+
+function renderMigrationToolScreen() {
+    appContainer.innerHTML = templates.migrationTool();
+    document.getElementById('migration-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
+    document.getElementById('migrate-data-btn').addEventListener('click', handleMigrateLegacyData);
 }
