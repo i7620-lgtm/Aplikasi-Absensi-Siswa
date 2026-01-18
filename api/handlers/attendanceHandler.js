@@ -187,17 +187,37 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
         aggregatedStudentsByClass[row.payload.class] = row.payload.students;
     });
 
-    // --- NEW: Fetch School Settings with Robust Default Fallback ---
-    // Menggunakan SELECT * untuk menghindari error 'column does not exist' jika skema DB belum update.
+    // --- Fetch School Settings & Holidays ---
+    // Fetch Settings
     const { rows: settingsRows } = await sql`
         SELECT * FROM schools WHERE id = ${schoolId}
     `;
     
-    // Default: Senin (1) s.d Sabtu (6). Jika data DB null atau kosong, gunakan default ini.
     let settings = settingsRows[0]?.settings;
     if (!settings || typeof settings !== 'object' || !Array.isArray(settings.workDays)) {
         settings = { workDays: [1, 2, 3, 4, 5, 6] };
     }
 
-    return response.status(200).json({ aggregatedStudentsByClass, settings });
+    // Fetch Applicable Holidays (National + Regional + School)
+    let applicableRegionalIds = [];
+    if (settingsRows[0] && settingsRows[0].jurisdiction_id) {
+        const { rows: jurIds } = await sql`
+            WITH RECURSIVE parents AS (
+                SELECT id, parent_id FROM jurisdictions WHERE id = ${settingsRows[0].jurisdiction_id}
+                UNION ALL
+                SELECT j.id, j.parent_id FROM jurisdictions j JOIN parents p ON j.id = p.parent_id
+            )
+            SELECT id FROM parents
+        `;
+        applicableRegionalIds = jurIds.map(j => j.id);
+    }
+
+    const { rows: allHolidays } = await sql`SELECT * FROM holidays`;
+    const holidays = allHolidays.filter(h => 
+        h.scope === 'NATIONAL' ||
+        (h.scope === 'SCHOOL' && h.reference_id === parseInt(schoolId)) ||
+        (h.scope === 'REGIONAL' && applicableRegionalIds.includes(h.reference_id))
+    );
+
+    return response.status(200).json({ aggregatedStudentsByClass, settings, holidays });
 }
