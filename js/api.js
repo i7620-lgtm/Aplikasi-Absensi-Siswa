@@ -181,11 +181,14 @@ export const apiService = {
         return await _fetch('/api/data', 'assignSchoolToJurisdiction', { schoolId, jurisdictionId });
     },
 
-    // Feedback APIs
-    async submitFeedback(name, email, type, message) {
-        return await _fetch('/api/data', 'submitFeedback', { name, email, type, message });
+    // Holiday & Settings APIs
+    async manageHoliday(operation, holidayId, date, description) {
+        return await _fetch('/api/data', 'manageHoliday', { operation, holidayId, date, description });
     },
-    async getFeedback() {
-        return await _fetch('/api/data', 'getFeedback');
+    async updateSchoolSettings(workDays, schoolId = null) {
+        return await _fetch('/api/data', 'updateSchoolSettings', { workDays, schoolId });
+    },
+    async getHolidays() {
+        return await _fetch('/api/data', 'getHolidays');
     }
 };
