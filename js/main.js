@@ -219,11 +219,16 @@ export async function handleStartAttendance(overrideClass = null, overrideDate =
     }
     
     const dateObj = new Date(state.selectedDate);
-    const dayOfWeek = dateObj.getDay(); 
+    const dayOfWeek = dateObj.getDay(); // 0 (Sun) - 6 (Sat)
     
     const workDays = state.schoolSettings?.workDays || [1,2,3,4,5,6];
     
-    if (!workDays.includes(dayOfWeek === 0 ? 7 : dayOfWeek) && !workDays.includes(dayOfWeek)) {
+    // Check if dayOfWeek is in workDays. 
+    // Usually settings use 1=Mon...6=Sat, 0=Sun.
+    // If workDays contains 0, it means Sunday is active.
+    if (!workDays.includes(dayOfWeek) && !(dayOfWeek === 0 && workDays.includes(7))) {
+        // Handle potential mismatch if settings use 7 for Sunday, but Date.getDay() uses 0
+        // Our backend defaults to [1..6], implying Mon-Sat.
         const proceed = await showConfirmation(`Hari ini (${dateObj.toLocaleDateString('id-ID', {weekday:'long'})}) bukan hari sekolah aktif. Tetap lanjutkan?`);
         if (!proceed) return;
     }
@@ -385,6 +390,7 @@ export async function handleSaveAttendance() {
 export async function handleSaveSchoolSettings(workDays) {
     showLoader('Menyimpan pengaturan...');
     try {
+        // Fix: Use state.userProfile, not 'user' which is undefined
         const schoolId = state.userProfile.primaryRole === 'SUPER_ADMIN' ? state.adminActingAsSchool?.id : state.userProfile.school_id;
         const { settings } = await apiService.updateSchoolSettings(workDays, schoolId);
         await setState({ schoolSettings: settings });
