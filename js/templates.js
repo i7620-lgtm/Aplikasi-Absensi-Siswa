@@ -1,4 +1,5 @@
 
+
 import { state, CLASSES } from './main.js';
 
 export function encodeHTML(str) {
@@ -484,145 +485,163 @@ export const templates = {
         const primaryRoleInfo = roleMapping[primaryRole] || { color: 'bg-slate-100 text-slate-800', title: primaryRole };
         const isDinas = ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole);
         const reportCardRoles = ['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN', 'SUPER_ADMIN'];
-
-        // Can access Holidays?
         const canManageHolidays = ['SUPER_ADMIN', 'ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'ADMIN_DINAS_PENDIDIKAN', 'DINAS_PENDIDIKAN'].includes(primaryRole);
 
-        return `
-        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
-            <div class="bg-white p-8 rounded-2xl shadow-lg max-w-2xl w-full">
-                <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-2xl font-bold text-slate-800">Beranda Aplikasi</h1>
-                    <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                    </button>
+        // --- Helper for Card Button ---
+        const renderCardBtn = (id, colorClass, iconSvg, title, desc) => `
+            <button id="${id}" class="group relative overflow-hidden bg-white border border-slate-200 hover:border-${colorClass}-500 p-6 rounded-xl text-left transition shadow-sm hover:shadow-md h-full flex flex-col justify-between">
+                <div class="absolute top-0 left-0 w-1 h-full bg-${colorClass}-500 group-hover:w-2 transition-all"></div>
+                <div class="pl-4">
+                     <div class="w-12 h-12 bg-${colorClass}-50 text-${colorClass}-600 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition duration-300">
+                        ${iconSvg}
+                     </div>
+                     <h3 class="font-bold text-slate-800 text-lg mb-1">${title}</h3>
+                     <p class="text-sm text-slate-500 leading-relaxed">${desc}</p>
                 </div>
-                <div class="flex flex-col sm:flex-row items-center gap-4 mb-8 p-4 bg-slate-50 rounded-lg">
-                    <img src="${encodeHTML(picture)}" alt="User" class="w-16 h-16 rounded-full"/>
-                    <div class="text-center sm:text-left">
-                        <p class="text-lg font-semibold text-slate-800">${encodeHTML(name)}</p>
-                        <p class="text-sm text-slate-500">${encodeHTML(email)}</p>
-                        <div class="mt-2 flex flex-wrap justify-center sm:justify-start gap-2">
-                            <span class="px-2 py-0.5 inline-block rounded-full text-xs font-semibold ${primaryRoleInfo.color}">${primaryRoleInfo.title}</span>
-                            ${isParent && primaryRole !== 'ORANG_TUA' ? `<span class="px-2 py-0.5 inline-block rounded-full text-xs font-semibold ${roleMapping['ORANG_TUA'].color}">${roleMapping['ORANG_TUA'].title}</span>` : ''}
+            </button>
+        `;
+
+        return `
+        <div class="screen active min-h-screen bg-slate-50 p-4 md:p-8">
+            <div class="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden min-h-[600px] flex flex-col lg:flex-row">
+                <!-- Sidebar / Profile Section -->
+                <div class="lg:w-1/3 bg-slate-50 p-8 border-b lg:border-b-0 lg:border-r border-slate-200 flex flex-col">
+                    <div class="flex items-center justify-between mb-8">
+                        <h1 class="text-2xl font-bold text-slate-800 tracking-tight">Beranda</h1>
+                         <button id="logoutBtn" class="flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-lg transition">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                            Logout
+                        </button>
+                    </div>
+
+                    <div class="flex flex-col items-center text-center mb-8">
+                        <div class="relative group cursor-pointer mb-4">
+                            <div class="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-tilt"></div>
+                            <img src="${encodeHTML(picture)}" alt="User" class="relative w-24 h-24 rounded-full border-4 border-white shadow-lg object-cover"/>
+                        </div>
+                        <h2 class="text-xl font-bold text-slate-900">${encodeHTML(name)}</h2>
+                        <p class="text-sm text-slate-500 font-medium mb-3">${encodeHTML(email)}</p>
+                        <div class="flex flex-wrap justify-center gap-2">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${primaryRoleInfo.color}">${primaryRoleInfo.title}</span>
+                            ${isParent && primaryRole !== 'ORANG_TUA' ? `<span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${roleMapping['ORANG_TUA'].color}">${roleMapping['ORANG_TUA'].title}</span>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="mt-auto hidden lg:block">
+                        <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                            <h3 class="font-bold text-blue-800 text-sm mb-1">Status Aplikasi</h3>
+                            <p class="text-xs text-blue-600">Versi Terbaru • Online</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="space-y-4">
-                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center">Pilih Aksi</h2>
-                    
-                    ${['GURU', 'ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN'].includes(primaryRole) ? `
-                    <button id="go-to-attendance-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><div><p class="font-bold">Lakukan & Kelola Absensi</p><p class="text-sm font-normal opacity-90">Catat kehadiran, kelola siswa, dan lihat rekap.</p></div></button>
-                    ` : ''}
+                <!-- Main Content / Actions -->
+                <div class="lg:w-2/3 p-8 bg-white">
+                    <div class="mb-6">
+                        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+                            Menu Utama
+                        </h2>
+                        <p class="text-slate-500 text-sm">Pilih menu di bawah ini untuk memulai aktivitas Anda.</p>
+                    </div>
 
-                     ${['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
-                    <button id="view-dashboard-btn" class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg><div><p class="font-bold">Lihat Dasbor Analitik</p><p class="text-sm font-normal opacity-90">Analisis data kehadiran, persentase, dan dapatkan rekomendasi AI.</p></div></button>
-                    ` : ''}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${['GURU', 'ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN'].includes(primaryRole) ? 
+                            renderCardBtn('go-to-attendance-btn', 'blue', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>', 'Absensi & Kelas', 'Catat kehadiran, kelola siswa, dan lihat rekapitulasi harian.')
+                        : ''}
 
-                    ${primaryRole === 'SUPER_ADMIN' ? `
-                    <button id="view-school-dashboard-btn" class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg><div><p class="font-bold">Dasbor Analitik Sekolah</p><p class="text-sm font-normal opacity-90">Analisis data kehadiran mendalam per sekolah.</p></div></button>
-                    <button id="view-jurisdiction-dashboard-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg><div><p class="font-bold">Dasbor Analitik Regional</p><p class="text-sm font-normal opacity-90">Analisis data agregat untuk seluruh wilayah.</p></div></button>
-                    ` : ''}
+                         ${['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? 
+                            renderCardBtn('view-dashboard-btn', 'cyan', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>', 'Dasbor Analitik', 'Analisis data kehadiran, persentase, dan rekomendasi AI.')
+                        : ''}
 
-                    ${isParent ? `
-                    <button id="view-parent-dashboard-btn" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg><div><p class="font-bold">Dasbor Orang Tua</p><p class="text-sm font-normal opacity-90">Lihat riwayat kehadiran anak Anda.</p></div></button>
-                    ` : ''}
-                    
-                    ${canManageHolidays ? `
-                    <button id="manage-holidays-btn" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
-                        <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                        <div>
-                            <p class="font-bold">Kalender & Pengaturan</p>
-                            <p class="text-sm font-normal opacity-90">Atur hari libur, hari sekolah, dan konfigurasi lainnya.</p>
-                        </div>
-                    </button>
-                    ` : ''}
-                    
-                    ${reportCardRoles.includes(primaryRole) && primaryRole !== 'SUPER_ADMIN' ? `
-                    <button id="download-scoped-report-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
-                        <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                        <div>
-                            <p class="font-bold">${isDinas ? 'Unduh Laporan Regional' : 'Unduh Laporan Sekolah'}</p>
-                            <p class="text-sm font-normal opacity-90">
-                                ${isDinas 
-                                    ? `Unduh rekap Excel untuk semua sekolah di ${encodeHTML(jurisdiction_name) || 'yurisdiksi Anda'}.`
-                                    : 'Unduh rekapitulasi absensi lengkap untuk sekolah Anda.'
-                                }
-                            </p>
-                        </div>
-                    </button>
-                    ` : ''}
-                    
-                    ${primaryRole === 'SUPER_ADMIN' ? `
-                    <button id="download-school-report-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
-                        <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                        <div><p class="font-bold">Unduh Laporan Sekolah Spesifik</p><p class="text-sm font-normal opacity-90">Pilih satu sekolah untuk mengunduh rekap Excel lengkap.</p></div>
-                    </button>
-                     <button id="download-jurisdiction-report-btn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
-                        <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                        <div><p class="font-bold">Unduh Laporan Regional</p><p class="text-sm font-normal opacity-90">Pilih yurisdiksi untuk mengunduh rekap gabungan.</p></div>
-                    </button>
-                    ` : ''}
-                    
-                    ${['SUPER_ADMIN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
-                    <button id="view-admin-panel-btn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.124-1.282-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.124-1.282.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg><div><p class="font-bold">Panel Manajemen Pengguna</p><p class="text-sm font-normal opacity-90">Kelola pengguna dan penetapan peran.</p></div></button>
-                    ` : ''}
+                        ${primaryRole === 'SUPER_ADMIN' ? 
+                            renderCardBtn('view-school-dashboard-btn', 'cyan', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>', 'Dasbor Sekolah', 'Lihat statistik dan analisis untuk sekolah tertentu.') +
+                            renderCardBtn('view-jurisdiction-dashboard-btn', 'purple', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>', 'Dasbor Regional', 'Analisis data agregat berdasarkan wilayah yurisdiksi.')
+                        : ''}
 
-                    ${primaryRole === 'SUPER_ADMIN' ? `
-                    <button id="view-jurisdiction-panel-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" /></svg><div><p class="font-bold">Panel Manajemen Yurisdiksi</p><p class="text-sm font-normal opacity-90">Kelola hierarki wilayah dan sekolah.</p></div></button>
-                    <button id="go-to-migration-tool-btn" class="w-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10m16-10v10M4 17h16M4 7h16M9 4v3m6-3v3m-3 14v-3"></path></svg><div><p class="font-bold">Alat Migrasi Data Lama</p><p class="text-sm font-normal opacity-90">Unggah data dari sistem lama ke format baru.</p></div></button>
-                    ` : ''}
+                        ${isParent ? 
+                            renderCardBtn('view-parent-dashboard-btn', 'teal', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>', 'Dasbor Orang Tua', 'Pantau kehadiran dan riwayat anak Anda secara real-time.')
+                        : ''}
+                        
+                        ${canManageHolidays ? 
+                            renderCardBtn('manage-holidays-btn', 'orange', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>', 'Kalender & Pengaturan', 'Kelola hari libur dan konfigurasi sistem sekolah.')
+                        : ''}
+                        
+                        ${reportCardRoles.includes(primaryRole) && primaryRole !== 'SUPER_ADMIN' ? 
+                            renderCardBtn('download-scoped-report-btn', 'emerald', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>', isDinas ? 'Laporan Regional' : 'Laporan Sekolah', `Unduh rekap Excel lengkap untuk ${isDinas ? (encodeHTML(jurisdiction_name) || 'wilayah') : 'sekolah'} Anda.`)
+                        : ''}
+                        
+                        ${primaryRole === 'SUPER_ADMIN' ? 
+                            renderCardBtn('download-school-report-btn', 'emerald', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>', 'Unduh Laporan Sekolah', 'Ekspor data rekapitulasi sekolah tertentu ke Excel.') +
+                            renderCardBtn('download-jurisdiction-report-btn', 'emerald', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>', 'Unduh Laporan Regional', 'Ekspor data rekapitulasi wilayah tertentu ke Excel.')
+                        : ''}
+                        
+                        ${['SUPER_ADMIN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? 
+                            renderCardBtn('view-admin-panel-btn', 'indigo', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.124-1.282-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.124-1.282.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>', 'Manajemen Pengguna', 'Kelola pengguna, peran, dan hak akses aplikasi.')
+                        : ''}
 
+                        ${primaryRole === 'SUPER_ADMIN' ? 
+                            renderCardBtn('view-jurisdiction-panel-btn', 'purple', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" /></svg>', 'Manajemen Yurisdiksi', 'Kelola struktur hierarki wilayah dan sekolah.') +
+                            renderCardBtn('go-to-migration-tool-btn', 'gray', '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10m16-10v10M4 17h16M4 7h16M9 4v3m6-3v3m-3 14v-3"></path></svg>', 'Migrasi Data', 'Alat bantu untuk memindahkan data lama ke sistem baru.')
+                        : ''}
+
+                    </div>
                 </div>
             </div>
         </div>
         `;
     },
     
-    // ... Existing templates ...
-    // Note: I will only append/replace changed templates below to keep the diff clean.
-
     attendance: (className, date) => `
-        <div class="screen active min-h-screen bg-slate-100 p-4">
-            <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden flex flex-col min-h-[80vh]">
-                <div class="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center sticky top-0 z-10">
+        <div class="screen active min-h-screen bg-slate-100 p-4 md:p-6">
+            <div class="max-w-7xl mx-auto bg-white rounded-xl shadow-xl overflow-hidden flex flex-col min-h-[85vh] border border-slate-200">
+                <div class="p-6 bg-white border-b border-slate-200 flex justify-between items-center sticky top-0 z-20 shadow-sm">
                     <div>
                         <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${encodeHTML(className)}</h1>
-                        <p class="text-slate-500 text-sm mt-1">${new Date(date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <p class="text-slate-500 text-sm mt-1 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                            ${new Date(date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        </p>
                     </div>
                     <div class="flex items-center gap-2">
-                         <button id="mark-holiday-btn" class="text-sm bg-orange-100 text-orange-700 hover:bg-orange-200 font-bold py-2 px-3 rounded-lg transition flex items-center gap-1">
+                         <button id="mark-holiday-btn" class="text-sm bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 font-bold py-2 px-4 rounded-lg transition flex items-center gap-2 shadow-sm">
                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                              Liburkan Kelas
                          </button>
-                         <button id="back-to-setup-btn" class="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-200 transition">
+                         <button id="back-to-setup-btn" class="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition">
                               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                          </button>
                     </div>
                 </div>
                 
-                <div class="flex-grow overflow-auto">
-                    <table class="w-full text-left border-collapse">
-                        <thead class="bg-white sticky top-0 shadow-sm z-10">
-                            <tr>
-                                <th class="p-3 w-12 text-sm font-semibold text-slate-500 border-b">No</th>
-                                <th class="p-3 text-sm font-semibold text-slate-500 border-b">Nama Siswa</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-green-600 border-b">Hadir</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-yellow-600 border-b">Sakit</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-blue-600 border-b">Izin</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-red-600 border-b">Alpa</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-orange-600 border-b">Libur</th>
-                            </tr>
-                        </thead>
-                        <tbody id="attendance-table-body" class="divide-y divide-slate-100">
-                            <!-- Rows injected here -->
-                        </tbody>
-                    </table>
+                <div class="flex-grow overflow-auto bg-slate-50">
+                    <div class="min-w-full inline-block align-middle">
+                        <div class="border rounded-lg overflow-hidden m-4 md:m-6 bg-white shadow-sm">
+                            <table class="min-w-full divide-y divide-slate-200">
+                                <thead class="bg-slate-50">
+                                    <tr>
+                                        <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider w-16 border-r border-slate-100">No</th>
+                                        <th scope="col" class="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-100">Nama Siswa</th>
+                                        <th scope="col" class="px-4 py-4 text-center text-xs font-bold text-green-600 uppercase tracking-wider w-24 border-r border-slate-100 bg-green-50/50">Hadir</th>
+                                        <th scope="col" class="px-4 py-4 text-center text-xs font-bold text-yellow-600 uppercase tracking-wider w-24 border-r border-slate-100 bg-yellow-50/50">Sakit</th>
+                                        <th scope="col" class="px-4 py-4 text-center text-xs font-bold text-blue-600 uppercase tracking-wider w-24 border-r border-slate-100 bg-blue-50/50">Izin</th>
+                                        <th scope="col" class="px-4 py-4 text-center text-xs font-bold text-red-600 uppercase tracking-wider w-24 border-r border-slate-100 bg-red-50/50">Alpa</th>
+                                        <th scope="col" class="px-4 py-4 text-center text-xs font-bold text-orange-600 uppercase tracking-wider w-24 bg-orange-50/50">Libur</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="attendance-table-body" class="divide-y divide-slate-200 bg-white">
+                                    <!-- Rows injected here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="p-4 border-t border-slate-200 bg-slate-50 sticky bottom-0 z-20">
-                    <button id="save-attendance-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg transition shadow-lg shadow-blue-500/30 text-lg">Simpan Absensi</button>
+                <div class="p-6 border-t border-slate-200 bg-white sticky bottom-0 z-20 flex justify-end gap-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+                    <button id="save-attendance-btn" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg transition shadow-lg shadow-blue-500/30 text-lg flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                        Simpan Absensi
+                    </button>
                 </div>
             </div>
         </div>
@@ -722,11 +741,6 @@ export const templates = {
         </div>
     `,
 
-    // --- EXISTING TEMPLATES BELOW (Unchanged parts omitted for brevity, only showing re-declarations needed for context if any) ---
-    // Note: I'm reusing the structure but I must include the whole `templates` object to be valid replacement.
-    // However, to keep this response within limits and correct, I will assume the user merges or I provide the FULL file content if required.
-    // Given the instruction "Full content of file", I must provide the full file content.
-    
     // ... [Rest of templates from original file] ...
     confirmation: (message) => `
         <div id="confirmation-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
