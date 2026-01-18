@@ -1,5 +1,6 @@
 
-import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport, handleManageHoliday, handleSaveSchoolSettings, handleMarkClassAsHoliday, apiService } from './main.js';
+import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport, handleManageHoliday, handleSaveSchoolSettings, handleMarkClassAsHoliday } from './main.js';
+import { apiService } from './api.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignOut, renderSignInButton } from './auth.js';
 
@@ -1812,4 +1813,158 @@ function renderMigrationToolScreen() {
     appContainer.innerHTML = templates.migrationTool();
     document.getElementById('migration-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
     document.getElementById('migrate-data-btn').addEventListener('click', handleMigrateLegacyData);
+}
+
+// --- MODIFIED RENDER FUNCTIONS ---
+
+function renderAttendanceScreen() {
+    appContainer.innerHTML = templates.attendance(state.selectedClass, state.selectedDate);
+    const tbody = document.getElementById('attendance-table-body');
+    tbody.innerHTML = state.students.map((student, index) => {
+        const status = state.attendance[student.name] || 'H';
+        return `<tr class="border-b hover:bg-slate-50">
+            <td class="p-3 text-sm text-slate-500">${index + 1}</td>
+            <td class="p-3 font-medium text-slate-800">${encodeHTML(student.name)}</td>
+            ${['H', 'S', 'I', 'A', 'L'].map(s => `
+                <td class="p-3 text-center">
+                    <input type="radio" name="status-${index}" value="${s}" class="w-5 h-5 accent-blue-500" ${status === s ? 'checked' : ''} data-student-name="${student.name}">
+                </td>
+            `).join('')}
+        </tr>`;
+    }).join('');
+
+    tbody.addEventListener('change', (e) => {
+        if (e.target.type === 'radio') {
+            state.attendance[e.target.dataset.studentName] = e.target.value;
+        }
+    });
+
+    document.getElementById('back-to-setup-btn').addEventListener('click', () => navigateTo('setup'));
+    document.getElementById('save-attendance-btn').addEventListener('click', handleSaveAttendance);
+    document.getElementById('mark-holiday-btn').addEventListener('click', handleMarkClassAsHoliday);
+}
+
+function renderHolidaySettingsScreen() {
+    appContainer.innerHTML = templates.holidaySettings();
+    document.getElementById('settings-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
+    
+    // School Settings (Work Days)
+    const workDayCheckboxes = document.querySelectorAll('.work-day-checkbox');
+    const saveSettingsBtn = document.getElementById('save-school-settings-btn');
+    if (saveSettingsBtn) {
+        saveSettingsBtn.addEventListener('click', () => {
+            const selectedDays = Array.from(workDayCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => parseInt(cb.value));
+            handleSaveSchoolSettings(selectedDays);
+        });
+    }
+
+    // Holiday Management
+    document.getElementById('add-holiday-btn').addEventListener('click', () => {
+        document.getElementById('add-holiday-modal').classList.remove('hidden');
+    });
+    document.getElementById('cancel-holiday-modal').addEventListener('click', () => {
+        document.getElementById('add-holiday-modal').classList.add('hidden');
+    });
+    
+    document.getElementById('confirm-add-holiday').addEventListener('click', async () => {
+        const date = document.getElementById('new-holiday-date').value;
+        const desc = document.getElementById('new-holiday-desc').value;
+        const success = await handleManageHoliday('ADD', date, desc);
+        if (success) {
+            document.getElementById('add-holiday-modal').classList.add('hidden');
+            renderScreen('holidaySettings'); // Re-render to show new holiday
+        }
+    });
+
+    document.querySelectorAll('.delete-holiday-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const id = e.currentTarget.dataset.id;
+            const confirmed = await showConfirmation('Anda yakin ingin menghapus libur ini?');
+            if (confirmed) {
+                await handleManageHoliday('DELETE', null, null, id);
+                renderScreen('holidaySettings');
+            }
+        });
+    });
+}
+
+// --- MAIN RENDERER (Updated Switch) ---
+
+export function renderScreen(screen) {
+    appContainer.innerHTML = '';
+    
+    const screenRenderers = {
+        'landingPage': renderLandingPageScreen,
+        'setup': renderSetupScreen,
+        'multiRoleHome': renderMultiRoleHomeScreen,
+        'dashboard': renderDashboardScreen,
+        'parentDashboard': renderParentDashboardScreen,
+        'adminPanel': renderAdminPanelScreen,
+        'jurisdictionPanel': renderJurisdictionPanelScreen,
+        'migrationTool': renderMigrationToolScreen,
+        'add-students': renderAddStudentsScreen,
+        'attendance': renderAttendanceScreen,
+        'holidaySettings': renderHolidaySettingsScreen, // New Screen
+        'success': () => {
+             appContainer.innerHTML = templates.success();
+             document.getElementById('success-back-to-start-btn').addEventListener('click', () => {
+                 setState({ lastSaveContext: null }); 
+                 navigateTo('setup');
+             });
+             document.getElementById('success-view-data-btn').addEventListener('click', () => {
+                 setState({ lastSaveContext: null }); 
+                 handleViewHistory(false);
+             });
+        },
+        'data': renderDataScreen,
+        'recap': renderRecapScreen,
+    };
+
+    (screenRenderers[screen] || renderLandingPageScreen)();
+    hideLoader();
+}
+
+export function stopAllPollers() {
+    if (state.dashboard.polling.timeoutId) {
+        clearTimeout(state.dashboard.polling.timeoutId);
+        setState({ dashboard: { ...state.dashboard, polling: { ...state.dashboard.polling, timeoutId: null } } });
+        console.log('Dashboard polling stopped.');
+    }
+    if (state.adminPanel.polling.timeoutId) {
+        clearTimeout(state.adminPanel.polling.timeoutId);
+        setState({ adminPanel: { ...state.adminPanel, polling: { ...state.adminPanel.polling, timeoutId: null } } });
+        console.log('Admin Panel polling stopped.');
+    }
+    if (state.setup.polling.timeoutId) {
+        clearTimeout(state.setup.polling.timeoutId);
+        setState({ setup: { ...state.setup, polling: { ...state.setup.polling, timeoutId: null } } });
+        console.log('Setup Screen (Teacher) polling stopped.');
+    }
+}
+
+export function resumePollingForCurrentScreen() {
+    if (!state.userProfile) return; 
+
+    console.log(`Page is visible again. Resuming polling for screen: ${state.currentScreen}`);
+    
+    switch (state.currentScreen) {
+        case 'dashboard':
+            setState({ dashboard: { ...state.dashboard, polling: { ...state.dashboard.polling, interval: INITIAL_POLLING_INTERVAL } } });
+            dashboardPoller();
+            break;
+        case 'adminPanel':
+            setState({ adminPanel: { ...state.adminPanel, polling: { ...state.adminPanel.polling, interval: INITIAL_POLLING_INTERVAL } } });
+            adminPanelPoller();
+            break;
+        case 'setup':
+             if (state.userProfile.primaryRole === 'GURU') {
+                setState({ setup: { ...state.setup, polling: { ...state.setup.polling, interval: INITIAL_POLLING_INTERVAL } } });
+                teacherProfilePoller();
+             }
+            break;
+        default:
+            break;
+    }
 }
