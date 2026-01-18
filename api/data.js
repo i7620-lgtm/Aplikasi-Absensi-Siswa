@@ -165,9 +165,12 @@ export default async function handler(request, response) {
     } catch (error) {
         console.error(`API Action '${action}' failed unexpectedly:`, error);
         
-        if (error.code === 'DB_NOT_INITIALIZED' || error.code === 'DATABASE_NOT_INITIALIZED') {
+        // 42P01: undefined_table
+        // 42703: undefined_column (e.g., if 'settings' column is missing)
+        if (error.code === 'DB_NOT_INITIALIZED' || error.code === 'DATABASE_NOT_INITIALIZED' || error.code === '42P01' || error.code === '42703') {
+            console.warn("Database schema mismatch detected (missing table or column). Triggering init signal.");
             return response.status(503).json({ 
-                error: 'Database is not initialized.', 
+                error: 'Database schema mismatch or not initialized.', 
                 code: 'DATABASE_NOT_INITIALIZED' 
             });
         }
