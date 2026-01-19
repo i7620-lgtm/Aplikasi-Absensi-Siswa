@@ -1,4 +1,5 @@
 
+
 import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
 import { showLoader, hideLoader, showNotification, showConfirmation, renderScreen, updateOnlineStatus, showSchoolSelectorModal, stopAllPollers, resumePollingForCurrentScreen, displayAuthError, updateLoaderText } from './ui.js';
@@ -493,13 +494,27 @@ export async function handleMarkClassAsHoliday() {
 }
 
 
-export async function handleViewHistory(isClassSpecific = false) {
+export async function handleViewHistory(identifier = false) {
+    // 1. Determine target Class based on identifier type
+    let targetClass = null;
+
+    if (typeof identifier === 'string') {
+        // Case A: Passed explicitly (e.g. "6A" from Success screen)
+        targetClass = identifier;
+    } else if (identifier === true) {
+        // Case B: Passed as boolean true (e.g. from Setup screen) -> Grab from DOM or state
+        const domSelect = document.getElementById('class-select');
+        targetClass = domSelect ? domSelect.value : state.selectedClass;
+    }
+    // Case C: Passed as false/null -> remains null (View All / Global View)
+
     const isSuperAdmin = state.userProfile.primaryRole === 'SUPER_ADMIN';
-    const isGlobalView = isSuperAdmin && !isClassSpecific && !state.adminActingAsSchool;
+    // If targetClass is set, it is NOT a global view, even for super admin.
+    const isGlobalView = isSuperAdmin && !targetClass && !state.adminActingAsSchool;
 
     await setState({ 
         dataScreenFilters: { studentName: '', status: 'all', startDate: '', endDate: '' },
-        historyClassFilter: isClassSpecific ? document.getElementById('class-select').value : null,
+        historyClassFilter: targetClass,
         adminAllLogsView: isGlobalView, 
     });
     
