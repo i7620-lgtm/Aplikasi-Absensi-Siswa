@@ -1,4 +1,5 @@
 
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport, handleManageHoliday, handleSaveSchoolSettings, handleMarkClassAsHoliday, handleSelectSchoolForConfig } from './main.js';
 import { apiService } from './api.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
@@ -1284,7 +1285,7 @@ async function adminPanelPoller() {
                 ...state.adminPanel, 
                 users: allUsers, 
                 schools: allSchools, 
-                isLoading: false,
+                isLoading: false, 
                 polling: { ...state.adminPanel.polling, interval: INITIAL_POLLING_INTERVAL }
             } 
         });
@@ -1956,8 +1957,9 @@ export function renderScreen(screen) {
                  navigateTo('setup');
              });
              document.getElementById('success-view-data-btn').addEventListener('click', () => {
+                 const classToView = state.lastSaveContext?.className || state.selectedClass;
                  setState({ lastSaveContext: null }); 
-                 handleViewHistory(false);
+                 handleViewHistory(classToView);
              });
         },
         'data': renderDataScreen,
