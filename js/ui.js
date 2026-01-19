@@ -1,5 +1,6 @@
 
 
+
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport, handleManageHoliday, handleSaveSchoolSettings, handleMarkClassAsHoliday, handleSelectSchoolForConfig } from './main.js';
 import { apiService } from './api.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
@@ -882,6 +883,41 @@ function updateDashboardContent(data) {
 
     if (!reportContent || !percentageContent || !aiContent) return;
 
+    // FIX: Toggle classes 'hidden' based on activeView
+    if (activeView === 'report') {
+        reportContent.classList.remove('hidden');
+        percentageContent.classList.add('hidden');
+        aiContent.classList.add('hidden');
+    } else if (activeView === 'percentage') {
+        reportContent.classList.add('hidden');
+        percentageContent.classList.remove('hidden');
+        aiContent.classList.add('hidden');
+    } else if (activeView === 'ai') {
+        reportContent.classList.add('hidden');
+        percentageContent.classList.add('hidden');
+        aiContent.classList.remove('hidden');
+    }
+
+    // Optional: Visual feedback for active tab
+    const tabs = {
+        'report': document.getElementById('db-view-report'),
+        'percentage': document.getElementById('db-view-percentage'),
+        'ai': document.getElementById('db-view-ai')
+    };
+
+    Object.entries(tabs).forEach(([view, el]) => {
+        if (el) {
+            if (view === activeView) {
+                el.classList.add('ring-2', 'ring-blue-500', 'bg-blue-50');
+                el.classList.remove('bg-white', 'border-slate-200'); 
+                el.classList.add('border-blue-500');
+            } else {
+                el.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-50', 'border-blue-500');
+                el.classList.add('bg-white', 'border-slate-200');
+            }
+        }
+    });
+
     const emptyStateHtml = (isRegional) => `
         <div class="text-center p-8 bg-slate-50 rounded-lg border-2 border-dashed">
             <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -1082,7 +1118,7 @@ async function dashboardPoller() {
             dashboard: { 
                 ...state.dashboard, 
                 data: dashboardData, 
-                isLoading: false,
+                isLoading: false, 
                 polling: { ...state.dashboard.polling, interval: INITIAL_POLLING_INTERVAL } 
             } 
         });
