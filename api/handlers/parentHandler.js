@@ -34,8 +34,9 @@ export default async function handleGetParentData({ user, sql, response }) {
                 WHERE student_obj->>'parentEmail' = ${parentEmail}
             ),
             child_attendance AS (
-                -- Get all attendance logs for the schools where the children are enrolled
-                SELECT
+                -- Get LATEST attendance logs for the schools where the children are enrolled
+                -- Fix: Use DISTINCT ON to ensure only the latest update per date is used
+                SELECT DISTINCT ON (school_id, payload->>'class', payload->>'date')
                     school_id,
                     payload->>'class' as class_name,
                     payload->>'date' as attendance_date,
@@ -43,6 +44,7 @@ export default async function handleGetParentData({ user, sql, response }) {
                 FROM change_log
                 WHERE event_type = 'ATTENDANCE_UPDATED'
                   AND school_id IN (SELECT school_id FROM parent_children)
+                ORDER BY school_id, payload->>'class', payload->>'date', id DESC
             )
             -- Join the children with their attendance data
             SELECT
