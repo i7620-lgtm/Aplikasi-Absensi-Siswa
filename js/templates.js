@@ -307,7 +307,7 @@ export const templates = {
                         </div>
 
                         <a id="contact-admin-btn" href="#" class="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-sm flex items-center justify-center gap-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                             Kirim Permintaan Akses
                         </a>
                         <p class="text-xs text-blue-600 mt-2 text-center opacity-80">Klik tombol di atas untuk mengirim email ke admin.</p>
@@ -565,7 +565,7 @@ export const templates = {
                     </button>
                     ` : ''}
                     
-                    ${['SUPER_ADMIN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
+                    ${['SUPER_ADMIN', 'ADMIN_SEKOLAH', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
                     <button id="view-admin-panel-btn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.124-1.282-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.124-1.282.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg><div><p class="font-bold">Panel Manajemen Pengguna</p><p class="text-sm font-normal opacity-90">Kelola pengguna dan penetapan peran.</p></div></button>
                     ` : ''}
 
@@ -579,155 +579,266 @@ export const templates = {
         </div>
         `;
     },
-    
-    // ... Existing templates ...
-    // Note: I will only append/replace changed templates below to keep the diff clean.
+    setup: () => {
+        const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile?.primaryRole);
+        const isTeacher = state.userProfile?.primaryRole === 'GURU';
+        const assignedClasses = state.userProfile?.assigned_classes || [];
+        const needsAssignment = isTeacher && (!state.userProfile.assigned_classes || state.userProfile.assigned_classes.length === 0);
+        const isSuperAdminInContext = state.userProfile?.primaryRole === 'SUPER_ADMIN' && state.adminActingAsSchool;
+        const title = isSuperAdminInContext 
+            ? `Absensi Sekolah`
+            : "Absensi Online Siswa";
+        
+        // The setup screen is now only for logged-in users.
+        if (!state.userProfile) {
+            return ``; // Should navigate to landing page instead.
+        }
 
-    attendance: (className, date) => `
-        <div class="screen active min-h-screen bg-slate-100 p-4">
-            <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden flex flex-col min-h-[80vh]">
-                <div class="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center sticky top-0 z-10">
+        // --- Generate Dropdown Options Logic ---
+        let optionsHtml = '';
+        if (isAdmin) {
+            const activeClassKeys = Object.keys(state.studentsByClass || {}).sort((a, b) => {
+                return a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'});
+            });
+            const inactiveClasses = CLASSES.filter(c => !activeClassKeys.includes(c));
+
+            if (activeClassKeys.length > 0) {
+                optionsHtml += `<optgroup label="Kelas Aktif di Sekolah (Ada Data)">`;
+                activeClassKeys.forEach(c => {
+                    optionsHtml += `<option value="${c}" ${c === state.selectedClass ? 'selected' : ''}>${c}</option>`;
+                });
+                optionsHtml += `</optgroup>`;
+                
+                optionsHtml += `<optgroup label="Buat Kelas Baru (Pilih dari daftar)">`;
+                inactiveClasses.forEach(c => {
+                    optionsHtml += `<option value="${c}" ${c === state.selectedClass ? 'selected' : ''}>${c}</option>`;
+                });
+                optionsHtml += `</optgroup>`;
+            } else {
+                optionsHtml += `<option disabled>Belum ada data kelas aktif</option>`;
+                optionsHtml += `<optgroup label="Silakan pilih kelas untuk memulai">`;
+                CLASSES.forEach(c => {
+                    optionsHtml += `<option value="${c}" ${c === state.selectedClass ? 'selected' : ''}>${c}</option>`;
+                });
+                optionsHtml += `</optgroup>`;
+            }
+        } else {
+            if (assignedClasses.length > 0) {
+                 assignedClasses.forEach(c => {
+                    optionsHtml += `<option value="${c}" ${c === state.selectedClass ? 'selected' : ''}>${c}</option>`;
+                });
+            } else {
+                 optionsHtml = `<option>Tidak ada kelas ditugaskan</option>`;
+            }
+        }
+        // --- END Logic ---
+
+        return `
+        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
+            <div class="bg-white p-8 rounded-2xl shadow-lg max-md w-full">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-xl font-bold text-slate-800">${encodeHTML(title)}</h1>
                     <div>
-                        <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${encodeHTML(className)}</h1>
-                        <p class="text-slate-500 text-sm mt-1">${new Date(date).toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <button id="back-to-main-home-btn" class="text-slate-500 hover:text-blue-500 transition duration-300 p-2 rounded-full -mr-2" title="Kembali ke Beranda"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg></button>
+                        <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        </button>
                     </div>
+                </div>
+                ${isSuperAdminInContext ? `
+                <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6 text-sm text-indigo-800" role="alert">
+                    <p><span class="font-bold">Mode Konteks:</span> Anda bertindak sebagai admin untuk sekolah <strong class="font-semibold">${encodeHTML(state.adminActingAsSchool.name)}</strong>.</p>
+                </div>
+                ` : ''}
+                <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
+                    <img src="${encodeHTML(state.userProfile.picture)}" alt="User" class="w-12 h-12 rounded-full"/>
+                    <div>
+                        <p class="font-semibold text-slate-800">${encodeHTML(state.userProfile.name)}</p>
+                        <p class="text-sm text-slate-500">${encodeHTML(state.userProfile.email)}</p>
+                        <span class="px-2 py-0.5 mt-1 inline-block rounded-full text-xs font-semibold ${isAdmin ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}">${getRoleDisplayName(state.userProfile.primaryRole)}</span>
+                    </div>
+                </div>
+                ${
+                    (('Notification' in window) && Notification.permission === 'default' && !localStorage.getItem('notificationBannerDismissed'))
+                    ? `
+                        <div id="notification-permission-banner" class="bg-indigo-50 border border-indigo-200 p-4 rounded-lg my-6 text-sm text-indigo-800 flex items-start justify-between gap-4">
+                            <div>
+                                <p class="font-semibold mb-1">Dapatkan Notifikasi Latar Belakang</p>
+                                <p>Izinkan notifikasi untuk mengetahui saat data Anda berhasil disinkronkan, bahkan saat aplikasi ditutup.</p>
+                            </div>
+                            <div class="flex-shrink-0 flex items-center gap-2">
+                                <button id="enable-notifications-btn" class="font-bold text-indigo-600 hover:text-indigo-800 focus:outline-none">Aktifkan</button>
+                                <button id="dismiss-notification-banner-btn" class="text-2xl leading-none text-indigo-400 hover:text-indigo-600 focus:outline-none" title="Tutup">&times;</button>
+                            </div>
+                        </div>
+                    ` : ''
+                }
+                ${ needsAssignment ? `
+                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+                        <div class="flex">
+                            <div class="py-1"><svg class="w-6 h-6 text-yellow-500 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg></div>
+                            <div>
+                                <p class="font-bold text-yellow-800">Menunggu Penugasan Kelas</p>
+                                <p class="text-sm text-yellow-700 mt-1">Akun Anda aktif tetapi belum ditugaskan kelas. Silakan hubungi admin sekolah untuk mendapatkan akses.</p>
+                            </div>
+                        </div>
+                    </div>
+                ` : `
+                    <h2 class="text-lg font-semibold text-slate-700 mb-4 pt-4 border-t border-slate-200">Pilih Kelas & Tanggal</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="class-select" class="block text-sm font-medium text-slate-700 mb-1">Pilih Kelas</label>
+                            <select id="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${(!isAdmin && assignedClasses.length === 0) ? 'disabled' : ''}>
+                                ${optionsHtml}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="date-input" class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
+                            <input type="date" id="date-input" value="${state.selectedDate}" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"/>
+                        </div>
+                    </div>
+                    <div class="mt-6 space-y-3">
+                         <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Mulai Absensi</button>
+                         <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Lihat Riwayat Kelas Ini</button>
+                         <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Rekap Absensi Siswa</button>
+                         <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Tambah/Kurangi Data Siswa</button>
+                         <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Unduh Rekap Kelas (Excel)</button>
+                    </div>
+                `}
+                <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">Data disimpan secara otomatis di cloud.</p>
+            </div>
+        </div>`;
+    },
+    // ... [No changes needed in confirmation, schoolSelectorModal, etc.] ...
+
+    adminPanel: () => {
+        const isSuperAdmin = state.userProfile?.primaryRole === 'SUPER_ADMIN';
+        return `
+        <div class="screen active min-h-screen bg-slate-100 p-4 md:p-8">
+            <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden min-h-[600px] flex flex-col">
+                 <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50">
+                    <div class="flex items-center gap-4">
+                        <button id="admin-panel-back-btn" class="p-2 rounded-full hover:bg-slate-200 text-slate-500 transition">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                        </button>
+                        <div>
+                            <h1 class="text-2xl font-bold text-slate-800">Manajemen Pengguna</h1>
+                            ${!isSuperAdmin ? `<p class="text-sm text-slate-500">Mengelola staf di sekolah Anda.</p>` : ''}
+                        </div>
+                    </div>
+                    ${isSuperAdmin ? `
                     <div class="flex items-center gap-2">
-                         <button id="mark-holiday-btn" class="text-sm bg-orange-100 text-orange-700 hover:bg-orange-200 font-bold py-2 px-3 rounded-lg transition flex items-center gap-1">
-                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                             Liburkan Kelas
-                         </button>
-                         <button id="back-to-setup-btn" class="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-200 transition">
-                              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                         </button>
+                         <div class="flex items-center mr-4">
+                            <input id="group-by-school-toggle" type="checkbox" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
+                            <label for="group-by-school-toggle" class="ml-2 text-sm font-medium text-gray-900">Kelompokkan per Sekolah</label>
+                        </div>
+                        <button id="add-school-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition text-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Tambah Sekolah
+                        </button>
+                    </div>` : ''}
+                </div>
+                
+                <div id="admin-bulk-actions-container" class="px-6 pt-4"></div>
+
+                <div class="p-6 flex-grow overflow-x-auto">
+                    <div id="admin-panel-container" class="min-w-full">
+                         <!-- Table will be rendered here -->
                     </div>
                 </div>
                 
-                <div class="flex-grow overflow-auto">
-                    <table class="w-full text-left border-collapse">
-                        <thead class="bg-white sticky top-0 shadow-sm z-10">
-                            <tr>
-                                <th class="p-3 w-12 text-sm font-semibold text-slate-500 border-b">No</th>
-                                <th class="p-3 text-sm font-semibold text-slate-500 border-b">Nama Siswa</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-green-600 border-b">Hadir</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-yellow-600 border-b">Sakit</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-blue-600 border-b">Izin</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-red-600 border-b">Alpa</th>
-                                <th class="p-3 w-16 text-center text-sm font-semibold text-orange-600 border-b">Libur</th>
-                            </tr>
-                        </thead>
-                        <tbody id="attendance-table-body" class="divide-y divide-slate-100">
-                            <!-- Rows injected here -->
-                        </tbody>
-                    </table>
-                </div>
+                <div id="admin-pagination-container" class="p-4 border-t border-slate-100 flex justify-center items-center gap-4 bg-slate-50"></div>
+            </div>
+        </div>
+    `},
 
-                <div class="p-4 border-t border-slate-200 bg-slate-50 sticky bottom-0 z-20">
-                    <button id="save-attendance-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg transition shadow-lg shadow-blue-500/30 text-lg">Simpan Absensi</button>
-                </div>
+    bulkActionsBar: (selectedCount) => `
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 flex flex-wrap items-center justify-between gap-4 animate-fade-in">
+            <span class="font-semibold text-blue-800 text-sm">${selectedCount} pengguna dipilih</span>
+            <div class="flex gap-2">
+                ${state.userProfile.primaryRole === 'SUPER_ADMIN' ? `<button id="bulk-assign-school-btn" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded text-sm font-medium transition">Tugaskan Sekolah</button>` : ''}
+                <button id="bulk-change-role-btn" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded text-sm font-medium transition">Ubah Peran</button>
             </div>
         </div>
     `,
 
-    // New Template for Settings & Holidays
-    holidaySettings: () => `
-        <div class="screen active min-h-screen bg-slate-100 p-4">
-             <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg flex flex-col min-h-[80vh]">
-                <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                    <h1 class="text-2xl font-bold text-slate-800">Kalender & Pengaturan</h1>
-                    <button id="settings-back-btn" class="text-slate-500 hover:text-blue-500 p-2 rounded-full hover:bg-slate-200 transition">
-                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                </div>
+    manageUserModal: (user, schools, jurisdictions) => {
+        const currentUserRole = state.userProfile.primaryRole;
+        const isSuperAdmin = currentUserRole === 'SUPER_ADMIN';
+        const isDinas = ['ADMIN_DINAS_PENDIDIKAN', 'DINAS_PENDIDIKAN'].includes(currentUserRole);
+        const isAdminSekolah = currentUserRole === 'ADMIN_SEKOLAH';
+
+        let roles = [];
+        if (isSuperAdmin) roles = ['GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN', 'SUPER_ADMIN'];
+        else if (isDinas) roles = ['GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'];
+        else if (isAdminSekolah) roles = ['GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'];
+        else roles = ['GURU', 'KEPALA_SEKOLAH'];
+
+        const showJurisdiction = isSuperAdmin || isDinas;
+        const showSchoolSelection = isSuperAdmin; // Admin sekolah can't move users between schools
+
+        const renderJurOptions = (nodes, level = 0) => nodes.map(node => `
+            <option value="${node.id}" ${user.jurisdiction_id === node.id ? 'selected' : ''}>
+                ${'&nbsp;'.repeat(level * 4)}${encodeHTML(node.name)} (${encodeHTML(node.type)})
+            </option>
+            ${node.children ? renderJurOptions(node.children, level + 1) : ''}
+        `).join('');
+
+        return `
+        <div id="manage-user-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
+            <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+                <h3 class="text-xl font-bold text-gray-800 mb-1">Kelola Pengguna</h3>
+                <p class="text-gray-500 text-sm mb-6">${encodeHTML(user.email)}</p>
                 
-                <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
-                    
-                    <!-- Section 1: School Settings (Work Days) -->
-                    ${['ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN'].includes(state.userProfile?.primaryRole) ? `
-                    <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                        <h2 class="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
-                             <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                             Hari Sekolah Aktif
-                        </h2>
-                        <p class="text-sm text-slate-500 mb-4">Pilih hari-hari dimana kegiatan belajar mengajar dilaksanakan.</p>
-                        <div class="grid grid-cols-2 gap-3 mb-4">
-                             ${['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'].map((day, idx) => `
-                                <label class="flex items-center space-x-2 cursor-pointer">
-                                    <input type="checkbox" value="${idx + 1 === 7 ? 0 : idx + 1}" class="work-day-checkbox w-5 h-5 text-blue-600 rounded focus:ring-blue-500" ${(state.schoolSettings?.workDays || []).includes(idx + 1 === 7 ? 0 : idx + 1) ? 'checked' : ''}>
-                                    <span class="text-slate-700">${day}</span>
-                                </label>
-                             `).join('')}
-                        </div>
-                        <button id="save-school-settings-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition">Simpan Pengaturan</button>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Peran</label>
+                        <select id="role-select-modal" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
+                             ${roles.map(r => `<option value="${r}" ${user.role === r ? 'selected' : ''}>${getRoleDisplayName(r)}</option>`).join('')}
+                        </select>
                     </div>
-                    ` : ''}
 
-                    <!-- Section 2: Holiday Management -->
-                    <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm md:col-span-2">
-                         <div class="flex justify-between items-center mb-4">
-                            <div>
-                                <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
-                                    <svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                    Daftar Hari Libur
-                                </h2>
-                                <p class="text-sm text-slate-500">Libur Nasional, Daerah, dan Sekolah.</p>
-                            </div>
-                            <button id="add-holiday-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                                Tambah Libur
-                            </button>
-                        </div>
+                    ${showJurisdiction ? `
+                    <div id="jurisdiction-assignment-container" class="${(['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(user.role)) ? '' : 'hidden'}">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Yurisdiksi</label>
+                         <select id="jurisdiction-select-modal" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
+                            <option value="">-- Tidak Ada --</option>
+                            ${renderJurOptions(jurisdictions)}
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">Hanya berlaku untuk peran Dinas Pendidikan.</p>
+                    </div>` : ''}
 
-                        <div id="holiday-list-container" class="space-y-3 max-h-96 overflow-y-auto pr-2">
-                            <!-- Holidays injected here -->
-                            ${state.holidays.length === 0 ? '<p class="text-slate-400 text-center py-4">Belum ada data libur.</p>' : ''}
-                            ${state.holidays.map(h => `
-                                <div class="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                                    <div>
-                                        <div class="flex items-center gap-2">
-                                            <span class="font-bold text-slate-700">${new Date(h.date).toLocaleDateString('id-ID', {weekday: 'long', day:'numeric', month:'long', year:'numeric'})}</span>
-                                            <span class="text-xs px-2 py-0.5 rounded-full font-bold ${h.scope === 'NATIONAL' ? 'bg-red-100 text-red-800' : h.scope === 'REGIONAL' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}">${h.scope === 'NATIONAL' ? 'Nasional' : h.scope === 'REGIONAL' ? 'Daerah' : 'Sekolah'}</span>
-                                        </div>
-                                        <p class="text-sm text-slate-600">${encodeHTML(h.description)}</p>
-                                    </div>
-                                    <button class="delete-holiday-btn text-slate-400 hover:text-red-500 transition p-2" data-id="${h.id}" title="Hapus">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                    </button>
-                                </div>
+                    <div id="school-assignment-container" class="${(['GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(user.role)) ? '' : 'hidden'} ${!showSchoolSelection ? 'hidden' : ''}">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
+                        <select id="school-select-modal" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white" ${!showSchoolSelection ? 'disabled' : ''}>
+                            <option value="">-- Tidak Ada --</option>
+                            ${schools.map(s => `<option value="${s.id}" ${user.school_id === s.id ? 'selected' : ''}>${encodeHTML(s.name)}</option>`).join('')}
+                        </select>
+                    </div>
+                    
+                    <div id="manage-classes-container" class="${user.role === 'GURU' ? '' : 'hidden'}">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Kelas yang Ditugaskan</label>
+                        <div class="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-200 rounded-lg bg-gray-50">
+                            ${CLASSES.map(cls => `
+                                <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                                    <input type="checkbox" value="${cls}" class="class-checkbox rounded text-blue-600 focus:ring-blue-500" ${(user.assigned_classes || []).includes(cls) ? 'checked' : ''}>
+                                    <span>${cls}</span>
+                                </label>
                             `).join('')}
                         </div>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Modal Add Holiday -->
-            <div id="add-holiday-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 backdrop-blur-sm p-4">
-                <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
-                    <h3 class="text-lg font-bold text-gray-800 mb-4">Tambah Hari Libur</h3>
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
-                            <input type="date" id="new-holiday-date" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">Keterangan</label>
-                            <input type="text" id="new-holiday-desc" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Contoh: Rapat Guru / Galungan">
-                        </div>
-                    </div>
-                    <div class="flex justify-end gap-2 mt-6">
-                        <button id="cancel-holiday-modal" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Batal</button>
-                        <button id="confirm-add-holiday" class="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700">Simpan</button>
-                    </div>
+
+                <div class="flex justify-end space-x-3 mt-8 pt-4 border-t border-gray-100">
+                    <button id="manage-user-cancel-btn" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition">Batal</button>
+                    <button id="manage-user-save-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-lg shadow-blue-500/30">Simpan Perubahan</button>
                 </div>
             </div>
         </div>
-    `,
+        `;
+    },
 
-    // --- EXISTING TEMPLATES BELOW (Unchanged parts omitted for brevity, only showing re-declarations needed for context if any) ---
-    // Note: I'm reusing the structure but I must include the whole `templates` object to be valid replacement.
-    // However, to keep this response within limits and correct, I will assume the user merges or I provide the FULL file content if required.
-    // Given the instruction "Full content of file", I must provide the full file content.
-    
-    // ... [Rest of templates from original file] ...
+    // ... [Rest of templates] ...
     confirmation: (message) => `
         <div id="confirmation-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
             <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 text-center">
@@ -812,123 +923,6 @@ export const templates = {
         </div>
     `,
     
-    adminPanel: () => `
-        <div class="screen active min-h-screen bg-slate-100 p-4 md:p-8">
-            <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden min-h-[600px] flex flex-col">
-                 <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50">
-                    <div class="flex items-center gap-4">
-                        <button id="admin-panel-back-btn" class="p-2 rounded-full hover:bg-slate-200 text-slate-500 transition">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                        </button>
-                        <h1 class="text-2xl font-bold text-slate-800">Manajemen Pengguna</h1>
-                    </div>
-                    ${state.userProfile.primaryRole === 'SUPER_ADMIN' ? `
-                    <div class="flex items-center gap-2">
-                         <div class="flex items-center mr-4">
-                            <input id="group-by-school-toggle" type="checkbox" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
-                            <label for="group-by-school-toggle" class="ml-2 text-sm font-medium text-gray-900">Kelompokkan per Sekolah</label>
-                        </div>
-                        <button id="add-school-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition text-sm">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                            Tambah Sekolah
-                        </button>
-                    </div>` : ''}
-                </div>
-                
-                <div id="admin-bulk-actions-container" class="px-6 pt-4"></div>
-
-                <div class="p-6 flex-grow overflow-x-auto">
-                    <div id="admin-panel-container" class="min-w-full">
-                         <!-- Table will be rendered here -->
-                    </div>
-                </div>
-                
-                <div id="admin-pagination-container" class="p-4 border-t border-slate-100 flex justify-center items-center gap-4 bg-slate-50"></div>
-            </div>
-        </div>
-    `,
-
-    bulkActionsBar: (selectedCount) => `
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 flex flex-wrap items-center justify-between gap-4 animate-fade-in">
-            <span class="font-semibold text-blue-800 text-sm">${selectedCount} pengguna dipilih</span>
-            <div class="flex gap-2">
-                ${state.userProfile.primaryRole === 'SUPER_ADMIN' ? `<button id="bulk-assign-school-btn" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded text-sm font-medium transition">Tugaskan Sekolah</button>` : ''}
-                <button id="bulk-change-role-btn" class="bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 px-3 py-1.5 rounded text-sm font-medium transition">Ubah Peran</button>
-            </div>
-        </div>
-    `,
-
-    manageUserModal: (user, schools, jurisdictions) => {
-        const currentUserRole = state.userProfile.primaryRole;
-        const isSuperAdmin = currentUserRole === 'SUPER_ADMIN';
-        const isDinas = ['ADMIN_DINAS_PENDIDIKAN', 'DINAS_PENDIDIKAN'].includes(currentUserRole);
-
-        let roles = [];
-        if (isSuperAdmin) roles = ['GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN', 'SUPER_ADMIN'];
-        else if (isDinas) roles = ['GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'];
-        else roles = ['GURU', 'KEPALA_SEKOLAH'];
-
-        // Helper to render jurisdiction options recursively
-        const renderJurOptions = (nodes, level = 0) => nodes.map(node => `
-            <option value="${node.id}" ${user.jurisdiction_id === node.id ? 'selected' : ''}>
-                ${'&nbsp;'.repeat(level * 4)}${encodeHTML(node.name)} (${encodeHTML(node.type)})
-            </option>
-            ${node.children ? renderJurOptions(node.children, level + 1) : ''}
-        `).join('');
-
-        return `
-        <div id="manage-user-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
-            <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-                <h3 class="text-xl font-bold text-gray-800 mb-1">Kelola Pengguna</h3>
-                <p class="text-gray-500 text-sm mb-6">${encodeHTML(user.email)}</p>
-                
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Peran</label>
-                        <select id="role-select-modal" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
-                             ${roles.map(r => `<option value="${r}" ${user.role === r ? 'selected' : ''}>${getRoleDisplayName(r)}</option>`).join('')}
-                        </select>
-                    </div>
-
-                    <div id="jurisdiction-assignment-container" class="${(['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(user.role)) ? '' : 'hidden'}">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Yurisdiksi</label>
-                         <select id="jurisdiction-select-modal" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white">
-                            <option value="">-- Tidak Ada --</option>
-                            ${renderJurOptions(jurisdictions)}
-                        </select>
-                        <p class="text-xs text-gray-500 mt-1">Hanya berlaku untuk peran Dinas Pendidikan.</p>
-                    </div>
-
-                    <div id="school-assignment-container" class="${(['GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(user.role)) ? '' : 'hidden'}">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
-                        <select id="school-select-modal" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white" ${(!isSuperAdmin && user.role !== 'ADMIN_SEKOLAH') ? 'disabled' : ''}>
-                            <option value="">-- Tidak Ada --</option>
-                            ${schools.map(s => `<option value="${s.id}" ${user.school_id === s.id ? 'selected' : ''}>${encodeHTML(s.name)}</option>`).join('')}
-                        </select>
-                    </div>
-                    
-                    <div id="manage-classes-container" class="${user.role === 'GURU' ? '' : 'hidden'}">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Kelas yang Ditugaskan</label>
-                        <div class="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-200 rounded-lg bg-gray-50">
-                            ${CLASSES.map(cls => `
-                                <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
-                                    <input type="checkbox" value="${cls}" class="class-checkbox rounded text-blue-600 focus:ring-blue-500" ${(user.assigned_classes || []).includes(cls) ? 'checked' : ''}>
-                                    <span>${cls}</span>
-                                </label>
-                            `).join('')}
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex justify-end space-x-3 mt-8 pt-4 border-t border-gray-100">
-                    <button id="manage-user-cancel-btn" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition">Batal</button>
-                    <button id="manage-user-save-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-lg shadow-blue-500/30">Simpan Perubahan</button>
-                </div>
-            </div>
-        </div>
-        `;
-    },
-
     addStudents: (className) => `
         <div class="screen active min-h-screen bg-slate-100 p-4 flex flex-col items-center">
              <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-3xl">
@@ -1261,7 +1255,7 @@ export const templates = {
                                 `).join('')}
                                </div>`
                             : `<div class="text-center py-10 bg-slate-50 rounded-lg border-2 border-dashed border-slate-200">
-                                 <svg class="mx-auto h-12 w-12 text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21v-1.5a2.5 2.5 0 00-5 0V21M3 21v-1.5a2.5 2.5 0 015 0V21"></path></svg>
+                                 <svg class="mx-auto h-12 w-12 text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21v-1.5a2.5 2.5 0 00-5 0V21M3 21v-1.5a2.5 2.5 0 015 0V21"></path></svg>
                                  <h3 class="text-lg font-medium text-slate-900">Data Tidak Ditemukan</h3>
                                  <p class="text-slate-500 max-w-sm mx-auto mt-2">Belum ada data siswa yang tertaut dengan email ini. Pastikan sekolah telah mendaftarkan email Anda dengan benar pada data siswa.</p>
                                </div>`
@@ -1302,6 +1296,98 @@ export const templates = {
                 <div class="mt-6 p-4 bg-slate-50 rounded border border-slate-200">
                     <h3 class="font-bold text-sm text-slate-700 mb-2">Log Hasil:</h3>
                     <pre id="migration-result" class="text-xs text-slate-600 whitespace-pre-wrap"></pre>
+                </div>
+            </div>
+        </div>
+    `,
+    holidaySettings: () => `
+        <div class="screen active min-h-screen bg-slate-100 p-4">
+             <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg flex flex-col min-h-[80vh]">
+                <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                    <h1 class="text-2xl font-bold text-slate-800">Kalender & Pengaturan</h1>
+                    <button id="settings-back-btn" class="text-slate-500 hover:text-blue-500 p-2 rounded-full hover:bg-slate-200 transition">
+                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                
+                <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                    
+                    <!-- Section 1: School Settings (Work Days) -->
+                    ${['ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN'].includes(state.userProfile?.primaryRole) ? `
+                    <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <h2 class="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
+                             <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                             Hari Sekolah Aktif
+                        </h2>
+                        <p class="text-sm text-slate-500 mb-4">Pilih hari-hari dimana kegiatan belajar mengajar dilaksanakan.</p>
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                             ${['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'].map((day, idx) => `
+                                <label class="flex items-center space-x-2 cursor-pointer">
+                                    <input type="checkbox" value="${idx + 1 === 7 ? 0 : idx + 1}" class="work-day-checkbox w-5 h-5 text-blue-600 rounded focus:ring-blue-500" ${(state.schoolSettings?.workDays || []).includes(idx + 1 === 7 ? 0 : idx + 1) ? 'checked' : ''}>
+                                    <span class="text-slate-700">${day}</span>
+                                </label>
+                             `).join('')}
+                        </div>
+                        <button id="save-school-settings-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition">Simpan Pengaturan</button>
+                    </div>
+                    ` : ''}
+
+                    <!-- Section 2: Holiday Management -->
+                    <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm md:col-span-2">
+                         <div class="flex justify-between items-center mb-4">
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                                    <svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                    Daftar Hari Libur
+                                </h2>
+                                <p class="text-sm text-slate-500">Libur Nasional, Daerah, dan Sekolah.</p>
+                            </div>
+                            <button id="add-holiday-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                Tambah Libur
+                            </button>
+                        </div>
+
+                        <div id="holiday-list-container" class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                            <!-- Holidays injected here -->
+                            ${state.holidays.length === 0 ? '<p class="text-slate-400 text-center py-4">Belum ada data libur.</p>' : ''}
+                            ${state.holidays.map(h => `
+                                <div class="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                                    <div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-bold text-slate-700">${new Date(h.date).toLocaleDateString('id-ID', {weekday: 'long', day:'numeric', month:'long', year:'numeric'})}</span>
+                                            <span class="text-xs px-2 py-0.5 rounded-full font-bold ${h.scope === 'NATIONAL' ? 'bg-red-100 text-red-800' : h.scope === 'REGIONAL' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}">${h.scope === 'NATIONAL' ? 'Nasional' : h.scope === 'REGIONAL' ? 'Daerah' : 'Sekolah'}</span>
+                                        </div>
+                                        <p class="text-sm text-slate-600">${encodeHTML(h.description)}</p>
+                                    </div>
+                                    <button class="delete-holiday-btn text-slate-400 hover:text-red-500 transition p-2" data-id="${h.id}" title="Hapus">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Modal Add Holiday -->
+            <div id="add-holiday-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 backdrop-blur-sm p-4">
+                <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">Tambah Hari Libur</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
+                            <input type="date" id="new-holiday-date" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Keterangan</label>
+                            <input type="text" id="new-holiday-desc" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Contoh: Rapat Guru / Galungan">
+                        </div>
+                    </div>
+                    <div class="flex justify-end gap-2 mt-6">
+                        <button id="cancel-holiday-modal" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Batal</button>
+                        <button id="confirm-add-holiday" class="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700">Simpan</button>
+                    </div>
                 </div>
             </div>
         </div>
