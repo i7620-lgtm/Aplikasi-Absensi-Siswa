@@ -17,7 +17,6 @@ async function getSubJurisdictionIds(jurisdictionId, sql) {
 
 /**
  * Reconstructs a school's current state from its entire change log.
- * This is the heavy data-lifting operation, now separated from login.
  */
 async function reconstructStateFromLogs(schoolId, sql) {
     if (!schoolId) {
@@ -32,7 +31,7 @@ async function reconstructStateFromLogs(schoolId, sql) {
     `;
 
     const studentsByClass = {};
-    const attendanceLogs = {}; // Use a map for efficient updates by key
+    const attendanceLogs = {};
 
     changes.forEach(change => {
         if (change.event_type === 'ATTENDANCE_UPDATED') {
@@ -57,19 +56,15 @@ async function reconstructStateFromLogs(schoolId, sql) {
  * New handler for fetching the main school data after a successful login.
  */
 export async function handleGetInitialData({ user, sql, response }) {
-    // The user object is already available in the context from api/data.js
     let schoolData = { initialStudents: {}, initialLogs: [], latestVersion: 0 };
-    let schoolSettings = { workDays: [1, 2, 3, 4, 5, 6] }; // Default Monday-Saturday
+    let schoolSettings = { workDays: [1, 2, 3, 4, 5, 6] };
     let holidays = [];
 
-    // 1. Fetch Attendance Data & Settings (If School Assigned)
     let applicableRegionalIds = [];
     
     if (user && user.school_id) {
         schoolData = await reconstructStateFromLogs(user.school_id, sql);
         
-        // Fetch School Settings
-        // Use SELECT * to avoid crash if 'settings' column is missing in DB
         const { rows: sRows } = await sql`SELECT * FROM schools WHERE id = ${user.school_id}`;
         
         if (sRows.length > 0) {
@@ -77,7 +72,6 @@ export async function handleGetInitialData({ user, sql, response }) {
                 schoolSettings = { ...schoolSettings, ...sRows[0].settings };
             }
             
-            // Calculate Applicable Regional IDs for this school
             if (sRows[0].jurisdiction_id) {
                 const { rows: jurIds } = await sql`
                     WITH RECURSIVE parents AS (
@@ -92,8 +86,6 @@ export async function handleGetInitialData({ user, sql, response }) {
         }
     }
 
-    // 2. Fetch Applicable Holidays (National + School + Regional)
-    // Fetch all holidays first (optimized for low volume)
     const { rows: allHolidays } = await sql`SELECT * FROM holidays`; 
     
     holidays = allHolidays.filter(h => 
@@ -170,14 +162,20 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
     // Admin Sekolah validation
     if (user.role === 'ADMIN_SEKOLAH') {
         if (!user.school_id) return response.status(403).json({ error: 'Admin Sekolah tidak ditugaskan ke sekolah manapun.' });
-        const { rows: targetUserRows } = await sql`SELECT school_id FROM users WHERE email = ${targetEmail}`;
+        
+        // Ensure the target is actually in their school
+        const { rows: targetUserRows } = await sql`SELECT school_id, role FROM users WHERE email = ${targetEmail}`;
         if (targetUserRows.length === 0 || targetUserRows[0].school_id !== user.school_id) {
             return response.status(403).json({ error: 'Anda hanya dapat mengelola pengguna di sekolah Anda sendiri.' });
         }
-        if (!['GURU', 'KEPALA_SEKOLAH'].includes(newRole)) {
-             return response.status(403).json({ error: 'Anda tidak memiliki izin untuk menetapkan peran ini.' });
+        
+        // Prevent assigning high-level roles
+        if (!['GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(newRole)) {
+             return response.status(403).json({ error: 'Anda tidak memiliki izin untuk menetapkan peran administratif tingkat wilayah atau sistem.' });
         }
-        if (newSchoolId && newSchoolId !== user.school_id.toString()) {
+        
+        // Prevent moving users to other schools (enforced server-side)
+        if (newSchoolId && Number(newSchoolId) !== Number(user.school_id)) {
              return response.status(403).json({ error: 'Anda tidak dapat memindahkan pengguna ke sekolah lain.' });
         }
     }
@@ -187,6 +185,7 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
          if (!user.jurisdiction_id) return response.status(403).json({ error: 'Admin Dinas tidak ditugaskan ke yurisdiksi manapun.' });
          const accessibleJurisdictionIds = await getSubJurisdictionIds(user.jurisdiction_id, sql);
          const { rows: targetUserRows } = await sql`SELECT jurisdiction_id, school_id FROM users WHERE email = ${targetEmail}`;
+         if (targetUserRows.length === 0) return response.status(404).json({ error: 'User not found' });
          const targetUser = targetUserRows[0];
          
          let isTargetInScope = false;
@@ -213,18 +212,19 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
         return response.status(400).json({ error: 'Cannot demote a bootstrapped Super Admin.' });
     }
     
-    let finalSchoolId = newSchoolId === "" ? null : newSchoolId;
-    let finalJurisdictionId = newJurisdictionId === "" ? null : newJurisdictionId;
+    // Fallback/Force school assignment for Admin Sekolah
+    let finalSchoolId = (user.role === 'ADMIN_SEKOLAH') ? user.school_id : (newSchoolId === "" ? null : newSchoolId);
+    let finalJurisdictionId = (user.role === 'ADMIN_SEKOLAH') ? null : (newJurisdictionId === "" ? null : newJurisdictionId);
     let assignedClasses = newRole === 'GURU' ? (newClasses || '{}') : '{}';
 
-    // Business logic for roles
+    // Role dependency rules
     if (newRole === 'SUPER_ADMIN') {
         finalSchoolId = null;
         finalJurisdictionId = null;
     } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(newRole)) {
-        finalSchoolId = null; // Dinas users are not tied to a single school
+        finalSchoolId = null;
     } else if (['GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH'].includes(newRole)) {
-        finalJurisdictionId = null; // School users are not directly tied to a jurisdiction
+        finalJurisdictionId = (user.role === 'ADMIN_DINAS_PENDIDIKAN' || user.role === 'SUPER_ADMIN') ? finalJurisdictionId : null;
     }
     
     await sql`
@@ -257,10 +257,10 @@ export async function handleUpdateUsersBulk({ payload, user, sql, response }) {
         if (targetUsers.some(u => u.school_id !== user.school_id)) {
             return response.status(403).json({ error: 'Anda hanya dapat mengelola pengguna di sekolah Anda sendiri.' });
         }
-        if (newRole && (newRole === 'SUPER_ADMIN' || newRole === 'ADMIN_SEKOLAH')) {
-             return response.status(403).json({ error: 'Anda tidak memiliki izin untuk menetapkan peran admin.' });
+        if (newRole && (newRole === 'SUPER_ADMIN' || ['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(newRole))) {
+             return response.status(403).json({ error: 'Anda tidak memiliki izin untuk menetapkan peran admin sistem atau wilayah.' });
         }
-        if (newSchoolId !== undefined && newSchoolId.toString() !== user.school_id.toString()) {
+        if (newSchoolId !== undefined && Number(newSchoolId) !== Number(user.school_id)) {
              return response.status(403).json({ error: 'Anda tidak dapat memindahkan pengguna ke sekolah lain.' });
         }
     }
@@ -303,7 +303,7 @@ export async function handleUpdateUsersBulk({ payload, user, sql, response }) {
         await client.query('COMMIT');
     } catch (error) {
         await client.query('ROLLBACK');
-        throw error; // Rethrow the error to be caught by the main handler
+        throw error;
     } finally {
         client.release();
     }
