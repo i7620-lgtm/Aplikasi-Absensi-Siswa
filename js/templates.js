@@ -1,4 +1,5 @@
 
+
 import { state, CLASSES } from './main.js';
 
 export function encodeHTML(str) {
@@ -307,7 +308,7 @@ export const templates = {
                         </div>
 
                         <a id="contact-admin-btn" href="#" class="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-sm flex items-center justify-center gap-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                             Kirim Permintaan Akses
                         </a>
                         <p class="text-xs text-blue-600 mt-2 text-center opacity-80">Klik tombol di atas untuk mengirim email ke admin.</p>
@@ -579,138 +580,6 @@ export const templates = {
         </div>
         `;
     },
-    setup: () => {
-        const isAdmin = ['SUPER_ADMIN', 'ADMIN_SEKOLAH'].includes(state.userProfile?.primaryRole);
-        const isTeacher = state.userProfile?.primaryRole === 'GURU';
-        const assignedClasses = state.userProfile?.assigned_classes || [];
-        const needsAssignment = isTeacher && (!state.userProfile.assigned_classes || state.userProfile.assigned_classes.length === 0);
-        const isSuperAdminInContext = state.userProfile?.primaryRole === 'SUPER_ADMIN' && state.adminActingAsSchool;
-        const title = isSuperAdminInContext 
-            ? `Absensi Sekolah`
-            : "Absensi Online Siswa";
-        
-        // The setup screen is now only for logged-in users.
-        if (!state.userProfile) {
-            return ``; // Should navigate to landing page instead.
-        }
-
-        // --- Generate Dropdown Options Logic ---
-        let optionsHtml = '';
-        if (isAdmin) {
-            const activeClassKeys = Object.keys(state.studentsByClass || {}).sort((a, b) => {
-                return a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'});
-            });
-            const inactiveClasses = CLASSES.filter(c => !activeClassKeys.includes(c));
-
-            if (activeClassKeys.length > 0) {
-                optionsHtml += `<optgroup label="Kelas Aktif di Sekolah (Ada Data)">`;
-                activeClassKeys.forEach(c => {
-                    optionsHtml += `<option value="${c}" ${c === state.selectedClass ? 'selected' : ''}>${c}</option>`;
-                });
-                optionsHtml += `</optgroup>`;
-                
-                optionsHtml += `<optgroup label="Buat Kelas Baru (Pilih dari daftar)">`;
-                inactiveClasses.forEach(c => {
-                    optionsHtml += `<option value="${c}" ${c === state.selectedClass ? 'selected' : ''}>${c}</option>`;
-                });
-                optionsHtml += `</optgroup>`;
-            } else {
-                optionsHtml += `<option disabled>Belum ada data kelas aktif</option>`;
-                optionsHtml += `<optgroup label="Silakan pilih kelas untuk memulai">`;
-                CLASSES.forEach(c => {
-                    optionsHtml += `<option value="${c}" ${c === state.selectedClass ? 'selected' : ''}>${c}</option>`;
-                });
-                optionsHtml += `</optgroup>`;
-            }
-        } else {
-            if (assignedClasses.length > 0) {
-                 assignedClasses.forEach(c => {
-                    optionsHtml += `<option value="${c}" ${c === state.selectedClass ? 'selected' : ''}>${c}</option>`;
-                });
-            } else {
-                 optionsHtml = `<option>Tidak ada kelas ditugaskan</option>`;
-            }
-        }
-        // --- END Logic ---
-
-        return `
-        <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
-            <div class="bg-white p-8 rounded-2xl shadow-lg max-md w-full">
-                <div class="flex items-center justify-between mb-6">
-                    <h1 class="text-xl font-bold text-slate-800">${encodeHTML(title)}</h1>
-                    <div>
-                        <button id="back-to-main-home-btn" class="text-slate-500 hover:text-blue-500 transition duration-300 p-2 rounded-full -mr-2" title="Kembali ke Beranda"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg></button>
-                        <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                        </button>
-                    </div>
-                </div>
-                ${isSuperAdminInContext ? `
-                <div class="bg-indigo-50 border-l-4 border-indigo-400 p-4 mb-6 text-sm text-indigo-800" role="alert">
-                    <p><span class="font-bold">Mode Konteks:</span> Anda bertindak sebagai admin untuk sekolah <strong class="font-semibold">${encodeHTML(state.adminActingAsSchool.name)}</strong>.</p>
-                </div>
-                ` : ''}
-                <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
-                    <img src="${encodeHTML(state.userProfile.picture)}" alt="User" class="w-12 h-12 rounded-full"/>
-                    <div>
-                        <p class="font-semibold text-slate-800">${encodeHTML(state.userProfile.name)}</p>
-                        <p class="text-sm text-slate-500">${encodeHTML(state.userProfile.email)}</p>
-                        <span class="px-2 py-0.5 mt-1 inline-block rounded-full text-xs font-semibold ${isAdmin ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}">${getRoleDisplayName(state.userProfile.primaryRole)}</span>
-                    </div>
-                </div>
-                ${
-                    (('Notification' in window) && Notification.permission === 'default' && !localStorage.getItem('notificationBannerDismissed'))
-                    ? `
-                        <div id="notification-permission-banner" class="bg-indigo-50 border border-indigo-200 p-4 rounded-lg my-6 text-sm text-indigo-800 flex items-start justify-between gap-4">
-                            <div>
-                                <p class="font-semibold mb-1">Dapatkan Notifikasi Latar Belakang</p>
-                                <p>Izinkan notifikasi untuk mengetahui saat data Anda berhasil disinkronkan, bahkan saat aplikasi ditutup.</p>
-                            </div>
-                            <div class="flex-shrink-0 flex items-center gap-2">
-                                <button id="enable-notifications-btn" class="font-bold text-indigo-600 hover:text-indigo-800 focus:outline-none">Aktifkan</button>
-                                <button id="dismiss-notification-banner-btn" class="text-2xl leading-none text-indigo-400 hover:text-indigo-600 focus:outline-none" title="Tutup">&times;</button>
-                            </div>
-                        </div>
-                    ` : ''
-                }
-                ${ needsAssignment ? `
-                    <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
-                        <div class="flex">
-                            <div class="py-1"><svg class="w-6 h-6 text-yellow-500 mr-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg></div>
-                            <div>
-                                <p class="font-bold text-yellow-800">Menunggu Penugasan Kelas</p>
-                                <p class="text-sm text-yellow-700 mt-1">Akun Anda aktif tetapi belum ditugaskan kelas. Silakan hubungi admin sekolah untuk mendapatkan akses.</p>
-                            </div>
-                        </div>
-                    </div>
-                ` : `
-                    <h2 class="text-lg font-semibold text-slate-700 mb-4 pt-4 border-t border-slate-200">Pilih Kelas & Tanggal</h2>
-                    <div class="space-y-4">
-                        <div>
-                            <label for="class-select" class="block text-sm font-medium text-slate-700 mb-1">Pilih Kelas</label>
-                            <select id="class-select" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" ${(!isAdmin && assignedClasses.length === 0) ? 'disabled' : ''}>
-                                ${optionsHtml}
-                            </select>
-                        </div>
-                        <div>
-                            <label for="date-input" class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
-                            <input type="date" id="date-input" value="${state.selectedDate}" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"/>
-                        </div>
-                    </div>
-                    <div class="mt-6 space-y-3">
-                         <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Mulai Absensi</button>
-                         <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Lihat Riwayat Kelas Ini</button>
-                         <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Rekap Absensi Siswa</button>
-                         <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Tambah/Kurangi Data Siswa</button>
-                         <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Unduh Rekap Kelas (Excel)</button>
-                    </div>
-                `}
-                <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">Data disimpan secara otomatis di cloud.</p>
-            </div>
-        </div>`;
-    },
-    // ... [No changes needed in confirmation, schoolSelectorModal, etc.] ...
-
     adminPanel: () => {
         const isSuperAdmin = state.userProfile?.primaryRole === 'SUPER_ADMIN';
         return `
@@ -838,7 +707,6 @@ export const templates = {
         `;
     },
 
-    // ... [Rest of templates] ...
     confirmation: (message) => `
         <div id="confirmation-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
             <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 text-center">
@@ -954,6 +822,59 @@ export const templates = {
              </div>
         </div>
     `,
+
+    attendance: (className, date) => {
+        const dateObj = new Date(date);
+        const dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        
+        return `
+        <div class="screen active min-h-screen bg-slate-100 p-4">
+            <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg flex flex-col min-h-[80vh]">
+                <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center sticky top-0 z-10 rounded-t-xl">
+                    <div>
+                        <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${encodeHTML(className)}</h1>
+                        <p class="text-slate-500 text-sm mt-1">${dateStr}</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="mark-holiday-btn" class="bg-orange-100 hover:bg-orange-200 text-orange-700 font-semibold py-2 px-4 rounded-lg transition text-sm flex items-center gap-2" title="Tandai seluruh kelas Libur">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                            <span class="hidden sm:inline">Tandai Libur</span>
+                        </button>
+                        <button id="back-to-setup-btn" class="text-slate-500 hover:text-blue-500 p-2 rounded-full hover:bg-slate-200 transition" title="Kembali">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="flex-grow overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                            <tr>
+                                <th class="p-3 w-10 text-center">No</th>
+                                <th class="p-3 min-w-[150px]">Nama Siswa</th>
+                                <th class="p-3 w-12 text-center text-green-600 font-bold" title="Hadir">H</th>
+                                <th class="p-3 w-12 text-center text-yellow-600 font-bold" title="Sakit">S</th>
+                                <th class="p-3 w-12 text-center text-blue-600 font-bold" title="Izin">I</th>
+                                <th class="p-3 w-12 text-center text-red-600 font-bold" title="Alpa">A</th>
+                                <th class="p-3 w-12 text-center text-slate-600 font-bold" title="Libur">L</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendance-table-body" class="divide-y divide-slate-100">
+                            <!-- Rows injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="p-6 border-t border-slate-200 bg-slate-50 rounded-b-xl sticky bottom-0 z-10">
+                    <button id="save-attendance-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                        Simpan Absensi
+                    </button>
+                </div>
+            </div>
+        </div>
+        `;
+    },
 
     success: () => `
         <div class="screen active min-h-screen flex items-center justify-center bg-slate-100 p-4">
