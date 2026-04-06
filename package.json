@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
-    "@vitejs/plugin-legacy": "^8.0.1",
+    "@vitejs/plugin-legacy": "^6.0.0",
     "terser": "^5.46.1",
     "typescript": "^5.7.2"
   }
