@@ -510,28 +510,29 @@ export const templates = {
                     </div>
                 </div>
 
-                <div class="space-y-4">
-                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center">Pilih Aksi</h2>
+                <div class="mt-8">
+                    <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center mb-4">Pilih Aksi</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     
                     ${['GURU', 'ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN'].includes(primaryRole) ? `
-                    <button id="go-to-attendance-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><div><p class="font-bold">Lakukan & Kelola Absensi</p><p class="text-sm font-normal opacity-90">Catat kehadiran, kelola siswa, dan lihat rekap.</p></div></button>
+                    <button id="go-to-attendance-btn" class="w-full h-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><div><p class="font-bold">Lakukan & Kelola Absensi</p><p class="text-sm font-normal opacity-90">Catat kehadiran, kelola siswa, dan lihat rekap.</p></div></button>
                     ` : ''}
 
                      ${['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
-                    <button id="view-dashboard-btn" class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg><div><p class="font-bold">Lihat Dasbor Analitik</p><p class="text-sm font-normal opacity-90">Analisis data kehadiran, persentase, dan dapatkan rekomendasi AI.</p></div></button>
+                    <button id="view-dashboard-btn" class="w-full h-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg><div><p class="font-bold">Lihat Dasbor Analitik</p><p class="text-sm font-normal opacity-90">Analisis data kehadiran, persentase, dan dapatkan rekomendasi AI.</p></div></button>
                     ` : ''}
 
                     ${primaryRole === 'SUPER_ADMIN' ? `
-                    <button id="view-school-dashboard-btn" class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg><div><p class="font-bold">Dasbor Analitik Sekolah</p><p class="text-sm font-normal opacity-90">Analisis data kehadiran mendalam per sekolah.</p></div></button>
-                    <button id="view-jurisdiction-dashboard-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg><div><p class="font-bold">Dasbor Analitik Regional</p><p class="text-sm font-normal opacity-90">Analisis data agregat untuk seluruh wilayah.</p></div></button>
+                    <button id="view-school-dashboard-btn" class="w-full h-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg><div><p class="font-bold">Dasbor Analitik Sekolah</p><p class="text-sm font-normal opacity-90">Analisis data kehadiran mendalam per sekolah.</p></div></button>
+                    <button id="view-jurisdiction-dashboard-btn" class="w-full h-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg><div><p class="font-bold">Dasbor Analitik Regional</p><p class="text-sm font-normal opacity-90">Analisis data agregat untuk seluruh wilayah.</p></div></button>
                     ` : ''}
 
                     ${isParent ? `
-                    <button id="view-parent-dashboard-btn" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg><div><p class="font-bold">Dasbor Orang Tua</p><p class="text-sm font-normal opacity-90">Lihat riwayat kehadiran anak Anda.</p></div></button>
+                    <button id="view-parent-dashboard-btn" class="w-full h-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg><div><p class="font-bold">Dasbor Orang Tua</p><p class="text-sm font-normal opacity-90">Lihat riwayat kehadiran anak Anda.</p></div></button>
                     ` : ''}
                     
                     ${canManageHolidays ? `
-                    <button id="manage-holidays-btn" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
+                    <button id="manage-holidays-btn" class="w-full h-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
                         <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                         <div>
                             <p class="font-bold">Kalender & Pengaturan</p>
@@ -541,7 +542,7 @@ export const templates = {
                     ` : ''}
                     
                     ${reportCardRoles.includes(primaryRole) && primaryRole !== 'SUPER_ADMIN' ? `
-                    <button id="download-scoped-report-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
+                    <button id="download-scoped-report-btn" class="w-full h-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
                         <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                         <div>
                             <p class="font-bold">${isDinas ? 'Unduh Laporan Regional' : 'Unduh Laporan Sekolah'}</p>
@@ -556,25 +557,26 @@ export const templates = {
                     ` : ''}
                     
                     ${primaryRole === 'SUPER_ADMIN' ? `
-                    <button id="download-school-report-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
+                    <button id="download-school-report-btn" class="w-full h-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
                         <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                         <div><p class="font-bold">Unduh Laporan Sekolah Spesifik</p><p class="text-sm font-normal opacity-90">Pilih satu sekolah untuk mengunduh rekap Excel lengkap.</p></div>
                     </button>
-                     <button id="download-jurisdiction-report-btn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
+                     <button id="download-jurisdiction-report-btn" class="w-full h-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
                         <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                         <div><p class="font-bold">Unduh Laporan Regional</p><p class="text-sm font-normal opacity-90">Pilih yurisdiksi untuk mengunduh rekap gabungan.</p></div>
                     </button>
                     ` : ''}
                     
                     ${['SUPER_ADMIN', 'ADMIN_SEKOLAH', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
-                    <button id="view-admin-panel-btn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.124-1.282-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.124-1.282.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg><div><p class="font-bold">Panel Manajemen Pengguna</p><p class="text-sm font-normal opacity-90">Kelola pengguna dan penetapan peran.</p></div></button>
+                    <button id="view-admin-panel-btn" class="w-full h-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.124-1.282-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.124-1.282.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg><div><p class="font-bold">Panel Manajemen Pengguna</p><p class="text-sm font-normal opacity-90">Kelola pengguna dan penetapan peran.</p></div></button>
                     ` : ''}
 
                     ${primaryRole === 'SUPER_ADMIN' ? `
-                    <button id="view-jurisdiction-panel-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" /></svg><div><p class="font-bold">Panel Manajemen Yurisdiksi</p><p class="text-sm font-normal opacity-90">Kelola hierarki wilayah dan sekolah.</p></div></button>
-                    <button id="go-to-migration-tool-btn" class="w-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10m16-10v10M4 17h16M4 7h16M9 4v3m6-3v3m-3 14v-3"></path></svg><div><p class="font-bold">Alat Migrasi Data Lama</p><p class="text-sm font-normal opacity-90">Unggah data dari sistem lama ke format baru.</p></div></button>
+                    <button id="view-jurisdiction-panel-btn" class="w-full h-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" /></svg><div><p class="font-bold">Panel Manajemen Yurisdiksi</p><p class="text-sm font-normal opacity-90">Kelola hierarki wilayah dan sekolah.</p></div></button>
+                    <button id="go-to-migration-tool-btn" class="w-full h-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10m16-10v10M4 17h16M4 7h16M9 4v3m6-3v3m-3 14v-3"></path></svg><div><p class="font-bold">Alat Migrasi Data Lama</p><p class="text-sm font-normal opacity-90">Unggah data dari sistem lama ke format baru.</p></div></button>
                     ` : ''}
 
+                    </div>
                 </div>
             </div>
         </div>
@@ -687,7 +689,7 @@ export const templates = {
                     
                     <div id="manage-classes-container" class="${user.role === 'GURU' ? '' : 'hidden'}">
                         <label class="block text-sm font-medium text-gray-700 mb-2">Kelas yang Ditugaskan</label>
-                        <div class="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-200 rounded-lg bg-gray-50">
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-200 rounded-lg bg-gray-50">
                             ${CLASSES.map(cls => `
                                 <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
                                     <input type="checkbox" value="${cls}" class="class-checkbox rounded text-blue-600 focus:ring-blue-500" ${(user.assigned_classes || []).includes(cls) ? 'checked' : ''}>
@@ -1040,14 +1042,14 @@ export const templates = {
                     <h3 class="text-xl font-bold text-gray-800">Kelola Sekolah di ${encodeHTML(jurName)}</h3>
                     <button id="assign-schools-close-btn" class="text-gray-400 hover:text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
                 </div>
-                <div class="flex flex-1 gap-4 overflow-hidden">
-                    <div class="w-1/2 flex flex-col">
+                <div class="flex flex-col md:flex-row flex-1 gap-4 overflow-hidden">
+                    <div class="w-full md:w-1/2 flex flex-col">
                         <h4 class="font-semibold text-green-700 mb-2">Terdaftar (${assigned.length})</h4>
                         <div class="flex-1 overflow-y-auto border rounded-lg p-2 bg-green-50 space-y-1">
                             ${assigned.map(s => `<div class="flex justify-between items-center bg-white p-2 rounded shadow-sm border border-green-100"><span class="text-sm">${encodeHTML(s.name)}</span><button class="unassign-school-btn text-red-500 hover:bg-red-50 p-1 rounded" data-school-id="${s.id}">&times;</button></div>`).join('')}
                         </div>
                     </div>
-                    <div class="w-1/2 flex flex-col">
+                    <div class="w-full md:w-1/2 flex flex-col">
                         <h4 class="font-semibold text-slate-700 mb-2">Tersedia (${unassigned.length})</h4>
                         <div class="flex-1 overflow-y-auto border rounded-lg p-2 bg-slate-50 space-y-1">
                              ${unassigned.map(s => `<div class="flex justify-between items-center bg-white p-2 rounded shadow-sm border border-slate-200"><span class="text-sm text-slate-600">${encodeHTML(s.name)}</span><button class="assign-school-btn text-green-600 hover:bg-green-50 p-1 rounded font-bold" data-school-id="${s.id}">+</button></div>`).join('')}
@@ -1163,7 +1165,7 @@ export const templates = {
                                                 : `<ul class="space-y-2">
                                                     ${child.attendance_history.map(log => `
                                                         <li class="flex items-center justify-between bg-white p-3 rounded border border-slate-100 shadow-sm">
-                                                            <span class="text-slate-700 text-sm font-medium">${new Date(log.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                                            <span class="text-slate-700 text-sm font-medium">${new Date(log.date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
                                                             <span class="px-3 py-1 rounded-full text-xs font-bold ${log.status === 'S' ? 'bg-yellow-100 text-yellow-800' : log.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">
                                                                 ${log.status === 'S' ? 'Sakit' : log.status === 'I' ? 'Izin' : 'Alpa'}
                                                             </span>
@@ -1276,7 +1278,7 @@ export const templates = {
                                 <div class="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded-lg">
                                     <div>
                                         <div class="flex items-center gap-2">
-                                            <span class="font-bold text-slate-700">${new Date(h.date).toLocaleDateString('id-ID', {weekday: 'long', day:'numeric', month:'long', year:'numeric'})}</span>
+                                            <span class="font-bold text-slate-700">${new Date(h.date + 'T00:00:00').toLocaleDateString('id-ID', {weekday: 'long', day:'numeric', month:'long', year:'numeric'})}</span>
                                             <span class="text-xs px-2 py-0.5 rounded-full font-bold ${h.scope === 'NATIONAL' ? 'bg-red-100 text-red-800' : h.scope === 'REGIONAL' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}">${h.scope === 'NATIONAL' ? 'Nasional' : h.scope === 'REGIONAL' ? 'Daerah' : 'Sekolah'}</span>
                                         </div>
                                         <p class="text-sm text-slate-600">${encodeHTML(h.description)}</p>
@@ -1297,8 +1299,12 @@ export const templates = {
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Tambah Hari Libur</h3>
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-sm font-medium text-slate-700 mb-1">Tanggal</label>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Tanggal Mulai</label>
                             <input type="date" id="new-holiday-date" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Tanggal Selesai (Opsional)</label>
+                            <input type="date" id="new-holiday-end-date" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Kosongkan jika hanya 1 hari">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">Keterangan</label>
