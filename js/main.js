@@ -26,12 +26,20 @@ const smpClasses = generateClasses(7, 9, 'A', 'P');
 
 export const CLASSES = [...sdClasses, ...smpClasses];
 
+function getLocalISODate() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 // --- APPLICATION STATE ---
 export let state = {
     userProfile: null, 
     currentScreen: 'landingPage',
     selectedClass: '',
-    selectedDate: new Date().toISOString().split('T')[0],
+    selectedDate: getLocalISODate(),
     students: [], 
     studentsByClass: {},
     attendance: {},
@@ -65,7 +73,7 @@ export let state = {
     dashboard: {
         data: null, 
         isLoading: true,
-        selectedDate: new Date().toISOString().split('T')[0],
+        selectedDate: getLocalISODate(),
         polling: {
             timeoutId: null,
             interval: 10000,
@@ -299,7 +307,7 @@ export async function handleManageStudents() {
 
 export async function handleSaveNewStudents() {
     const finalStudentList = state.newStudents
-        .map(s => ({ name: s.name.trim(), parentEmail: (s.parentEmail || '').trim() }))
+        .map(s => ({ name: s.name.trim(), parentEmail: (s.parentEmail || '').trim().toLowerCase() }))
         .filter(s => s.name);
 
     showLoader('Menyimpan data siswa...');
@@ -448,7 +456,7 @@ export async function handleSaveSchoolSettings(workDays) {
     }
 }
 
-export async function handleManageHoliday(operation, date, description, id = null) {
+export async function handleManageHoliday(operation, date, description, id = null, endDate = null) {
     if (operation === 'ADD' && (!date || !description)) {
         showNotification('Tanggal dan deskripsi wajib diisi.', 'error');
         return;
@@ -456,11 +464,15 @@ export async function handleManageHoliday(operation, date, description, id = nul
     
     showLoader(operation === 'ADD' ? 'Menambah libur...' : 'Menghapus libur...');
     try {
-        const { holiday } = await apiService.manageHoliday(operation, id, date, description);
+        const response = await apiService.manageHoliday(operation, id, date, description, endDate);
         
         let updatedHolidays = [...state.holidays];
         if (operation === 'ADD') {
-            updatedHolidays.push(holiday);
+            if (response.holidays && Array.isArray(response.holidays)) {
+                updatedHolidays.push(...response.holidays);
+            } else if (response.holiday) {
+                updatedHolidays.push(response.holiday);
+            }
             updatedHolidays.sort((a,b) => new Date(b.date) - new Date(a.date)); 
         } else {
             updatedHolidays = updatedHolidays.filter(h => h.id !== parseInt(id));
@@ -664,7 +676,7 @@ export function handleExcelImport(event) {
             
             const newStudents = json.slice(1).map(row => ({
                 name: String(row[0] || '').trim(),
-                parentEmail: String(row[1] || '').trim()
+                parentEmail: String(row[1] || '').trim().toLowerCase()
             })).filter(s => s.name);
 
             if (newStudents.length > 0) {
@@ -691,7 +703,7 @@ export function handleExcelImport(event) {
 async function downloadRecapData(params) {
     showLoader('Menyiapkan data untuk diunduh...');
     try {
-        const { recapData, reportType, monthlySummary } = await apiService.getRecapData(params);
+        const { recapData, reportType, monthlySummary, recordedDates } = await apiService.getRecapData(params);
         const hasRecapData = recapData && ((reportType === 'class' && recapData.length > 0) || (reportType !== 'class' && Object.keys(recapData).length > 0));
         const hasSummaryData = monthlySummary && monthlySummary.length > 0;
 
@@ -747,9 +759,70 @@ async function downloadRecapData(params) {
 
         if (hasRecapData) {
             const header = ['Nama Lengkap', 'Kelas', 'Sakit (S)', 'Izin (I)', 'Alpa (A)', 'Total Absen'];
-            const createSheetFromData = (dataArray, includeClassCol = true) => {
+            const createSheetFromData = (dataArray, includeClassCol = true, className = null) => {
                 const finalHeader = includeClassCol ? header : header.filter(h => h !== 'Kelas');
-                const dataForSheet = [finalHeader];
+                const dataForSheet = [];
+                
+                // Add summary if dates are available and className is provided (only for class-specific sheets)
+                if (params.startDate && params.endDate && recordedDates && className) {
+                    let filteredDates = recordedDates.filter(r => r.class_name === className);
+                    
+                    let totalRecorded = filteredDates.length;
+                    let totalWorkDays = 0;
+                    let totalHolidays = 0;
+                    const workDaysArray = state.schoolSettings?.workDays || [1,2,3,4,5,6];
+                    let current = new Date(params.startDate + 'T00:00:00');
+                    const end = new Date(params.endDate + 'T23:59:59');
+                    const today = new Date();
+                    const actualEnd = end > today ? today : end;
+                    
+                    const holidayDates = (state.holidays || []).map(h => {
+                        let d = h.date;
+                        if (d instanceof Date) {
+                            const y = d.getFullYear();
+                            const m = String(d.getMonth() + 1).padStart(2, '0');
+                            const day = String(d.getDate()).padStart(2, '0');
+                            return `${y}-${m}-${day}`;
+                        }
+                        if (typeof d === 'string') return d.substring(0, 10);
+                        return null;
+                    }).filter(Boolean);
+
+                    let unexecutedList = [];
+
+                    while (current <= actualEnd) {
+                        const year = current.getFullYear();
+                        const month = String(current.getMonth() + 1).padStart(2, '0');
+                        const day = String(current.getDate()).padStart(2, '0');
+                        const dateStr = `${year}-${month}-${day}`;
+                        
+                        const isWorkDay = workDaysArray.includes(current.getDay());
+                        const isHoliday = holidayDates.includes(dateStr);
+                        
+                        if (isWorkDay) {
+                            if (isHoliday) {
+                                totalHolidays++;
+                            } else {
+                                totalWorkDays++;
+                                const isRecorded = filteredDates.some(r => r.date === dateStr);
+                                if (!isRecorded) {
+                                    unexecutedList.push(dateStr);
+                                }
+                            }
+                        }
+                        current.setDate(current.getDate() + 1);
+                    }
+                    
+                    const totalUnexecuted = unexecutedList.length;
+                    
+                    dataForSheet.push(['Ringkasan Absensi']);
+                    dataForSheet.push(['Hari Libur', totalHolidays]);
+                    dataForSheet.push(['Sudah Dilaksanakan', totalRecorded]);
+                    dataForSheet.push(['Belum Dilaksanakan', totalUnexecuted]);
+                    dataForSheet.push([]); // Empty row
+                }
+                
+                dataForSheet.push(finalHeader);
                 
                 dataArray
                     .sort((a, b) => {
@@ -785,11 +858,11 @@ async function downloadRecapData(params) {
             } else if (reportType === 'school') {
                 const sortedClasses = Object.keys(recapData).sort();
                 for (const className of sortedClasses) {
-                    const worksheet = createSheetFromData(recapData[className], false);
+                    const worksheet = createSheetFromData(recapData[className], false, className);
                     XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(`Kelas ${className}`));
                 }
             } else { 
-                const worksheet = createSheetFromData(recapData, true);
+                const worksheet = createSheetFromData(recapData, true, params.classFilter);
                 XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Absensi');
             }
         }
@@ -852,16 +925,27 @@ export async function handleDownloadFullSchoolReport(schoolId, schoolName) {
     
     const fileName = `Laporan_Absensi_Lengkap_${finalSchoolName.replace(/\s+/g, '_')}.xlsx`;
     
-    const today = new Date();
-    const currentMonth = today.getMonth(); 
-    const currentYear = today.getFullYear();
     let startDate, endDate;
-    if (currentMonth >= 6) { 
-        startDate = `${currentYear}-07-01`;
-        endDate = `${currentYear}-12-31`;
-    } else { 
-        startDate = `${currentYear}-01-01`;
-        endDate = `${currentYear}-06-30`;
+    if (state.recapPeriod) {
+        const [year, sem] = state.recapPeriod.split('-').map(Number);
+        if (sem === 1) { 
+            startDate = `${year}-07-01`;
+            endDate = `${year}-12-31`;
+        } else { 
+            startDate = `${year}-01-01`;
+            endDate = `${year}-06-30`;
+        }
+    } else {
+        const today = new Date();
+        const currentMonth = today.getMonth(); 
+        const currentYear = today.getFullYear();
+        if (currentMonth >= 6) { 
+            startDate = `${currentYear}-07-01`;
+            endDate = `${currentYear}-12-31`;
+        } else { 
+            startDate = `${currentYear}-01-01`;
+            endDate = `${currentYear}-06-30`;
+        }
     }
 
     await downloadRecapData({ schoolId: finalSchoolId, fileName, startDate, endDate });
@@ -875,16 +959,27 @@ export async function handleDownloadJurisdictionReport(jurisdictionId, jurisdict
     const finalJurisdictionName = jurisdictionName || `Yurisdiksi_ID_${jurisdictionId}`;
     const fileName = `Laporan_Absensi_Regional_${finalJurisdictionName.replace(/\s+/g, '_')}.xlsx`;
     
-    const today = new Date();
-    const currentMonth = today.getMonth();
-    const currentYear = today.getFullYear();
     let startDate, endDate;
-    if (currentMonth >= 6) {
-        startDate = `${currentYear}-07-01`;
-        endDate = `${currentYear}-12-31`;
+    if (state.recapPeriod) {
+        const [year, sem] = state.recapPeriod.split('-').map(Number);
+        if (sem === 1) { 
+            startDate = `${year}-07-01`;
+            endDate = `${year}-12-31`;
+        } else { 
+            startDate = `${year}-01-01`;
+            endDate = `${year}-06-30`;
+        }
     } else {
-        startDate = `${currentYear}-01-01`;
-        endDate = `${currentYear}-06-30`;
+        const today = new Date();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+        if (currentMonth >= 6) {
+            startDate = `${currentYear}-07-01`;
+            endDate = `${currentYear}-12-31`;
+        } else {
+            startDate = `${currentYear}-01-01`;
+            endDate = `${currentYear}-06-30`;
+        }
     }
 
     await downloadRecapData({ jurisdictionId, fileName, startDate, endDate });
@@ -1015,6 +1110,7 @@ async function initApp() {
         await initializeGsi(); 
     } catch (e) {
         console.warn("GSI Initialization deferred or failed:", e);
+        hideLoader(); // Ensure loader is hidden even if GSI fails
     }
 
     if (state.userProfile) {
