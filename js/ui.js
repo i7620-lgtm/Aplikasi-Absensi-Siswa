@@ -1677,16 +1677,70 @@ function renderDataScreen() {
     filterAndRenderHistory();
 }
 
-function generateSemesterOptions() {
+async function generateSemesterOptions() {
+    try {
+        // Fetch recorded dates to determine available semesters
+        const payload = {
+            schoolId: state.adminActingAsSchool?.id || state.userProfile?.school_id,
+        };
+        const { recordedDates } = await apiService.getRecapData(payload);
+        
+        if (recordedDates && recordedDates.length > 0) {
+            const semesters = new Set();
+            recordedDates.forEach(record => {
+                const date = new Date(record.date);
+                const year = date.getFullYear();
+                const month = date.getMonth(); // 0-11
+                // Semester 1 (Ganjil): July (6) - Dec (11) -> Year/Year+1
+                // Semester 2 (Genap): Jan (0) - June (5) -> Year-1/Year
+                if (month >= 6) {
+                    semesters.add(`${year}-1`);
+                } else {
+                    semesters.add(`${year}-2`);
+                }
+            });
+
+            const options = Array.from(semesters).map(val => {
+                const [year, sem] = val.split('-').map(Number);
+                if (sem === 1) {
+                    return { label: `Semester Ganjil ${year}/${year+1}`, value: val, sortKey: `${year}1` };
+                } else {
+                    return { label: `Semester Genap ${year-1}/${year}`, value: val, sortKey: `${year-1}2` };
+                }
+            });
+
+            // Sort descending (newest first)
+            options.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+            
+            // Remove sortKey before returning
+            return options.map(({ label, value }) => ({ label, value }));
+        }
+    } catch (error) {
+        console.error("Failed to fetch recorded dates for semester options:", error);
+    }
+
+    // Fallback if no data or error
     const currentYear = new Date().getFullYear();
-    return [
-        { label: `Semester Ganjil ${currentYear}/${currentYear+1}`, value: `${currentYear}-1` },
-        { label: `Semester Genap ${currentYear}/${currentYear+1}`, value: `${currentYear}-2` },
-        { label: `Semester Genap ${currentYear-1}/${currentYear}`, value: `${currentYear-1}-2` },
-    ];
+    const currentMonth = new Date().getMonth();
+    
+    // If we are in Genap (Jan-Jun), show current Genap, previous Ganjil, previous Genap
+    // If we are in Ganjil (Jul-Dec), show current Ganjil, previous Genap, previous Ganjil
+    if (currentMonth < 6) {
+        return [
+            { label: `Semester Genap ${currentYear-1}/${currentYear}`, value: `${currentYear}-2` },
+            { label: `Semester Ganjil ${currentYear-1}/${currentYear}`, value: `${currentYear-1}-1` },
+            { label: `Semester Genap ${currentYear-2}/${currentYear-1}`, value: `${currentYear-1}-2` },
+        ];
+    } else {
+        return [
+            { label: `Semester Ganjil ${currentYear}/${currentYear+1}`, value: `${currentYear}-1` },
+            { label: `Semester Genap ${currentYear-1}/${currentYear}`, value: `${currentYear}-2` },
+            { label: `Semester Ganjil ${currentYear-1}/${currentYear}`, value: `${currentYear-1}-1` },
+        ];
+    }
 }
 
-function renderRecapScreen() {
+async function renderRecapScreen() {
     appContainer.innerHTML = templates.recap();
     const container = document.getElementById('recap-container');
     const headerEl = document.querySelector('h1'); // Find the H1
@@ -1694,7 +1748,12 @@ function renderRecapScreen() {
     // Add Period Selector
     const periodSelect = document.createElement('select');
     periodSelect.className = "ml-4 p-2 border rounded text-sm";
-    generateSemesterOptions().forEach(opt => {
+    
+    showLoader('Memuat opsi semester...');
+    const semesterOptions = await generateSemesterOptions();
+    hideLoader();
+
+    semesterOptions.forEach(opt => {
         const option = document.createElement('option');
         option.value = opt.value;
         option.textContent = opt.label;
@@ -1702,11 +1761,8 @@ function renderRecapScreen() {
         periodSelect.appendChild(option);
     });
     // Set default if null
-    if (!state.recapPeriod) {
-        const today = new Date();
-        const m = today.getMonth();
-        const y = today.getFullYear();
-        state.recapPeriod = (m >= 6) ? `${y}-1` : `${y}-2`;
+    if (!state.recapPeriod && semesterOptions.length > 0) {
+        state.recapPeriod = semesterOptions[0].value;
         periodSelect.value = state.recapPeriod;
     }
     
