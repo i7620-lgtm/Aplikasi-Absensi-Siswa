@@ -1,4 +1,4 @@
- 
+
 
 
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport, handleManageHoliday, handleSaveSchoolSettings, handleMarkClassAsHoliday, handleSelectSchoolForConfig } from './main.js';
@@ -1244,7 +1244,7 @@ function renderAdminPanelTable() {
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex items-center">
-                        <img class="h-8 w-8 rounded-full" src="${encodeHTML(u.picture)}" alt="">
+                        <img class="h-8 w-8 rounded-full" src="${encodeHTML(u.picture)}" alt="" loading="lazy">
                         <div class="ml-4">
                             <div class="text-sm font-medium text-slate-900">${encodeHTML(u.name)}</div>
                             <div class="text-sm text-slate-500">${encodeHTML(u.email)}</div>
