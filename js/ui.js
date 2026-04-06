@@ -1210,9 +1210,11 @@ function renderAdminPanelTable() {
         users.sort((a, b) => (a.school_name || '').localeCompare(b.school_name || ''));
     }
 
-    const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
-    const startIndex = (state.adminPanel.currentPage - 1) * USERS_PER_PAGE;
-    const paginatedUsers = users.slice(startIndex, startIndex + USERS_PER_PAGE);
+    // Since we use server-side pagination, users array is already the paginated slice
+    // unless there is a search query, in which case it's all matching users.
+    const isSearching = !!state.adminPanel.searchQuery;
+    const totalPages = isSearching ? 1 : Math.ceil(state.adminPanel.totalUsers / USERS_PER_PAGE);
+    const paginatedUsers = users;
 
     const isAllSelected = paginatedUsers.length > 0 && paginatedUsers.every(u => state.adminPanel.selectedUsers.includes(u.email));
 
@@ -1268,14 +1270,18 @@ function renderAdminPanelTable() {
     container.innerHTML = html;
 
     // Pagination Controls
-    paginationContainer.innerHTML = `
-        <button id="prev-page-btn" class="px-3 py-1 rounded border ${state.adminPanel.currentPage === 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}" ${state.adminPanel.currentPage === 1 ? 'disabled' : ''}>Sebelumnya</button>
-        <span class="text-sm text-slate-600">Halaman ${state.adminPanel.currentPage} dari ${totalPages || 1}</span>
-        <button id="next-page-btn" class="px-3 py-1 rounded border ${state.adminPanel.currentPage >= totalPages ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}" ${state.adminPanel.currentPage >= totalPages ? 'disabled' : ''}>Berikutnya</button>
-    `;
+    if (isSearching) {
+        paginationContainer.innerHTML = `<span class="text-sm text-slate-600">Menampilkan semua hasil pencarian (${paginatedUsers.length} pengguna)</span>`;
+    } else {
+        paginationContainer.innerHTML = `
+            <button id="prev-page-btn" class="px-3 py-1 rounded border ${state.adminPanel.currentPage === 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}" ${state.adminPanel.currentPage === 1 ? 'disabled' : ''}>Sebelumnya</button>
+            <span class="text-sm text-slate-600">Halaman ${state.adminPanel.currentPage} dari ${totalPages || 1} (Total: ${state.adminPanel.totalUsers})</span>
+            <button id="next-page-btn" class="px-3 py-1 rounded border ${state.adminPanel.currentPage >= totalPages ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}" ${state.adminPanel.currentPage >= totalPages ? 'disabled' : ''}>Berikutnya</button>
+        `;
 
-    document.getElementById('prev-page-btn').onclick = () => { if(state.adminPanel.currentPage > 1) { state.adminPanel.currentPage--; renderAdminPanelTable(); renderBulkActionsBar(); } };
-    document.getElementById('next-page-btn').onclick = () => { if(state.adminPanel.currentPage < totalPages) { state.adminPanel.currentPage++; renderAdminPanelTable(); renderBulkActionsBar(); } };
+        document.getElementById('prev-page-btn').onclick = () => { if(state.adminPanel.currentPage > 1) { state.adminPanel.currentPage--; adminPanelPoller(); renderBulkActionsBar(); } };
+        document.getElementById('next-page-btn').onclick = () => { if(state.adminPanel.currentPage < totalPages) { state.adminPanel.currentPage++; adminPanelPoller(); renderBulkActionsBar(); } };
+    }
 
     document.getElementById('select-all-users')?.addEventListener('change', (e) => {
         const isChecked = e.target.checked;
@@ -1313,13 +1319,18 @@ async function adminPanelPoller() {
     let nextInterval = getNextInterval(state.adminPanel.polling.interval);
 
     try {
-        const { allUsers } = await apiService.getAllUsers();
+        const { allUsers, totalCount } = await apiService.getAllUsers({
+            page: state.adminPanel.currentPage,
+            limit: USERS_PER_PAGE,
+            searchQuery: state.adminPanel.searchQuery
+        });
         const { allSchools } = await apiService.getAllSchools();
         
         await setState({ 
             adminPanel: { 
                 ...state.adminPanel, 
                 users: allUsers, 
+                totalUsers: totalCount || 0,
                 schools: allSchools, 
                 isLoading: false, 
                 polling: { ...state.adminPanel.polling, interval: INITIAL_POLLING_INTERVAL }
@@ -1344,6 +1355,21 @@ function renderAdminPanelScreen() {
         renderAdminPanelTable();
     });
     document.getElementById('add-school-btn')?.addEventListener('click', handleCreateSchool);
+    
+    // Search input handler with debounce
+    let searchTimeout;
+    const searchInput = document.getElementById('admin-search-input');
+    if (searchInput) {
+        searchInput.value = state.adminPanel.searchQuery;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                state.adminPanel.searchQuery = e.target.value.trim();
+                state.adminPanel.currentPage = 1; // Reset to page 1 on search
+                adminPanelPoller(); // Trigger fetch
+            }, 300); // 300ms debounce
+        });
+    }
     
     renderAdminPanelTable(); 
     renderBulkActionsBar();
@@ -1854,27 +1880,17 @@ async function renderRecapScreen() {
 
             let summaryHtml = `
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                    <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center relative group">
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
                         <p class="text-xs text-slate-500 uppercase font-semibold">Hari Libur</p>
                         <p class="text-2xl font-bold text-slate-800">${totalHolidays}</p>
-                        ${holidayList.length > 0 ? `
-                        <div class="absolute z-10 hidden group-hover:block bg-slate-800 text-white text-xs rounded p-2 bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 max-h-48 overflow-y-auto">
-                            ${holidayList.map(d => `<div>${d}</div>`).join('')}
-                        </div>
-                        ` : ''}
                     </div>
                     <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
                         <p class="text-xs text-slate-500 uppercase font-semibold">Sudah Dilaksanakan</p>
                         <p class="text-2xl font-bold text-blue-600">${totalRecorded}</p>
                     </div>
-                    <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center relative group">
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
                         <p class="text-xs text-slate-500 uppercase font-semibold">Belum Dilaksanakan</p>
                         <p class="text-2xl font-bold text-red-600">${totalUnexecuted}</p>
-                        ${unexecutedList.length > 0 ? `
-                        <div class="absolute z-10 hidden group-hover:block bg-slate-800 text-white text-xs rounded p-2 bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 max-h-48 overflow-y-auto">
-                            ${unexecutedList.map(d => `<div>${d}</div>`).join('')}
-                        </div>
-                        ` : ''}
                     </div>
                 </div>
             `;
