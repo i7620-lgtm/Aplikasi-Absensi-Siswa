@@ -1206,9 +1206,8 @@ function renderAdminPanelTable() {
     if (!container || !paginationContainer) return;
 
     let users = state.adminPanel.users;
-    if (state.adminPanel.groupBySchool) {
-        users.sort((a, b) => (a.school_name || '').localeCompare(b.school_name || ''));
-    }
+    // Client-side sorting removed because pagination is server-side. 
+    // Sorting is now handled by the backend.
 
     // Since we use server-side pagination, users array is already the paginated slice
     // unless there is a search query, in which case it's all matching users.
@@ -1322,7 +1321,8 @@ async function adminPanelPoller() {
         const { allUsers, totalCount } = await apiService.getAllUsers({
             page: state.adminPanel.currentPage,
             limit: USERS_PER_PAGE,
-            searchQuery: state.adminPanel.searchQuery
+            searchQuery: state.adminPanel.searchQuery,
+            groupBySchool: state.adminPanel.groupBySchool
         });
         const { allSchools } = await apiService.getAllSchools();
         
@@ -1352,7 +1352,7 @@ function renderAdminPanelScreen() {
     document.getElementById('group-by-school-toggle')?.addEventListener('change', (e) => {
         state.adminPanel.groupBySchool = e.target.checked;
         state.adminPanel.currentPage = 1;
-        renderAdminPanelTable();
+        adminPanelPoller(); // Fetch new data with grouping
     });
     document.getElementById('add-school-btn')?.addEventListener('click', handleCreateSchool);
     
