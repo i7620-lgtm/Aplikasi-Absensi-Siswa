@@ -62,7 +62,9 @@ export default async function handleGetRecapData({ payload, user, sql, response 
     // If startDate/endDate provided, use them. Otherwise, default to "all time" (no filter),
     // but in practice, the frontend should now always provide semester dates.
     // To be safe, we check if they exist.
-    const hasDateFilter = startDate && endDate;
+    const hasDateFilter = Boolean(startDate && endDate);
+    const safeStartDate = startDate || null;
+    const safeEndDate = endDate || null;
 
     const { rows: recapArray } = await sql`
         WITH
@@ -96,7 +98,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             FROM change_log
             WHERE school_id = ANY(${schoolIdsInScope}) AND event_type = 'ATTENDANCE_UPDATED'
             AND (${classFilter}::text IS NULL OR TRIM(payload->>'class') = ${classFilter}::text)
-            AND (${!hasDateFilter} OR (payload->>'date')::date BETWEEN ${startDate}::date AND ${endDate}::date)
+            AND (${!hasDateFilter} OR (payload->>'date')::date BETWEEN ${safeStartDate}::date AND ${safeEndDate}::date)
             ORDER BY school_id, TRIM(payload->>'class'), payload->>'date', id DESC
         ),
         absences AS (
@@ -141,6 +143,20 @@ export default async function handleGetRecapData({ payload, user, sql, response 
     const isRegionalReport = !!jurisdictionId;
     const isFullSchoolReport = !!schoolId && !classFilter;
 
+    const { rows: recordedDatesRows } = await sql`
+        SELECT DISTINCT ON (cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date')
+            cl.school_id,
+            s.name as school_name,
+            TRIM(cl.payload->>'class') as class_name,
+            cl.payload->>'date' as date
+        FROM change_log cl
+        LEFT JOIN schools s ON cl.school_id = s.id
+        WHERE cl.school_id = ANY(${schoolIdsInScope}) AND cl.event_type = 'ATTENDANCE_UPDATED'
+        AND (${classFilter}::text IS NULL OR TRIM(cl.payload->>'class') = ${classFilter}::text)
+        AND (${!hasDateFilter} OR (cl.payload->>'date')::date BETWEEN ${safeStartDate}::date AND ${safeEndDate}::date)
+        ORDER BY cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date', cl.id DESC
+    `;
+
     if (isRegionalReport) {
         const dataBySchool = recapArray.reduce((acc, row) => {
             const { school_name, ...studentData } = row;
@@ -148,7 +164,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             acc[school_name].push(studentData);
             return acc;
         }, {});
-        return response.status(200).json({ recapData: dataBySchool, reportType: 'regional' });
+        return response.status(200).json({ recapData: dataBySchool, reportType: 'regional', recordedDates: recordedDatesRows });
 
     } else if (isFullSchoolReport) {
         const dataByClass = recapArray.reduce((acc, row) => {
@@ -157,9 +173,9 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             acc[className].push(studentData);
             return acc;
         }, {});
-        return response.status(200).json({ recapData: dataByClass, reportType: 'school' });
+        return response.status(200).json({ recapData: dataByClass, reportType: 'school', recordedDates: recordedDatesRows });
     }
     
     // Fallback for single class report
-    return response.status(200).json({ recapData: recapArray, reportType: 'class' });
+    return response.status(200).json({ recapData: recapArray, reportType: 'class', recordedDates: recordedDatesRows });
 }
