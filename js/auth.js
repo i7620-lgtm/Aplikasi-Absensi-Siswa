@@ -183,9 +183,11 @@ export async function initializeGsi() {
 
     try {
         const { clientId } = await apiService.getAuthConfig();
+        console.log("Auth Config received:", clientId ? "Client ID present" : "Client ID missing");
         googleClientId = clientId;
 
         if (!clientId || typeof clientId !== 'string' || clientId.trim() === '') {
+            console.warn("Google Client ID is missing from server config.");
             const missingIdError = `<div class="bg-red-50 p-4 rounded-lg border border-red-200 text-left"><h3 class="font-bold text-red-800">Kesalahan Konfigurasi Server</h3><p class="text-sm text-red-700 mt-1">Server tidak menyediakan Client ID Google. Aplikasi tidak dapat melanjutkan proses otentikasi. Silakan hubungi administrator.</p></div>`;
             displayAuthError(missingIdError, null);
             hideLoader();
@@ -193,11 +195,11 @@ export async function initializeGsi() {
         }
 
         const script = document.createElement('script');
-        // Force Indonesian locale for the button and popups
         script.src = 'https://accounts.google.com/gsi/client?hl=id'; 
         script.async = true;
         script.defer = true;
         script.onload = () => {
+            console.log("GSI Script loaded successfully.");
             if (!window.google || !window.google.accounts || !window.google.accounts.id) {
                 console.error("Google Sign-In library failed to initialize correctly.");
                 displayAuthError("Gagal memuat pustaka Google. Coba muat ulang halaman.");
@@ -210,18 +212,16 @@ export async function initializeGsi() {
                     client_id: clientId,
                     callback: handleSignIn,
                     auto_select: false,
-                    ux_mode: 'popup', // Explicitly set to popup for stability
+                    ux_mode: 'popup',
                 });
 
                 gsiClientInitialized = true;
-                renderSignInButton(); // Perform the initial render
+                renderSignInButton();
+                console.log("GSI Client initialized and button rendered.");
 
-                const loaderWrapper = document.getElementById('loader-wrapper');
-                if (loaderWrapper.querySelector('.loader-text').textContent.includes('Memuat Aplikasi')) {
-                    hideLoader();
-                }
+                // Always hide loader after initialization attempt
+                hideLoader();
             } catch (initError) {
-                // This catch block is crucial for diagnosing Client ID/Origin issues.
                 console.error("GSI Initialization failed:", initError);
                 const detailedError = `
                     <div class="bg-red-50 p-4 rounded-lg border border-red-200 text-left flex items-start gap-4">
@@ -240,7 +240,8 @@ export async function initializeGsi() {
                 hideLoader();
             }
         };
-        script.onerror = () => {
+        script.onerror = (err) => {
+             console.error("GSI Script load error:", err);
              displayAuthError('Gagal memuat skrip otentikasi Google. Periksa koneksi internet Anda atau coba muat ulang halaman.');
              hideLoader();
         };
