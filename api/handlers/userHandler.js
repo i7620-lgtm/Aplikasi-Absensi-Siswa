@@ -104,7 +104,7 @@ export async function handleGetAllUsers({ payload, user, sql, response }) {
          return response.status(403).json({ error: 'Forbidden: Access denied' });
     }
 
-    const { page = 1, limit = 10, searchQuery = '' } = payload || {};
+    const { page = 1, limit = 10, searchQuery = '', groupBySchool = false } = payload || {};
     const offset = (page - 1) * limit;
     const searchPattern = searchQuery ? `%${searchQuery}%` : null;
     const isSearching = !!searchQuery;
@@ -129,7 +129,9 @@ export async function handleGetAllUsers({ payload, user, sql, response }) {
             LEFT JOIN schools s ON u.school_id = s.id
             LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
             WHERE (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
-            ORDER BY u.name
+            ORDER BY 
+                CASE WHEN ${groupBySchool}::boolean THEN s.name END ASC NULLS LAST,
+                u.name ASC
             LIMIT ${isSearching ? null : limit} OFFSET ${isSearching ? 0 : offset};
         `;
         allUsers = rows;
@@ -155,7 +157,9 @@ export async function handleGetAllUsers({ payload, user, sql, response }) {
             LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
             WHERE (u.jurisdiction_id = ANY(${accessibleJurisdictionIds}) OR s.jurisdiction_id = ANY(${accessibleJurisdictionIds}))
             AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
-            ORDER BY u.name
+            ORDER BY 
+                CASE WHEN ${groupBySchool}::boolean THEN s.name END ASC NULLS LAST,
+                u.name ASC
             LIMIT ${isSearching ? null : limit} OFFSET ${isSearching ? 0 : offset};
         `;
         allUsers = rows;
@@ -179,7 +183,9 @@ export async function handleGetAllUsers({ payload, user, sql, response }) {
             LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
             WHERE u.school_id = ${user.school_id} AND u.role IN ('GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH')
             AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
-            ORDER BY u.name
+            ORDER BY 
+                CASE WHEN ${groupBySchool}::boolean THEN s.name END ASC NULLS LAST,
+                u.name ASC
             LIMIT ${isSearching ? null : limit} OFFSET ${isSearching ? 0 : offset};
         `;
         allUsers = rows;
