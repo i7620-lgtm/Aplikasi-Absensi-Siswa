@@ -410,7 +410,7 @@ export const templates = {
                 </div>
                 ` : ''}
                 <div class="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-lg">
-                    <img src="${encodeHTML(state.userProfile.picture)}" alt="User" class="w-12 h-12 rounded-full"/>
+                    <img src="${encodeHTML(state.userProfile.picture)}" alt="User" class="w-12 h-12 rounded-full" loading="lazy" />
                     <div>
                         <p class="font-semibold text-slate-800">${encodeHTML(state.userProfile.name)}</p>
                         <p class="text-sm text-slate-500">${encodeHTML(state.userProfile.email)}</p>
@@ -499,7 +499,7 @@ export const templates = {
                     </button>
                 </div>
                 <div class="flex flex-col sm:flex-row items-center gap-4 mb-8 p-4 bg-slate-50 rounded-lg">
-                    <img src="${encodeHTML(picture)}" alt="User" class="w-16 h-16 rounded-full"/>
+                    <img src="${encodeHTML(picture)}" alt="User" class="w-16 h-16 rounded-full" loading="lazy" />
                     <div class="text-center sm:text-left">
                         <p class="text-lg font-semibold text-slate-800">${encodeHTML(name)}</p>
                         <p class="text-sm text-slate-500">${encodeHTML(email)}</p>
