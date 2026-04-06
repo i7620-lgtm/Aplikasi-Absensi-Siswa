@@ -1,4 +1,4 @@
-
+ 
 
 import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
