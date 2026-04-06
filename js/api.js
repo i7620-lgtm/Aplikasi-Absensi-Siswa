@@ -1,4 +1,4 @@
- 
+
 import { state } from './main.js';
 import { idb } from './db.js';
 
@@ -153,8 +153,8 @@ export const apiService = {
         return await _fetch('/api/data', 'getSchoolStudentData', { schoolId });
     },
 
-    async getAllUsers() {
-        return await _fetch('/api/data', 'getAllUsers');
+    async getAllUsers(params) {
+        return await _fetch('/api/data', 'getAllUsers', params);
     },
 
     async getAllSchools() {
