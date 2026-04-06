@@ -1,4 +1,4 @@
-
+ 
 export async function handleGetUpdateSignal({ payload, user, sql, response, redis }) {
     const schoolId = payload.schoolId || user.school_id;
     if (!schoolId) {
