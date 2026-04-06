@@ -1,4 +1,4 @@
- 
+
 
 import { state, CLASSES } from './main.js';
 
@@ -394,7 +394,7 @@ export const templates = {
 
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
-            <div class="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full">
+            <div class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-[95%] xl:max-w-[1400px]">
                 <div class="flex items-center justify-between mb-6">
                     <h1 class="text-xl font-bold text-slate-800">${encodeHTML(title)}</h1>
                     <div>
@@ -491,7 +491,7 @@ export const templates = {
 
         return `
         <div class="screen active min-h-screen flex flex-col items-center justify-center p-4">
-            <div class="bg-white p-8 rounded-2xl shadow-lg max-w-2xl w-full">
+            <div class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-[95%] xl:max-w-[1400px]">
                 <div class="flex items-center justify-between mb-6">
                     <h1 class="text-2xl font-bold text-slate-800">Beranda Aplikasi</h1>
                     <button id="logoutBtn" class="text-slate-500 hover:text-red-500 transition duration-300 p-2 rounded-full -mr-2" title="Logout">
@@ -512,7 +512,7 @@ export const templates = {
 
                 <div class="mt-8">
                     <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wider text-center mb-4">Pilih Aksi</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     
                     ${['GURU', 'ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN'].includes(primaryRole) ? `
                     <button id="go-to-attendance-btn" class="w-full h-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><div><p class="font-bold">Lakukan & Kelola Absensi</p><p class="text-sm font-normal opacity-90">Catat kehadiran, kelola siswa, dan lihat rekap.</p></div></button>
@@ -586,7 +586,7 @@ export const templates = {
         const isSuperAdmin = state.userProfile?.primaryRole === 'SUPER_ADMIN';
         return `
         <div class="screen active min-h-screen bg-slate-100 p-4 md:p-8">
-            <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden min-h-[600px] flex flex-col">
+            <div class="w-full max-w-[95%] xl:max-w-[1400px] mx-auto bg-white rounded-xl shadow-lg overflow-hidden min-h-[600px] flex flex-col">
                  <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50">
                     <div class="flex items-center gap-4">
                         <button id="admin-panel-back-btn" class="p-2 rounded-full hover:bg-slate-200 text-slate-500 transition">
@@ -795,7 +795,7 @@ export const templates = {
     
     addStudents: (className) => `
         <div class="screen active min-h-screen bg-slate-100 p-4 flex flex-col items-center">
-             <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-3xl">
+             <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-[95%] xl:max-w-[1400px]">
                 <h1 class="text-2xl font-bold text-slate-800 mb-6">Kelola Siswa Kelas ${encodeHTML(className)}</h1>
                 
                 <div class="mb-8 p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 text-center">
@@ -831,7 +831,7 @@ export const templates = {
         
         return `
         <div class="screen active min-h-screen bg-slate-100 p-4">
-            <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg flex flex-col min-h-[80vh]">
+            <div class="w-full max-w-[95%] xl:max-w-[1400px] mx-auto bg-white rounded-xl shadow-lg flex flex-col min-h-[80vh]">
                 <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center sticky top-0 z-10 rounded-t-xl">
                     <div>
                         <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${encodeHTML(className)}</h1>
@@ -905,7 +905,7 @@ export const templates = {
 
     data: () => `
         <div class="screen active min-h-screen bg-slate-100 p-4">
-            <div class="max-w-3xl mx-auto bg-white rounded-xl shadow-lg min-h-[80vh] flex flex-col">
+            <div class="w-full max-w-[95%] xl:max-w-[1400px] mx-auto bg-white rounded-xl shadow-lg min-h-[80vh] flex flex-col">
                 <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
                     <div>
                          <h1 id="data-title" class="text-2xl font-bold text-slate-800">Riwayat Absensi</h1>
@@ -937,7 +937,7 @@ export const templates = {
 
     recap: () => `
         <div class="screen active min-h-screen bg-slate-100 p-4">
-            <div class="max-w-5xl mx-auto bg-white rounded-xl shadow-lg min-h-[80vh] flex flex-col">
+            <div class="w-full max-w-[95%] xl:max-w-[1400px] mx-auto bg-white rounded-xl shadow-lg min-h-[80vh] flex flex-col">
                 <div class="p-6 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row justify-between items-center gap-4">
                     <h1 class="text-2xl font-bold text-slate-800">Rekapitulasi Absensi</h1>
                     <div class="flex gap-2">
@@ -962,7 +962,7 @@ export const templates = {
 
     jurisdictionPanel: () => `
         <div class="screen active min-h-screen bg-slate-100 p-4 md:p-8">
-            <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden min-h-[600px] flex flex-col">
+            <div class="w-full max-w-[95%] xl:max-w-[1400px] mx-auto bg-white rounded-xl shadow-lg overflow-hidden min-h-[600px] flex flex-col">
                 <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                     <div class="flex items-center gap-4">
                         <button id="jurisdiction-panel-back-btn" class="p-2 rounded-full hover:bg-slate-200 text-slate-500 transition">
@@ -1140,7 +1140,7 @@ export const templates = {
     
     parentDashboard: () => `
         <div class="screen active min-h-screen bg-slate-100 p-4">
-             <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg flex flex-col min-h-[80vh]">
+             <div class="w-full max-w-[95%] xl:max-w-[1400px] mx-auto bg-white rounded-xl shadow-lg flex flex-col min-h-[80vh]">
                 <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
                     <h1 class="text-2xl font-bold text-slate-800">Dasbor Orang Tua</h1>
                     <button id="parent-dashboard-back-btn" class="text-slate-500 hover:text-blue-500 p-2 rounded-full hover:bg-slate-200 transition">
@@ -1225,7 +1225,7 @@ export const templates = {
     `,
     holidaySettings: () => `
         <div class="screen active min-h-screen bg-slate-100 p-4">
-             <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg flex flex-col min-h-[80vh]">
+             <div class="w-full max-w-[95%] xl:max-w-[1400px] mx-auto bg-white rounded-xl shadow-lg flex flex-col min-h-[80vh]">
                 <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
                     <h1 class="text-2xl font-bold text-slate-800">Kalender & Pengaturan</h1>
                     <button id="settings-back-btn" class="text-slate-500 hover:text-blue-500 p-2 rounded-full hover:bg-slate-200 transition">
