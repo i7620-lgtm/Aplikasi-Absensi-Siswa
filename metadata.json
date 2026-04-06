@@ -1,4 +1,4 @@
-{
+{ 
   "name": "Aplikasi Absensi Siswa Online",
   "description": "Progressive Web Application (PWA) untuk mencatat absensi siswa secara online. Memungkinkan guru untuk memilih kelas, tanggal, dan mencatat status kehadiran setiap siswa (Hadir, Sakit, Izin, Alpha) dengan mudah.",
   "requestFramePermissions": []
