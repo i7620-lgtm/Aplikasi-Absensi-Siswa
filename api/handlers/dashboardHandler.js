@@ -1,4 +1,4 @@
-
+ 
 
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
@@ -102,7 +102,7 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
             ),
             RegionalStats AS (
                 SELECT
-                    SUM(total_students_per_school)::int AS "totalStudents",
+                    COALESCE(SUM(total_students_per_school), 0)::int AS "totalStudents",
                     COALESCE(jsonb_object_agg(school_id, total_students_per_school), '{}'::jsonb) AS "studentsPerSchool"
                 FROM (
                     SELECT

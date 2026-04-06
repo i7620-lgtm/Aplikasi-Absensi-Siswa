@@ -1,4 +1,4 @@
-
+ 
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
     const { rows } = await sql`
@@ -85,12 +85,15 @@ async function handleSchoolAnalysis(schoolId, startDate, endDate, rangeLabel, sq
 
     // 1. Fetch Raw Data
     const { rows: logs } = await sql`
-        SELECT payload->>'date' as date, payload->>'class' as class_name, payload->'attendance' as attendance
+        SELECT DISTINCT ON (payload->>'class', payload->>'date')
+            payload->>'date' as date, 
+            payload->>'class' as class_name, 
+            payload->'attendance' as attendance
         FROM change_log
         WHERE school_id = ${schoolId}
         AND event_type = 'ATTENDANCE_UPDATED'
         AND (payload->>'date')::date BETWEEN ${startDate} AND ${endDate}
-        ORDER BY (payload->>'date')::date ASC
+        ORDER BY payload->>'class', payload->>'date', id DESC
     `;
 
     if (logs.length === 0) {
@@ -359,20 +362,28 @@ async function handleRegionalAnalysis(jurisdictionId, startDate, endDate, rangeL
     
     // 1. Fetch Aggregated Data
     const { rows: stats } = await sql`
+        WITH latest_logs AS (
+            SELECT DISTINCT ON (school_id, payload->>'class', payload->>'date')
+                school_id,
+                payload
+            FROM change_log
+            WHERE event_type = 'ATTENDANCE_UPDATED'
+              AND (payload->>'date')::date BETWEEN ${startDate} AND ${endDate}
+            ORDER BY school_id, payload->>'class', payload->>'date', id DESC
+        )
         SELECT 
             s.name as school_name,
-            COUNT(cl.id) FILTER (WHERE cl.event_type = 'ATTENDANCE_UPDATED') as total_logs,
-            SUM((value = 'S')::int) as count_s,
-            SUM((value = 'I')::int) as count_i,
-            SUM((value = 'A')::int) as count_a,
-            SUM((value = 'H')::int) as count_h
+            COUNT(DISTINCT ll.school_id || (ll.payload->>'class') || (ll.payload->>'date')) as total_logs,
+            COALESCE(SUM((att.value = 'S')::int), 0) as count_s,
+            COALESCE(SUM((att.value = 'I')::int), 0) as count_i,
+            COALESCE(SUM((att.value = 'A')::int), 0) as count_a,
+            COALESCE(SUM((att.value = 'H')::int), 0) as count_h
         FROM schools s
-        LEFT JOIN change_log cl ON s.id = cl.school_id
-        LEFT JOIN jsonb_each_text(cl.payload->'attendance') ON true
+        LEFT JOIN latest_logs ll ON s.id = ll.school_id 
+        LEFT JOIN LATERAL jsonb_each_text(ll.payload->'attendance') as att(key, value) ON true
         WHERE s.jurisdiction_id = ANY(${jurisdictionIdsInScope})
-        AND (cl.payload->>'date')::date BETWEEN ${startDate} AND ${endDate}
         GROUP BY s.id, s.name
-        HAVING COUNT(cl.id) > 0
+        HAVING COUNT(ll.payload) > 0
     `;
 
     if (stats.length === 0) {

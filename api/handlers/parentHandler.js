@@ -1,4 +1,4 @@
-
+ 
 export default async function handleGetParentData({ user, sql, response }) {
     // Check if the user has been identified as a parent, regardless of their primary role.
     if (!user.isParent) {
@@ -31,7 +31,7 @@ export default async function handleGetParentData({ user, sql, response }) {
                 FROM latest_student_lists l
                 JOIN schools s ON l.school_id = s.id
                 CROSS JOIN jsonb_array_elements(l.students) as student_obj
-                WHERE student_obj->>'parentEmail' = ${parentEmail}
+                WHERE LOWER(student_obj->>'parentEmail') = LOWER(${parentEmail})
             ),
             child_attendance AS (
                 -- Get LATEST attendance logs for the schools where the children are enrolled

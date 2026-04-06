@@ -1,4 +1,4 @@
-
+ 
 import { sql, db } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 import { Redis } from '@upstash/redis';
@@ -24,7 +24,7 @@ import {
 
 
 // --- KONFIGURASI ---
-export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com'];
+export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com', 'mc4diaz@gmail.com'];
 
 // --- SETUP KLIEN EKSTERNAL ---
 let redis = null;
@@ -52,8 +52,8 @@ export default async function handler(request, response) {
         try {
             const clientId = process.env.GOOGLE_CLIENT_ID;
             if (!clientId) {
-                console.error("SERVER_CONFIGURATION_ERROR: GOOGLE_CLIENT_ID is not set in environment variables.");
-                return response.status(503).json({ error: 'Konfigurasi otentikasi server tidak lengkap.' });
+                console.warn("SERVER_CONFIGURATION_WARNING: GOOGLE_CLIENT_ID is not set in environment variables.");
+                return response.status(200).json({ clientId: null, warning: 'Konfigurasi otentikasi server tidak lengkap.' });
             }
             return response.status(200).json({ clientId });
         } catch (e) {

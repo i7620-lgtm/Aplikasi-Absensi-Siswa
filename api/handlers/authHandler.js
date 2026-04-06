@@ -1,4 +1,4 @@
-
+ 
 import { setupDatabase } from '../setup.js';
 
 /**
@@ -36,7 +36,7 @@ async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
         )
         SELECT 1 
         FROM latest_logs, jsonb_array_elements(students) as student
-        WHERE student->>'parentEmail' = ${email}
+        WHERE LOWER(student->>'parentEmail') = LOWER(${email})
         LIMIT 1;
     `;
     const isParent = parentCheck.length > 0;

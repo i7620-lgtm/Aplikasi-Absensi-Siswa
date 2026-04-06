@@ -1,4 +1,4 @@
-
+ 
 // Simple sanitizer to prevent basic XSS by removing HTML tags.
 function sanitize(text) {
     if (!text) return '';
@@ -141,6 +141,9 @@ export async function handleGetHistoryData({ payload, user, sql, response }) {
         return response.status(200).json({ allLogs: [] });
     }
 
+    const hasClassFilter = Boolean(isClassSpecific && classFilter);
+    const safeClassFilter = classFilter || null;
+
     // --- FIX: SQL 'DISTINCT ON' requires exact match with 'ORDER BY' prefix.
     // Removed '::date' cast in ORDER BY to ensure compatibility with 'DISTINCT ON' expression.
     // Both act on the string representation (YYYY-MM-DD) so sorting is preserved correctly.
@@ -151,7 +154,7 @@ export async function handleGetHistoryData({ payload, user, sql, response }) {
         JOIN users u ON cl.user_email = u.email
         WHERE cl.school_id = ANY(${schoolIds}) 
           AND cl.event_type = 'ATTENDANCE_UPDATED'
-          AND (${!isClassSpecific} OR TRIM(cl.payload->>'class') = TRIM(${classFilter}::text))
+          AND (${!hasClassFilter} OR TRIM(cl.payload->>'class') = TRIM(${safeClassFilter}::text))
         ORDER BY cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date' DESC, cl.id DESC
     `;
     
@@ -212,7 +215,7 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
         applicableRegionalIds = jurIds.map(j => j.id);
     }
 
-    const { rows: allHolidays } = await sql`SELECT * FROM holidays`;
+    const { rows: allHolidays } = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`;
     const holidays = allHolidays.filter(h => 
         h.scope === 'NATIONAL' ||
         (h.scope === 'SCHOOL' && h.reference_id === parseInt(schoolId)) ||

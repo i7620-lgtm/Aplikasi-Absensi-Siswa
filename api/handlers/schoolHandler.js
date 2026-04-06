@@ -1,4 +1,4 @@
-
+ 
 // Simple sanitizer to prevent basic XSS by removing HTML tags.
 function sanitize(text) {
     if (!text) return '';
@@ -106,7 +106,7 @@ export async function handleCreateSchool({ payload, user, sql, response }) {
 // --- NEW: Holiday Management Handlers ---
 
 export async function handleManageHoliday({ payload, user, sql, response }) {
-    const { operation, holidayId, date, description } = payload;
+    const { operation, holidayId, date, endDate, description } = payload;
     // operation: 'ADD' or 'DELETE'
 
     // Authorization: Only admins can manage
@@ -150,12 +150,34 @@ export async function handleManageHoliday({ payload, user, sql, response }) {
             if (!referenceId) return response.status(400).json({ error: 'School Admin must have a school.' });
         }
 
-        const { rows } = await sql`
-            INSERT INTO holidays (date, description, scope, reference_id, created_by_email)
-            VALUES (${date}, ${sanitize(description)}, ${scope}, ${referenceId}, ${user.email})
-            RETURNING *
-        `;
-        return response.status(201).json({ holiday: rows[0] });
+        let startDateObj = new Date(date);
+        let endDateObj = endDate ? new Date(endDate) : new Date(date);
+        
+        if (endDateObj < startDateObj) {
+            return response.status(400).json({ error: 'End date cannot be before start date.' });
+        }
+
+        let datesToInsert = [];
+        let current = new Date(startDateObj);
+        while (current <= endDateObj) {
+            const year = current.getFullYear();
+            const month = String(current.getMonth() + 1).padStart(2, '0');
+            const day = String(current.getDate()).padStart(2, '0');
+            datesToInsert.push(`${year}-${month}-${day}`);
+            current.setDate(current.getDate() + 1);
+        }
+
+        let insertedHolidays = [];
+        for (const d of datesToInsert) {
+            const { rows } = await sql`
+                INSERT INTO holidays (date, description, scope, reference_id, created_by_email)
+                VALUES (${d}, ${sanitize(description)}, ${scope}, ${referenceId}, ${user.email})
+                RETURNING id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email
+            `;
+            insertedHolidays.push(rows[0]);
+        }
+
+        return response.status(201).json({ holidays: insertedHolidays });
     }
 
     return response.status(400).json({ error: 'Invalid operation' });
@@ -199,7 +221,7 @@ export async function handleGetHolidays({ user, sql, response }) {
          conditions.push(sql`(scope = 'REGIONAL' AND reference_id = ANY(${myJurisdictionIds}))`);
     }
 
-    const { rows: holidays } = await sql`SELECT * FROM holidays ORDER BY date DESC`;
+    const { rows: holidays } = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`;
     
     const filteredHolidays = holidays.filter(h => {
         if (h.scope === 'NATIONAL') return true;
