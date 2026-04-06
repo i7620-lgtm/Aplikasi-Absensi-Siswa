@@ -11,10 +11,10 @@ export async function handleGetUpdateSignal({ payload, user, sql, response, redi
             const key = `school_version:${schoolId}`;
             const latestVersion = await redis.get(key);
             
-            // If we get a valid number from Redis, return it immediately.
-            if (typeof latestVersion === 'number') {
+            // If we get a valid value from Redis, return it immediately.
+            if (latestVersion !== null && latestVersion !== undefined) {
                 console.log(`Update signal hit from Redis for school ${schoolId}: v${latestVersion}`);
-                return response.status(200).json({ latestVersion });
+                return response.status(200).json({ latestVersion: Number(latestVersion) });
             }
         } catch (e) {
             console.error("Failed to read from Redis, falling back to DB:", e);
