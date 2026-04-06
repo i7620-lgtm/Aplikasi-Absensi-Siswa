@@ -1,4 +1,4 @@
- 
+
 import { SUPER_ADMIN_EMAILS } from '../data.js';
 
 async function getSubJurisdictionIds(jurisdictionId, sql) {
@@ -98,15 +98,28 @@ export async function handleGetInitialData({ user, sql, response }) {
 }
 
 
-export async function handleGetAllUsers({ user, sql, response }) {
+export async function handleGetAllUsers({ payload, user, sql, response }) {
     const authorizedRoles = ['SUPER_ADMIN', 'ADMIN_SEKOLAH', 'ADMIN_DINAS_PENDIDIKAN'];
     if (!authorizedRoles.includes(user.role)) {
          return response.status(403).json({ error: 'Forbidden: Access denied' });
     }
 
-    let usersQuery;
+    const { page = 1, limit = 10, searchQuery = '' } = payload || {};
+    const offset = (page - 1) * limit;
+    const searchPattern = searchQuery ? `%${searchQuery}%` : null;
+    const isSearching = !!searchQuery;
+
+    let totalCount = 0;
+    let allUsers = [];
+
     if (user.role === 'SUPER_ADMIN') {
-        usersQuery = sql`
+        const countRes = await sql`
+            SELECT COUNT(*) as total FROM users u
+            WHERE (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
+        `;
+        totalCount = parseInt(countRes.rows[0].total, 10);
+
+        const { rows } = await sql`
             SELECT 
                 u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes,
                 s.name as school_name,
@@ -115,13 +128,24 @@ export async function handleGetAllUsers({ user, sql, response }) {
             FROM users u
             LEFT JOIN schools s ON u.school_id = s.id
             LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
-            ORDER BY u.name;
+            WHERE (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
+            ORDER BY u.name
+            LIMIT ${isSearching ? null : limit} OFFSET ${isSearching ? 0 : offset};
         `;
+        allUsers = rows;
     } else if (user.role === 'ADMIN_DINAS_PENDIDIKAN') {
         const accessibleJurisdictionIds = await getSubJurisdictionIds(user.jurisdiction_id, sql);
-        if (accessibleJurisdictionIds.length === 0) return response.status(200).json({ allUsers: [] });
+        if (accessibleJurisdictionIds.length === 0) return response.status(200).json({ allUsers: [], totalCount: 0 });
         
-        usersQuery = sql`
+        const countRes = await sql`
+            SELECT COUNT(*) as total FROM users u
+            LEFT JOIN schools s ON u.school_id = s.id
+            WHERE (u.jurisdiction_id = ANY(${accessibleJurisdictionIds}) OR s.jurisdiction_id = ANY(${accessibleJurisdictionIds}))
+            AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
+        `;
+        totalCount = parseInt(countRes.rows[0].total, 10);
+
+        const { rows } = await sql`
             SELECT 
                 u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes,
                 s.name as school_name,
@@ -129,13 +153,23 @@ export async function handleGetAllUsers({ user, sql, response }) {
             FROM users u
             LEFT JOIN schools s ON u.school_id = s.id
             LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
-            WHERE u.jurisdiction_id = ANY(${accessibleJurisdictionIds})
-            OR s.jurisdiction_id = ANY(${accessibleJurisdictionIds})
-            ORDER BY u.name;
+            WHERE (u.jurisdiction_id = ANY(${accessibleJurisdictionIds}) OR s.jurisdiction_id = ANY(${accessibleJurisdictionIds}))
+            AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
+            ORDER BY u.name
+            LIMIT ${isSearching ? null : limit} OFFSET ${isSearching ? 0 : offset};
         `;
+        allUsers = rows;
     } else { // ADMIN_SEKOLAH
-        if (!user.school_id) return response.status(200).json({ allUsers: [] });
-        usersQuery = sql`
+        if (!user.school_id) return response.status(200).json({ allUsers: [], totalCount: 0 });
+        
+        const countRes = await sql`
+            SELECT COUNT(*) as total FROM users u
+            WHERE u.school_id = ${user.school_id} AND u.role IN ('GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH')
+            AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
+        `;
+        totalCount = parseInt(countRes.rows[0].total, 10);
+
+        const { rows } = await sql`
             SELECT 
                 u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes,
                 s.name as school_name,
@@ -144,11 +178,14 @@ export async function handleGetAllUsers({ user, sql, response }) {
             LEFT JOIN schools s ON u.school_id = s.id
             LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
             WHERE u.school_id = ${user.school_id} AND u.role IN ('GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH')
-            ORDER BY u.name;
+            AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
+            ORDER BY u.name
+            LIMIT ${isSearching ? null : limit} OFFSET ${isSearching ? 0 : offset};
         `;
+        allUsers = rows;
     }
-    const { rows: allUsers } = await usersQuery;
-    return response.status(200).json({ allUsers });
+    
+    return response.status(200).json({ allUsers, totalCount });
 }
 
 
