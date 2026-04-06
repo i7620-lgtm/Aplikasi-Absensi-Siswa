@@ -86,7 +86,7 @@ export async function handleGetInitialData({ user, sql, response }) {
         }
     }
 
-    const { rows: allHolidays } = await sql`SELECT * FROM holidays`; 
+    const { rows: allHolidays } = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`; 
     
     holidays = allHolidays.filter(h => 
         h.scope === 'NATIONAL' ||
@@ -204,6 +204,17 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
          
          if (['SUPER_ADMIN', 'ADMIN_DINAS_PENDIDIKAN'].includes(newRole)) {
             return response.status(403).json({ error: 'Anda tidak dapat menetapkan peran admin tingkat tinggi.' });
+         }
+
+         if (newJurisdictionId && newJurisdictionId !== "" && !accessibleJurisdictionIds.includes(Number(newJurisdictionId))) {
+             return response.status(403).json({ error: 'Anda tidak dapat menetapkan yurisdiksi di luar wilayah Anda.' });
+         }
+
+         if (newSchoolId && newSchoolId !== "") {
+             const { rows: newSchoolRows } = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${newSchoolId}`;
+             if (newSchoolRows.length === 0 || !accessibleJurisdictionIds.includes(newSchoolRows[0].jurisdiction_id)) {
+                 return response.status(403).json({ error: 'Anda tidak dapat menetapkan sekolah di luar wilayah Anda.' });
+             }
          }
     }
     
