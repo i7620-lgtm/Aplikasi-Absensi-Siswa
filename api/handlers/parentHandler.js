@@ -1,4 +1,4 @@
-
+ 
 export default async function handleGetParentData({ user, sql, response }) {
     // Check if the user has been identified as a parent, regardless of their primary role.
     if (!user.isParent) {
