@@ -1,4 +1,4 @@
-
+ 
 // Simple sanitizer to prevent basic XSS by removing HTML tags.
 function sanitize(text) {
     if (!text) return '';
