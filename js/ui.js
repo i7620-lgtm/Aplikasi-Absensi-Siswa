@@ -621,7 +621,7 @@ async function renderMultiRoleHomeScreen() {
 // --- DASHBOARD LOGIC ---
 
 function getWeekRange(date) {
-    const d = new Date(date);
+    const d = new Date(date + 'T00:00:00');
     d.setHours(0, 0, 0, 0);
     const dayOfWeek = d.getDay(); 
     const diffToMonday = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
@@ -635,7 +635,7 @@ function updateDashboardDateDisplay() {
     const dateDisplay = document.getElementById('dashboard-header-date');
     if (!dateDisplay) return;
     const { chartViewMode, selectedDate } = state.dashboard;
-    const dateObj = new Date(selectedDate);
+    const dateObj = new Date(selectedDate + 'T00:00:00');
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     
     if (chartViewMode === 'weekly') {
@@ -715,11 +715,11 @@ function attachDatePickerListeners() {
         const isHidden = popover.classList.contains('hidden');
         if (isHidden) {
             popover.classList.remove('hidden');
-            renderCalendar(popover, new Date(state.dashboard.selectedDate), async (newDate, keepOpen = false) => {
+            renderCalendar(popover, new Date(state.dashboard.selectedDate + 'T00:00:00'), async (newDate, keepOpen = false) => {
                 await setState({ dashboard: { ...state.dashboard, selectedDate: newDate, aiRecommendation: { ...state.dashboard.aiRecommendation, result: null, error: null } } });
                 updateDashboardDateDisplay();
                 if (!keepOpen) popover.classList.add('hidden');
-                else renderCalendar(popover, new Date(newDate), arguments.callee);
+                else renderCalendar(popover, new Date(newDate + 'T00:00:00'), arguments.callee);
                 
                 updateDashboardContent(state.dashboard.data);
                 dashboardPoller(); 
@@ -1501,38 +1501,134 @@ async function filterAndRenderHistory() {
             return matchName && matchStatus && matchStart && matchEnd;
         });
 
+        let finalLogs = [...filtered];
+
+        if (historyClassFilter && !dataScreenFilters.studentName && dataScreenFilters.status === 'all') {
+            const today = new Date();
+            const m = today.getMonth();
+            const y = today.getFullYear();
+            const sem = (m >= 6) ? 1 : 2;
+            let startDateStr;
+            if (sem === 1) {
+                startDateStr = `${y}-07-01`;
+            } else {
+                startDateStr = `${y}-01-01`;
+            }
+
+            let loopStart = new Date(startDateStr + 'T00:00:00');
+            if (dataScreenFilters.startDate) {
+                const filterStart = new Date(dataScreenFilters.startDate + 'T00:00:00');
+                if (filterStart < loopStart) {
+                    loopStart = filterStart;
+                }
+            }
+
+            let actualEnd = today;
+            if (dataScreenFilters.endDate) {
+                const filterEnd = new Date(dataScreenFilters.endDate + 'T23:59:59');
+                if (filterEnd < actualEnd) {
+                    actualEnd = filterEnd;
+                }
+            }
+
+            const workDaysArray = state.schoolSettings?.workDays || [1,2,3,4,5,6];
+            let current = new Date(loopStart);
+
+            const holidayDates = (state.holidays || []).map(h => {
+                let d = h.date;
+                if (d instanceof Date) {
+                    const hy = d.getFullYear();
+                    const hm = String(d.getMonth() + 1).padStart(2, '0');
+                    const hday = String(d.getDate()).padStart(2, '0');
+                    return `${hy}-${hm}-${hday}`;
+                }
+                if (typeof d === 'string') return d.substring(0, 10);
+                return null;
+            }).filter(Boolean);
+
+            const recordedDates = finalLogs.map(l => l.date);
+
+            while (current <= actualEnd) {
+                const year = current.getFullYear();
+                const month = String(current.getMonth() + 1).padStart(2, '0');
+                const day = String(current.getDate()).padStart(2, '0');
+                const dateStr = `${year}-${month}-${day}`;
+                
+                const isWorkDay = workDaysArray.includes(current.getDay());
+                const isHoliday = holidayDates.includes(dateStr);
+                
+                const logDate = new Date(dateStr + 'T00:00:00');
+                const matchStart = dataScreenFilters.startDate ? logDate >= new Date(dataScreenFilters.startDate + 'T00:00:00') : true;
+                const matchEnd = dataScreenFilters.endDate ? logDate <= new Date(dataScreenFilters.endDate + 'T23:59:59') : true;
+
+                if (matchStart && matchEnd) {
+                    if (isWorkDay) {
+                        if (isHoliday && !recordedDates.includes(dateStr)) {
+                            finalLogs.push({
+                                class: historyClassFilter,
+                                date: dateStr,
+                                teacherName: 'Sistem',
+                                attendance: { "Sistem": "L" },
+                                isVirtualHoliday: true
+                            });
+                        } else if (!isHoliday && !recordedDates.includes(dateStr)) {
+                            finalLogs.push({
+                                class: historyClassFilter,
+                                date: dateStr,
+                                teacherName: '-',
+                                attendance: {},
+                                isUnexecuted: true
+                            });
+                        }
+                    }
+                }
+                current.setDate(current.getDate() + 1);
+            }
+        }
+
+        finalLogs.sort((a, b) => {
+            if (a.isUnexecuted && !b.isUnexecuted) return -1;
+            if (!a.isUnexecuted && b.isUnexecuted) return 1;
+            return new Date(b.date) - new Date(a.date);
+        });
+
         const container = document.getElementById('data-container');
         if (container) {
-            container.innerHTML = filtered.length ? filtered.map(log => {
-                const dateObj = new Date(log.date);
+            container.innerHTML = finalLogs.length ? finalLogs.map(log => {
+                const dateObj = new Date(log.date + 'T00:00:00');
                 const dateStr = dateObj.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
                 const statuses = Object.values(log.attendance);
                 const s = statuses.filter(x => x === 'S').length;
                 const i = statuses.filter(x => x === 'I').length;
                 const a = statuses.filter(x => x === 'A').length;
                 const h = statuses.filter(x => x === 'H').length;
-                const isHoliday = statuses.every(x => x === 'L');
+                
+                let statusHtml = '';
+                if (log.isUnexecuted) {
+                    statusHtml = `<span class="bg-red-100 text-red-800 text-xs font-bold px-3 py-1 rounded-full">BELUM DIISI</span>`;
+                } else if (log.isVirtualHoliday || (statuses.length > 0 && statuses.every(x => x === 'L'))) {
+                    statusHtml = `<span class="bg-orange-100 text-orange-800 text-xs font-bold px-3 py-1 rounded-full">LIBUR</span>`;
+                } else {
+                    statusHtml = `<div class="flex flex-wrap gap-2 text-xs font-bold">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded">H: ${h}</span>
+                                <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded">S: ${s}</span>
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">I: ${i}</span>
+                                <span class="bg-red-100 text-red-800 px-2 py-1 rounded">A: ${a}</span>
+                               </div>`;
+                }
 
                 return `
-                <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm hover:shadow-md transition mb-4">
-                    <div class="flex justify-between items-start mb-3">
+                <div class="bg-white border border-slate-200 p-4 rounded-xl shadow-sm hover:shadow-md transition mb-4 ${log.isUnexecuted ? 'border-l-4 border-l-red-500' : ''}">
+                    <div class="flex flex-col sm:flex-row justify-between items-start mb-3 gap-2">
                         <div>
                             <h3 class="font-bold text-slate-800 text-lg">Kelas ${encodeHTML(log.class)}</h3>
                             <p class="text-slate-500 text-sm">${dateStr}</p>
                             <p class="text-xs text-slate-400 mt-1">Dicatat oleh: ${encodeHTML(log.teacherName || 'Guru')}</p>
                         </div>
-                        ${isHoliday 
-                            ? `<span class="bg-orange-100 text-orange-800 text-xs font-bold px-3 py-1 rounded-full">LIBUR</span>`
-                            : `<div class="flex gap-2 text-xs font-bold">
-                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded">H: ${h}</span>
-                                <span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded">S: ${s}</span>
-                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">I: ${i}</span>
-                                <span class="bg-red-100 text-red-800 px-2 py-1 rounded">A: ${a}</span>
-                               </div>`
-                        }
+                        ${statusHtml}
                     </div>
                     <div class="mt-3 border-t border-slate-100 pt-2">
-                        <button class="text-blue-600 hover:text-blue-800 text-sm font-semibold edit-log-btn" data-class="${log.class}" data-date="${log.date}">Edit Absensi</button>
+                        <button class="text-blue-600 hover:text-blue-800 text-sm font-semibold edit-log-btn" data-class="${log.class}" data-date="${log.date}">${log.isUnexecuted ? 'Isi Absensi' : 'Edit Absensi'}</button>
                     </div>
                 </div>`;
             }).join('') : '<div class="text-center py-10 text-slate-500">Tidak ada data ditemukan.</div>';
@@ -1640,7 +1736,7 @@ function renderRecapScreen() {
                 endDate
             };
             
-            const { recapData } = await apiService.getRecapData(payload);
+            const { recapData, recordedDates } = await apiService.getRecapData(payload);
             
             if (state.recapSortOrder === 'total') {
                 recapData.sort((a, b) => b.total - a.total);
@@ -1648,10 +1744,89 @@ function renderRecapScreen() {
                 recapData.sort((a, b) => (a.originalIndex || 0) - (b.originalIndex || 0));
             }
 
+            // Calculate summary
+            let totalRecorded = recordedDates ? recordedDates.length : 0;
+            let totalWorkDays = 0;
+            let totalHolidays = 0;
+            const workDaysArray = state.schoolSettings?.workDays || [1,2,3,4,5,6]; // Default Mon-Sat
+            let current = new Date(startDate + 'T00:00:00');
+            const end = new Date(endDate + 'T23:59:59');
+            const today = new Date();
+            const actualEnd = end > today ? today : end;
+            
+            const holidayDates = (state.holidays || []).map(h => {
+                let d = h.date;
+                if (d instanceof Date) {
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${day}`;
+                }
+                if (typeof d === 'string') return d.substring(0, 10);
+                return null;
+            }).filter(Boolean);
+
+            let holidayList = [];
+            let unexecutedList = [];
+
+            while (current <= actualEnd) {
+                const year = current.getFullYear();
+                const month = String(current.getMonth() + 1).padStart(2, '0');
+                const day = String(current.getDate()).padStart(2, '0');
+                const dateStr = `${year}-${month}-${day}`;
+                
+                const isWorkDay = workDaysArray.includes(current.getDay());
+                const isHoliday = holidayDates.includes(dateStr);
+                
+                if (isWorkDay) {
+                    if (isHoliday) {
+                        totalHolidays++;
+                        holidayList.push(dateStr);
+                    } else {
+                        totalWorkDays++;
+                        const isRecorded = recordedDates && recordedDates.some(r => r.date === dateStr);
+                        // If it's today, we only count it as unexecuted if it's not recorded yet.
+                        if (!isRecorded) {
+                            unexecutedList.push(dateStr);
+                        }
+                    }
+                }
+                current.setDate(current.getDate() + 1);
+            }
+            
+            const totalUnexecuted = unexecutedList.length;
+
+            let summaryHtml = `
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center relative group">
+                        <p class="text-xs text-slate-500 uppercase font-semibold">Hari Libur</p>
+                        <p class="text-2xl font-bold text-slate-800">${totalHolidays}</p>
+                        ${holidayList.length > 0 ? `
+                        <div class="absolute z-10 hidden group-hover:block bg-slate-800 text-white text-xs rounded p-2 bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 max-h-48 overflow-y-auto">
+                            ${holidayList.map(d => `<div>${d}</div>`).join('')}
+                        </div>
+                        ` : ''}
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
+                        <p class="text-xs text-slate-500 uppercase font-semibold">Sudah Dilaksanakan</p>
+                        <p class="text-2xl font-bold text-blue-600">${totalRecorded}</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center relative group">
+                        <p class="text-xs text-slate-500 uppercase font-semibold">Belum Dilaksanakan</p>
+                        <p class="text-2xl font-bold text-red-600">${totalUnexecuted}</p>
+                        ${unexecutedList.length > 0 ? `
+                        <div class="absolute z-10 hidden group-hover:block bg-slate-800 text-white text-xs rounded p-2 bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 max-h-48 overflow-y-auto">
+                            ${unexecutedList.map(d => `<div>${d}</div>`).join('')}
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+
             if (recapData.length === 0) {
-                container.innerHTML = '<div class="text-center py-10 text-slate-500">Belum ada data absensi untuk periode ini.</div>';
+                container.innerHTML = summaryHtml + '<div class="text-center py-10 text-slate-500">Belum ada data absensi untuk periode ini.</div>';
             } else {
-                let html = `
+                let html = summaryHtml + `
                     <div class="overflow-x-auto rounded-lg border border-slate-200 shadow-sm">
                     <table class="min-w-full bg-white text-sm">
                         <thead class="bg-slate-50 border-b border-slate-200">
@@ -1949,8 +2124,9 @@ function renderHolidaySettingsScreen() {
     
     document.getElementById('confirm-add-holiday').addEventListener('click', async () => {
         const date = document.getElementById('new-holiday-date').value;
+        const endDate = document.getElementById('new-holiday-end-date').value;
         const desc = document.getElementById('new-holiday-desc').value;
-        const success = await handleManageHoliday('ADD', date, desc);
+        const success = await handleManageHoliday('ADD', date, desc, null, endDate);
         if (success) {
             document.getElementById('add-holiday-modal').classList.add('hidden');
             renderScreen('holidaySettings'); // Re-render to show new holiday
