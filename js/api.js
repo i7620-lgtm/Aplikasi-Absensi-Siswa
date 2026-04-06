@@ -206,8 +206,8 @@ export const apiService = {
     },
 
     // Holiday & Settings APIs
-    async manageHoliday(operation, holidayId, date, description) {
-        return await _fetch('/api/data', 'manageHoliday', { operation, holidayId, date, description });
+    async manageHoliday(operation, holidayId, date, description, endDate = null) {
+        return await _fetch('/api/data', 'manageHoliday', { operation, holidayId, date, description, endDate });
     },
     async updateSchoolSettings(workDays, schoolId = null) {
         return await _fetch('/api/data', 'updateSchoolSettings', { workDays, schoolId });
