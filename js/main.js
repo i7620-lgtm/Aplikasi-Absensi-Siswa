@@ -1,4 +1,4 @@
- 
+
 
 import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
@@ -60,6 +60,8 @@ export let state = {
     recapPeriod: null, 
     adminPanel: {
         users: [],
+        totalUsers: 0,
+        searchQuery: '',
         schools: [],
         isLoading: true,
         polling: {
