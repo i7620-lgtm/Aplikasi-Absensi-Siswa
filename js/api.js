@@ -9,27 +9,9 @@ async function _fetch(url, action, payload = {}, retryCount = 0) {
         userEmail: state.userProfile?.email || null,
     };
     
-    // For save actions, if offline, queue it.
+    // For save actions, if offline, throw an error immediately.
     if (action === 'saveData' && !navigator.onLine) {
-        console.log(`Offline mode detected. Queuing action: ${action}`);
-        try {
-            const queue = await idb.getQueue();
-            const offlineAction = { url, body };
-            queue.push(offlineAction);
-            await idb.setQueue(queue);
-            
-            // Register a sync event with the service worker
-            if ('serviceWorker' in navigator && 'SyncManager' in window) {
-                navigator.serviceWorker.ready.then(sw => {
-                    sw.sync.register('sync-offline-actions');
-                }).catch(err => console.error("Sync registration failed:", err));
-            }
-            
-            return Promise.resolve({ success: true, queued: true, savedBy: state.userProfile.name });
-        } catch (error) {
-            console.error('Failed to queue offline action:', error);
-            throw new Error('Gagal menyimpan data secara lokal. Coba lagi.');
-        }
+        throw new Error('Koneksi terputus. Gagal menyimpan data, pastikan Anda terhubung ke internet.');
     }
     
     // Create an abort controller for timeout
