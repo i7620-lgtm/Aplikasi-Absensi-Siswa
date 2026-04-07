@@ -1,4 +1,4 @@
-const CACHE_NAME = 'absensi-cache-v12'; // Updated version
+const CACHE_NAME = 'absensi-cache-v13'; // Updated version for CDN caching
 const localUrlsToCache = [
   '/',
   '/index.html',
@@ -10,6 +10,14 @@ const localUrlsToCache = [
   '/js/db.js',
   '/js/templates.js',
   '/js/ui.js',
+];
+
+const CDN_ORIGINS = [
+  'https://cdn.tailwindcss.com',
+  'https://cdn.sheetjs.com',
+  'https://cdn.jsdelivr.net',
+  'https://fonts.googleapis.com',
+  'https://fonts.gstatic.com'
 ];
 
 self.addEventListener('install', event => {
@@ -29,28 +37,36 @@ self.addEventListener('fetch', event => {
 
   const url = new URL(event.request.url);
 
-  // FULL ONLINE: API calls and cross-origin requests (like Google profiles) always go to network
-  if (url.pathname.startsWith('/api/') || url.origin !== location.origin) {
+  // FULL ONLINE: API calls and unapproved cross-origin requests always go to network
+  if (url.pathname.startsWith('/api/') || (url.origin !== location.origin && !CDN_ORIGINS.includes(url.origin))) {
      event.respondWith(fetch(event.request));
      return;
   }
 
-  // For local static assets: Network First, cache only valid 200 responses
+  // For local static assets AND approved CDNs: Stale-While-Revalidate Strategy
   event.respondWith(
-    fetch(event.request)
-      .then(networkResponse => {
-        // Only cache valid, non-opaque responses
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+    caches.match(event.request).then(cachedResponse => {
+      if (cachedResponse) {
+        // Fetch in background to update cache
+        fetch(event.request).then(networkResponse => {
+          if (networkResponse && networkResponse.status === 200 && (networkResponse.type === 'basic' || networkResponse.type === 'cors')) {
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, networkResponse));
+          }
+        }).catch(() => {}); // Ignore network errors in background
+        return cachedResponse;
+      }
+
+      // If not in cache, fetch from network
+      return fetch(event.request).then(networkResponse => {
+        if (networkResponse && networkResponse.status === 200 && (networkResponse.type === 'basic' || networkResponse.type === 'cors')) {
             const responseToCache = networkResponse.clone();
             caches.open(CACHE_NAME).then(cache => {
                 cache.put(event.request, responseToCache);
             });
         }
         return networkResponse;
-      })
-      .catch(() => {
-        return caches.match(event.request);
-      })
+      });
+    })
   );
 });
 
