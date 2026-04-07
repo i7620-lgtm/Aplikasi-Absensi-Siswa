@@ -11,7 +11,7 @@ const notificationEl = document.getElementById('notification');
 const offlineIndicator = document.getElementById('offline-indicator');
 
 // --- POLLING & PAGINATION CONFIGURATION ---
-const POLLING_BACKOFF_SEQUENCE = [10000, 20000, 40000, 80000, 150000, 300000];
+const POLLING_BACKOFF_SEQUENCE = [60000, 120000, 300000, 600000]; // 1m, 2m, 5m, 10m
 const INITIAL_POLLING_INTERVAL = POLLING_BACKOFF_SEQUENCE[0]; 
 const USERS_PER_PAGE = 10;
 
