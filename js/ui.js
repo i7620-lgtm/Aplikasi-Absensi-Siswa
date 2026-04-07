@@ -1,4 +1,4 @@
- 
+
 
 
 import { state, setState, navigateTo, handleStartAttendance, handleManageStudents, handleViewHistory, handleDownloadData, handleSaveNewStudents, handleExcelImport, handleDownloadTemplate, handleSaveAttendance, handleGenerateAiRecommendation, handleCreateSchool, handleViewRecap, handleDownloadFullSchoolReport, handleMigrateLegacyData, handleDownloadJurisdictionReport, handleManageHoliday, handleSaveSchoolSettings, handleMarkClassAsHoliday, handleSelectSchoolForConfig } from './main.js';
@@ -11,7 +11,7 @@ const notificationEl = document.getElementById('notification');
 const offlineIndicator = document.getElementById('offline-indicator');
 
 // --- POLLING & PAGINATION CONFIGURATION ---
-const POLLING_BACKOFF_SEQUENCE = [10000, 20000, 40000, 80000, 150000, 300000];
+const POLLING_BACKOFF_SEQUENCE = [60000, 120000, 300000, 600000]; // 1m, 2m, 5m, 10m
 const INITIAL_POLLING_INTERVAL = POLLING_BACKOFF_SEQUENCE[0]; 
 const USERS_PER_PAGE = 10;
 
@@ -1206,13 +1206,14 @@ function renderAdminPanelTable() {
     if (!container || !paginationContainer) return;
 
     let users = state.adminPanel.users;
-    if (state.adminPanel.groupBySchool) {
-        users.sort((a, b) => (a.school_name || '').localeCompare(b.school_name || ''));
-    }
+    // Client-side sorting removed because pagination is server-side. 
+    // Sorting is now handled by the backend.
 
-    const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
-    const startIndex = (state.adminPanel.currentPage - 1) * USERS_PER_PAGE;
-    const paginatedUsers = users.slice(startIndex, startIndex + USERS_PER_PAGE);
+    // Since we use server-side pagination, users array is already the paginated slice
+    // unless there is a search query, in which case it's all matching users.
+    const isSearching = !!state.adminPanel.searchQuery;
+    const totalPages = isSearching ? 1 : Math.ceil(state.adminPanel.totalUsers / USERS_PER_PAGE);
+    const paginatedUsers = users;
 
     const isAllSelected = paginatedUsers.length > 0 && paginatedUsers.every(u => state.adminPanel.selectedUsers.includes(u.email));
 
@@ -1244,7 +1245,7 @@ function renderAdminPanelTable() {
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                     <div class="flex items-center">
-                        <img class="h-8 w-8 rounded-full" src="${encodeHTML(u.picture)}" alt="">
+                        <img class="h-8 w-8 rounded-full" src="${encodeHTML(u.picture)}" alt="" loading="lazy">
                         <div class="ml-4">
                             <div class="text-sm font-medium text-slate-900">${encodeHTML(u.name)}</div>
                             <div class="text-sm text-slate-500">${encodeHTML(u.email)}</div>
@@ -1268,14 +1269,18 @@ function renderAdminPanelTable() {
     container.innerHTML = html;
 
     // Pagination Controls
-    paginationContainer.innerHTML = `
-        <button id="prev-page-btn" class="px-3 py-1 rounded border ${state.adminPanel.currentPage === 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}" ${state.adminPanel.currentPage === 1 ? 'disabled' : ''}>Sebelumnya</button>
-        <span class="text-sm text-slate-600">Halaman ${state.adminPanel.currentPage} dari ${totalPages || 1}</span>
-        <button id="next-page-btn" class="px-3 py-1 rounded border ${state.adminPanel.currentPage >= totalPages ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}" ${state.adminPanel.currentPage >= totalPages ? 'disabled' : ''}>Berikutnya</button>
-    `;
+    if (isSearching) {
+        paginationContainer.innerHTML = `<span class="text-sm text-slate-600">Menampilkan semua hasil pencarian (${paginatedUsers.length} pengguna)</span>`;
+    } else {
+        paginationContainer.innerHTML = `
+            <button id="prev-page-btn" class="px-3 py-1 rounded border ${state.adminPanel.currentPage === 1 ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}" ${state.adminPanel.currentPage === 1 ? 'disabled' : ''}>Sebelumnya</button>
+            <span class="text-sm text-slate-600">Halaman ${state.adminPanel.currentPage} dari ${totalPages || 1} (Total: ${state.adminPanel.totalUsers})</span>
+            <button id="next-page-btn" class="px-3 py-1 rounded border ${state.adminPanel.currentPage >= totalPages ? 'text-slate-300 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}" ${state.adminPanel.currentPage >= totalPages ? 'disabled' : ''}>Berikutnya</button>
+        `;
 
-    document.getElementById('prev-page-btn').onclick = () => { if(state.adminPanel.currentPage > 1) { state.adminPanel.currentPage--; renderAdminPanelTable(); renderBulkActionsBar(); } };
-    document.getElementById('next-page-btn').onclick = () => { if(state.adminPanel.currentPage < totalPages) { state.adminPanel.currentPage++; renderAdminPanelTable(); renderBulkActionsBar(); } };
+        document.getElementById('prev-page-btn').onclick = () => { if(state.adminPanel.currentPage > 1) { state.adminPanel.currentPage--; adminPanelPoller(); renderBulkActionsBar(); } };
+        document.getElementById('next-page-btn').onclick = () => { if(state.adminPanel.currentPage < totalPages) { state.adminPanel.currentPage++; adminPanelPoller(); renderBulkActionsBar(); } };
+    }
 
     document.getElementById('select-all-users')?.addEventListener('change', (e) => {
         const isChecked = e.target.checked;
@@ -1313,13 +1318,19 @@ async function adminPanelPoller() {
     let nextInterval = getNextInterval(state.adminPanel.polling.interval);
 
     try {
-        const { allUsers } = await apiService.getAllUsers();
+        const { allUsers, totalCount } = await apiService.getAllUsers({
+            page: state.adminPanel.currentPage,
+            limit: USERS_PER_PAGE,
+            searchQuery: state.adminPanel.searchQuery,
+            groupBySchool: state.adminPanel.groupBySchool
+        });
         const { allSchools } = await apiService.getAllSchools();
         
         await setState({ 
             adminPanel: { 
                 ...state.adminPanel, 
                 users: allUsers, 
+                totalUsers: totalCount || 0,
                 schools: allSchools, 
                 isLoading: false, 
                 polling: { ...state.adminPanel.polling, interval: INITIAL_POLLING_INTERVAL }
@@ -1341,9 +1352,24 @@ function renderAdminPanelScreen() {
     document.getElementById('group-by-school-toggle')?.addEventListener('change', (e) => {
         state.adminPanel.groupBySchool = e.target.checked;
         state.adminPanel.currentPage = 1;
-        renderAdminPanelTable();
+        adminPanelPoller(); // Fetch new data with grouping
     });
     document.getElementById('add-school-btn')?.addEventListener('click', handleCreateSchool);
+    
+    // Search input handler with debounce
+    let searchTimeout;
+    const searchInput = document.getElementById('admin-search-input');
+    if (searchInput) {
+        searchInput.value = state.adminPanel.searchQuery;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                state.adminPanel.searchQuery = e.target.value.trim();
+                state.adminPanel.currentPage = 1; // Reset to page 1 on search
+                adminPanelPoller(); // Trigger fetch
+            }, 300); // 300ms debounce
+        });
+    }
     
     renderAdminPanelTable(); 
     renderBulkActionsBar();
@@ -1677,16 +1703,70 @@ function renderDataScreen() {
     filterAndRenderHistory();
 }
 
-function generateSemesterOptions() {
+async function generateSemesterOptions() {
+    try {
+        // Fetch recorded dates to determine available semesters
+        const payload = {
+            schoolId: state.adminActingAsSchool?.id || state.userProfile?.school_id,
+        };
+        const { recordedDates } = await apiService.getRecapData(payload);
+        
+        if (recordedDates && recordedDates.length > 0) {
+            const semesters = new Set();
+            recordedDates.forEach(record => {
+                const date = new Date(record.date);
+                const year = date.getFullYear();
+                const month = date.getMonth(); // 0-11
+                // Semester 1 (Ganjil): July (6) - Dec (11) -> Year/Year+1
+                // Semester 2 (Genap): Jan (0) - June (5) -> Year-1/Year
+                if (month >= 6) {
+                    semesters.add(`${year}-1`);
+                } else {
+                    semesters.add(`${year}-2`);
+                }
+            });
+
+            const options = Array.from(semesters).map(val => {
+                const [year, sem] = val.split('-').map(Number);
+                if (sem === 1) {
+                    return { label: `Semester Ganjil ${year}/${year+1}`, value: val, sortKey: `${year}1` };
+                } else {
+                    return { label: `Semester Genap ${year-1}/${year}`, value: val, sortKey: `${year-1}2` };
+                }
+            });
+
+            // Sort descending (newest first)
+            options.sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+            
+            // Remove sortKey before returning
+            return options.map(({ label, value }) => ({ label, value }));
+        }
+    } catch (error) {
+        console.error("Failed to fetch recorded dates for semester options:", error);
+    }
+
+    // Fallback if no data or error
     const currentYear = new Date().getFullYear();
-    return [
-        { label: `Semester Ganjil ${currentYear}/${currentYear+1}`, value: `${currentYear}-1` },
-        { label: `Semester Genap ${currentYear}/${currentYear+1}`, value: `${currentYear}-2` },
-        { label: `Semester Genap ${currentYear-1}/${currentYear}`, value: `${currentYear-1}-2` },
-    ];
+    const currentMonth = new Date().getMonth();
+    
+    // If we are in Genap (Jan-Jun), show current Genap, previous Ganjil, previous Genap
+    // If we are in Ganjil (Jul-Dec), show current Ganjil, previous Genap, previous Ganjil
+    if (currentMonth < 6) {
+        return [
+            { label: `Semester Genap ${currentYear-1}/${currentYear}`, value: `${currentYear}-2` },
+            { label: `Semester Ganjil ${currentYear-1}/${currentYear}`, value: `${currentYear-1}-1` },
+            { label: `Semester Genap ${currentYear-2}/${currentYear-1}`, value: `${currentYear-1}-2` },
+        ];
+    } else {
+        return [
+            { label: `Semester Ganjil ${currentYear}/${currentYear+1}`, value: `${currentYear}-1` },
+            { label: `Semester Genap ${currentYear-1}/${currentYear}`, value: `${currentYear}-2` },
+            { label: `Semester Ganjil ${currentYear-1}/${currentYear}`, value: `${currentYear-1}-1` },
+        ];
+    }
 }
 
-function renderRecapScreen() {
+async function renderRecapScreen() {
     appContainer.innerHTML = templates.recap();
     const container = document.getElementById('recap-container');
     const headerEl = document.querySelector('h1'); // Find the H1
@@ -1694,7 +1774,12 @@ function renderRecapScreen() {
     // Add Period Selector
     const periodSelect = document.createElement('select');
     periodSelect.className = "ml-4 p-2 border rounded text-sm";
-    generateSemesterOptions().forEach(opt => {
+    
+    showLoader('Memuat opsi semester...');
+    const semesterOptions = await generateSemesterOptions();
+    hideLoader();
+
+    semesterOptions.forEach(opt => {
         const option = document.createElement('option');
         option.value = opt.value;
         option.textContent = opt.label;
@@ -1702,11 +1787,8 @@ function renderRecapScreen() {
         periodSelect.appendChild(option);
     });
     // Set default if null
-    if (!state.recapPeriod) {
-        const today = new Date();
-        const m = today.getMonth();
-        const y = today.getFullYear();
-        state.recapPeriod = (m >= 6) ? `${y}-1` : `${y}-2`;
+    if (!state.recapPeriod && semesterOptions.length > 0) {
+        state.recapPeriod = semesterOptions[0].value;
         periodSelect.value = state.recapPeriod;
     }
     
@@ -1798,27 +1880,17 @@ function renderRecapScreen() {
 
             let summaryHtml = `
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                    <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center relative group">
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
                         <p class="text-xs text-slate-500 uppercase font-semibold">Hari Libur</p>
                         <p class="text-2xl font-bold text-slate-800">${totalHolidays}</p>
-                        ${holidayList.length > 0 ? `
-                        <div class="absolute z-10 hidden group-hover:block bg-slate-800 text-white text-xs rounded p-2 bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 max-h-48 overflow-y-auto">
-                            ${holidayList.map(d => `<div>${d}</div>`).join('')}
-                        </div>
-                        ` : ''}
                     </div>
                     <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
                         <p class="text-xs text-slate-500 uppercase font-semibold">Sudah Dilaksanakan</p>
                         <p class="text-2xl font-bold text-blue-600">${totalRecorded}</p>
                     </div>
-                    <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center relative group">
+                    <div class="bg-white p-4 rounded-lg shadow-sm border border-slate-200 text-center">
                         <p class="text-xs text-slate-500 uppercase font-semibold">Belum Dilaksanakan</p>
                         <p class="text-2xl font-bold text-red-600">${totalUnexecuted}</p>
-                        ${unexecutedList.length > 0 ? `
-                        <div class="absolute z-10 hidden group-hover:block bg-slate-800 text-white text-xs rounded p-2 bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 max-h-48 overflow-y-auto">
-                            ${unexecutedList.map(d => `<div>${d}</div>`).join('')}
-                        </div>
-                        ` : ''}
                     </div>
                 </div>
             `;

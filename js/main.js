@@ -1,4 +1,4 @@
- 
+
 
 import { initializeGsi, handleSignIn, handleSignOut, handleAuthenticationRedirect } from './auth.js';
 import { templates } from './templates.js';
@@ -60,6 +60,8 @@ export let state = {
     recapPeriod: null, 
     adminPanel: {
         users: [],
+        totalUsers: 0,
+        searchQuery: '',
         schools: [],
         isLoading: true,
         polling: {
@@ -326,25 +328,19 @@ export async function handleSaveNewStudents() {
         const updatedStudentsByClass = { ...state.studentsByClass };
         updatedStudentsByClass[state.selectedClass] = { students: finalStudentList };
 
-        if (response.queued) {
-            await setState({ studentsByClass: updatedStudentsByClass });
-            hideLoader();
-            showNotification('Anda sedang offline. Daftar siswa disimpan lokal dan akan disinkronkan nanti.', 'info');
-        } else {
-            await setState({ 
-                studentsByClass: updatedStudentsByClass,
-                localVersion: response.newVersion
-            });
-            
-            try {
-                const { userProfile } = await apiService.getUserProfile();
-                await setState({ userProfile });
-            } catch (pError) {
-                console.error("Failed to refresh profile:", pError);
-            }
-
-            hideLoader();
+        await setState({ 
+            studentsByClass: updatedStudentsByClass,
+            localVersion: response.newVersion
+        });
+        
+        try {
+            const { userProfile } = await apiService.getUserProfile();
+            await setState({ userProfile });
+        } catch (pError) {
+            console.error("Failed to refresh profile:", pError);
         }
+
+        hideLoader();
         
         navigateTo('setup');
     } catch (error) {
@@ -386,21 +382,12 @@ export async function handleSaveAttendance() {
             className: state.selectedClass 
         };
         
-        if (response.queued) {
-            await setState({ 
-                savedLogs: updatedLogs, 
-                lastSaveContext: newContext,
-            });
-            hideLoader();
-            showNotification('Anda sedang offline. Absensi disimpan lokal dan akan disinkronkan nanti.', 'info');
-        } else {
-            await setState({ 
-                savedLogs: updatedLogs, 
-                lastSaveContext: newContext,
-                localVersion: response.newVersion
-            });
-            hideLoader();
-        }
+        await setState({ 
+            savedLogs: updatedLogs, 
+            lastSaveContext: newContext,
+            localVersion: response.newVersion
+        });
+        hideLoader();
         
         navigateTo('success');
     } catch (error) {
@@ -990,33 +977,9 @@ async function syncWithServer() {
         console.log("Offline, skipping server sync.");
         return;
     }
-    const queue = await idb.getQueue();
-    if (queue.length === 0) {
-        console.log("No offline actions to sync.");
-        return;
-    }
-
-    showNotification(`Menyinkronkan ${queue.length} perubahan offline...`, 'info');
-    let failedActions = [];
-    let successCount = 0;
-
-    for (const request of queue) {
-        try {
-            await apiService.saveData(request.body.payload);
-            successCount++;
-        } catch (error) {
-            console.error('Failed to sync an action:', request, error);
-            failedActions.push(request);
-        }
-    }
-
-    await idb.setQueue(failedActions);
-    if (failedActions.length > 0) {
-        showNotification(`Gagal menyinkronkan ${failedActions.length} perubahan. Akan dicoba lagi nanti.`, 'error');
-    } else {
-        showNotification('Semua data offline berhasil disinkronkan!', 'success');
-        await fetchChangesFromServer();
-    }
+    
+    // Just fetch changes from server since we are full online now
+    await fetchChangesFromServer();
 }
 
 async function fetchChangesFromServer() {
@@ -1088,8 +1051,23 @@ async function initApp() {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('/service-worker.js').then(registration => {
                 console.log('ServiceWorker registered with scope: ', registration.scope);
+                
+                // Auto-update logic: Check for updates on load
+                registration.update();
             }).catch(err => {
                 console.log('ServiceWorker registration failed: ', err);
+            });
+            
+            // Listen for new service worker taking over
+            let refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!refreshing) {
+                    refreshing = true;
+                    showNotification('Memperbarui aplikasi ke versi terbaru...', 'info');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                }
             });
         });
     }
