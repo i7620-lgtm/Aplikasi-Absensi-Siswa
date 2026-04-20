@@ -6,7 +6,7 @@ import { Redis } from '@upstash/redis';
 // Import Handlers
 import handleLoginOrRegister, { handleInitializeDatabase } from './handlers/authHandler.js';
 import { handleGetUpdateSignal } from './handlers/configHandler.js';
-import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetInitialData } from './handlers/userHandler.js';
+import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetInitialData, handleRegisterAsTeacher } from './handlers/userHandler.js';
 import { handleGetAllSchools, handleCreateSchool, handleSearchSchools, handleManageHoliday, handleUpdateSchoolSettings, handleGetHolidays } from './handlers/schoolHandler.js';
 import { handleSaveData, handleGetHistoryData, handleGetSchoolStudentData, handleGetChangesSince } from './handlers/attendanceHandler.js';
 import handleGetDashboardData from './handlers/dashboardHandler.js';
@@ -105,7 +105,7 @@ export default async function handler(request, response) {
             WHERE event_type = 'STUDENT_LIST_UPDATED'
             AND EXISTS (
                 SELECT 1 FROM jsonb_array_elements(payload->'students') as s
-                WHERE LOWER(s->>'parentEmail') = LOWER(${userEmail})
+                WHERE LOWER(TRIM(s->>'parentEmail')) = LOWER(TRIM(${userEmail}))
             )
             LIMIT 1;
         `;
@@ -154,6 +154,7 @@ export default async function handler(request, response) {
             'manageHoliday': () => handleManageHoliday(context),
             'updateSchoolSettings': () => handleUpdateSchoolSettings(context),
             'getHolidays': () => handleGetHolidays(context),
+            'registerAsTeacher': () => handleRegisterAsTeacher(context),
         };
 
         if (authenticatedActions[action]) {
