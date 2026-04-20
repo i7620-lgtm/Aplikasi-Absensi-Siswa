@@ -609,6 +609,28 @@ async function renderMultiRoleHomeScreen() {
 
 
     document.getElementById('view-parent-dashboard-btn')?.addEventListener('click', () => navigateTo('parentDashboard'));
+    document.getElementById('go-to-parent-btn')?.addEventListener('click', () => navigateTo('parentDashboard'));
+    
+    document.getElementById('request-teacher-access-btn')?.addEventListener('click', async () => {
+        showLoader('Mendaftarkan profil tenaga pendidik Anda...');
+        try {
+            const result = await apiService.requestTeacherAccess();
+            if (result.success) {
+                // Instantly upgrade role and re-initialize
+                const userProfile = { ...state.userProfile, primaryRole: 'GURU' };
+                await setState({ userProfile });
+                hideLoader();
+                showNotification('Berhasil! Anda sekarang dapat bergabung ke sekolah.', 'success');
+                navigateTo('setup');
+            } else {
+                throw new Error("Gagal upgrade role");
+            }
+        } catch (error) {
+            hideLoader();
+            showNotification('Gagal mendaftar sebagai tenaga pendidik: ' + (error.message || 'Error tidak diketahui'), 'error');
+        }
+    });
+
     document.getElementById('view-admin-panel-btn')?.addEventListener('click', () => navigateTo('adminPanel'));
     document.getElementById('view-jurisdiction-panel-btn')?.addEventListener('click', () => navigateTo('jurisdictionPanel'));
     document.getElementById('manage-holidays-btn')?.addEventListener('click', () => navigateTo('holidaySettings'));

@@ -196,5 +196,8 @@ export const apiService = {
     },
     async getHolidays() {
         return await _fetch('/api/data', 'getHolidays');
+    },
+    async requestTeacherAccess() {
+        return await _fetch('/api/data', 'registerAsTeacher');
     }
 };

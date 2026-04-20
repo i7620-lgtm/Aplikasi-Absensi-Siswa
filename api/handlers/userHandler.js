@@ -142,7 +142,7 @@ export async function handleGetAllUsers({ payload, user, sql, response }) {
         const countRes = await sql`
             SELECT COUNT(*) as total FROM users u
             LEFT JOIN schools s ON u.school_id = s.id
-            WHERE (u.jurisdiction_id = ANY(${accessibleJurisdictionIds}) OR s.jurisdiction_id = ANY(${accessibleJurisdictionIds}))
+            WHERE ((u.jurisdiction_id = ANY(${accessibleJurisdictionIds}) OR s.jurisdiction_id = ANY(${accessibleJurisdictionIds})) OR (u.school_id IS NULL AND u.jurisdiction_id IS NULL AND u.email = ${searchPattern}))
             AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
         `;
         totalCount = parseInt(countRes.rows[0].total, 10);
@@ -155,7 +155,7 @@ export async function handleGetAllUsers({ payload, user, sql, response }) {
             FROM users u
             LEFT JOIN schools s ON u.school_id = s.id
             LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
-            WHERE (u.jurisdiction_id = ANY(${accessibleJurisdictionIds}) OR s.jurisdiction_id = ANY(${accessibleJurisdictionIds}))
+            WHERE ((u.jurisdiction_id = ANY(${accessibleJurisdictionIds}) OR s.jurisdiction_id = ANY(${accessibleJurisdictionIds})) OR (u.school_id IS NULL AND u.jurisdiction_id IS NULL AND u.email = ${searchPattern}))
             AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
             ORDER BY 
                 CASE WHEN ${groupBySchool}::boolean THEN s.name END ASC NULLS LAST,
@@ -168,7 +168,8 @@ export async function handleGetAllUsers({ payload, user, sql, response }) {
         
         const countRes = await sql`
             SELECT COUNT(*) as total FROM users u
-            WHERE u.school_id = ${user.school_id} AND u.role IN ('GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH')
+            WHERE (u.school_id = ${user.school_id} OR (u.school_id IS NULL AND u.email = ${searchPattern})) 
+            AND u.role IN ('GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH')
             AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
         `;
         totalCount = parseInt(countRes.rows[0].total, 10);
@@ -181,7 +182,8 @@ export async function handleGetAllUsers({ payload, user, sql, response }) {
             FROM users u
             LEFT JOIN schools s ON u.school_id = s.id
             LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
-            WHERE u.school_id = ${user.school_id} AND u.role IN ('GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH')
+            WHERE (u.school_id = ${user.school_id} OR (u.school_id IS NULL AND u.email = ${searchPattern})) 
+            AND u.role IN ('GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH')
             AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
             ORDER BY 
                 CASE WHEN ${groupBySchool}::boolean THEN s.name END ASC NULLS LAST,
@@ -206,10 +208,10 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
     if (user.role === 'ADMIN_SEKOLAH') {
         if (!user.school_id) return response.status(403).json({ error: 'Admin Sekolah tidak ditugaskan ke sekolah manapun.' });
         
-        // Ensure the target is actually in their school
+        // Ensure the target is actually in their school OR is unassigned
         const { rows: targetUserRows } = await sql`SELECT school_id, role FROM users WHERE email = ${targetEmail}`;
-        if (targetUserRows.length === 0 || targetUserRows[0].school_id !== user.school_id) {
-            return response.status(403).json({ error: 'Anda hanya dapat mengelola pengguna di sekolah Anda sendiri.' });
+        if (targetUserRows.length === 0 || (targetUserRows[0].school_id !== user.school_id && targetUserRows[0].school_id !== null)) {
+            return response.status(403).json({ error: 'Anda hanya dapat mengelola pengguna di sekolah Anda sendiri atau pengguna yang belum mendapatkan sekolah.' });
         }
         
         // Prevent assigning high-level roles
@@ -232,7 +234,9 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
          const targetUser = targetUserRows[0];
          
          let isTargetInScope = false;
-         if (targetUser.jurisdiction_id && accessibleJurisdictionIds.includes(targetUser.jurisdiction_id)) {
+         if (!targetUser.jurisdiction_id && !targetUser.school_id) {
+             isTargetInScope = true; // Unassigned user
+         } else if (targetUser.jurisdiction_id && accessibleJurisdictionIds.includes(targetUser.jurisdiction_id)) {
             isTargetInScope = true;
          } else if (targetUser.school_id) {
             const { rows: schoolRows } = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${targetUser.school_id}`;
@@ -242,7 +246,7 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
          }
          
          if (!isTargetInScope) {
-             return response.status(403).json({ error: 'Anda hanya dapat mengelola pengguna di dalam yurisdiksi Anda.' });
+             return response.status(403).json({ error: 'Anda hanya dapat mengelola pengguna di dalam yurisdiksi Anda atau pengguna yang belum ditugaskan.' });
          }
          
          if (['SUPER_ADMIN', 'ADMIN_DINAS_PENDIDIKAN'].includes(newRole)) {
@@ -363,4 +367,23 @@ export async function handleUpdateUsersBulk({ payload, user, sql, response }) {
     }
     
     return response.status(200).json({ success: true });
+}
+
+export async function handleRegisterAsTeacher({ user, sql, response }) {
+    if (!user.isParent || user.role !== 'ORANG_TUA') {
+        return response.status(400).json({ error: 'Anda sudah login sebagai tenaga pendidik.' });
+    }
+
+    try {
+        // Insert them into the users table as a 'GURU'
+        await sql`
+            INSERT INTO users (email, name, picture, role, last_login, assigned_classes)
+            VALUES (${user.email}, ${user.name || 'User'}, ${user.picture || ''}, 'GURU', NOW(), '{}')
+            ON CONFLICT (email) DO UPDATE SET role = 'GURU', last_login = NOW()
+        `;
+        return response.status(200).json({ success: true, message: 'Berhasil didaftarkan sebagai tenaga pendidik.' });
+    } catch (error) {
+        console.error("Error registering as teacher:", error);
+        return response.status(500).json({ error: 'Gagal mendaftar sebagai tenaga pendidik.' });
+    }
 }
