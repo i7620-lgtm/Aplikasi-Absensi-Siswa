@@ -1,4 +1,4 @@
- 
+
 import { sql, db } from '@vercel/postgres';
 import { GoogleGenAI } from "@google/genai";
 import { Redis } from '@upstash/redis';
@@ -105,7 +105,7 @@ export default async function handler(request, response) {
             WHERE event_type = 'STUDENT_LIST_UPDATED'
             AND EXISTS (
                 SELECT 1 FROM jsonb_array_elements(payload->'students') as s
-                WHERE s->>'parentEmail' = ${userEmail}
+                WHERE LOWER(s->>'parentEmail') = LOWER(${userEmail})
             )
             LIMIT 1;
         `;
