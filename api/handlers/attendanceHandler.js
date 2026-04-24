@@ -1,4 +1,4 @@
- 
+
 // Simple sanitizer to prevent basic XSS by removing HTML tags.
 function sanitize(text) {
     if (!text) return '';
@@ -149,9 +149,9 @@ export async function handleGetHistoryData({ payload, user, sql, response }) {
     // Both act on the string representation (YYYY-MM-DD) so sorting is preserved correctly.
     const { rows } = await sql`
         SELECT DISTINCT ON (cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date')
-            cl.payload, u.name as "teacherName"
+            cl.payload, COALESCE(u.name, 'Admin/Sistem') as "teacherName"
         FROM change_log cl
-        JOIN users u ON cl.user_email = u.email
+        LEFT JOIN users u ON cl.user_email = u.email
         WHERE cl.school_id = ANY(${schoolIds}) 
           AND cl.event_type = 'ATTENDANCE_UPDATED'
           AND (${!hasClassFilter} OR TRIM(cl.payload->>'class') = TRIM(${safeClassFilter}::text))
