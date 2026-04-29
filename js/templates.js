@@ -844,34 +844,34 @@ export const templates = {
         
         return `
         <div class="screen active min-h-screen bg-slate-100 p-4">
-            <div class="w-full max-w-[95%] xl:max-w-[1400px] mx-auto bg-white rounded-xl shadow-lg flex flex-col min-h-[80vh]">
-                <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center sticky top-0 z-10 rounded-t-xl">
-                    <div>
-                        <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${encodeHTML(className)}</h1>
-                        <p class="text-slate-500 text-sm mt-1">${dateStr}</p>
+            <div class="w-full max-w-[95%] xl:max-w-[1400px] mx-auto bg-white rounded-xl shadow-lg flex flex-col max-h-[calc(100vh-2rem)] min-h-[80vh]">
+                <div class="flex-grow overflow-auto rounded-t-xl flex flex-col">
+                    <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center min-w-max md:min-w-full">
+                        <div>
+                            <h1 class="text-2xl font-bold text-slate-800">Absensi Kelas ${encodeHTML(className)}</h1>
+                            <p class="text-slate-500 text-sm mt-1">${dateStr}</p>
+                        </div>
+                        <div class="flex gap-2 pl-4">
+                            <button id="mark-holiday-btn" class="bg-orange-100 hover:bg-orange-200 text-orange-700 font-semibold py-2 px-4 rounded-lg transition text-sm flex items-center gap-2" title="Tandai seluruh kelas Libur">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                                <span class="hidden sm:inline">Tandai Libur</span>
+                            </button>
+                            <button id="back-to-setup-btn" class="text-slate-500 hover:text-blue-500 p-2 rounded-full hover:bg-slate-200 transition" title="Kembali">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
                     </div>
-                    <div class="flex gap-2">
-                        <button id="mark-holiday-btn" class="bg-orange-100 hover:bg-orange-200 text-orange-700 font-semibold py-2 px-4 rounded-lg transition text-sm flex items-center gap-2" title="Tandai seluruh kelas Libur">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                            <span class="hidden sm:inline">Tandai Libur</span>
-                        </button>
-                        <button id="back-to-setup-btn" class="text-slate-500 hover:text-blue-500 p-2 rounded-full hover:bg-slate-200 transition" title="Kembali">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                        </button>
-                    </div>
-                </div>
                 
-                <div class="flex-grow overflow-x-auto">
                     <table class="w-full text-sm text-left">
-                        <thead class="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                        <thead class="bg-slate-50 text-slate-500 font-medium">
                             <tr>
-                                <th class="p-3 w-10 text-center">No</th>
-                                <th class="p-3 min-w-[150px]">Nama Siswa</th>
-                                <th class="p-3 w-12 text-center text-green-600 font-bold" title="Hadir">H</th>
-                                <th class="p-3 w-12 text-center text-yellow-600 font-bold" title="Sakit">S</th>
-                                <th class="p-3 w-12 text-center text-blue-600 font-bold" title="Izin">I</th>
-                                <th class="p-3 w-12 text-center text-red-600 font-bold" title="Alpa">A</th>
-                                <th class="p-3 w-12 text-center text-slate-600 font-bold" title="Libur">L</th>
+                                <th class="p-3 w-10 text-center bg-slate-50 sticky top-0 z-10 shadow-[inset_0_-1px_0_0_#e2e8f0]">No</th>
+                                <th class="p-3 bg-slate-50 min-w-[150px] sticky top-0 z-10 shadow-[inset_0_-1px_0_0_#e2e8f0]">Nama Siswa</th>
+                                <th class="p-3 w-12 text-center text-green-600 font-bold bg-slate-50 sticky top-0 z-10 shadow-[inset_0_-1px_0_0_#e2e8f0]" title="Hadir">H</th>
+                                <th class="p-3 w-12 text-center text-yellow-600 font-bold bg-slate-50 sticky top-0 z-10 shadow-[inset_0_-1px_0_0_#e2e8f0]" title="Sakit">S</th>
+                                <th class="p-3 w-12 text-center text-blue-600 font-bold bg-slate-50 sticky top-0 z-10 shadow-[inset_0_-1px_0_0_#e2e8f0]" title="Izin">I</th>
+                                <th class="p-3 w-12 text-center text-red-600 font-bold bg-slate-50 sticky top-0 z-10 shadow-[inset_0_-1px_0_0_#e2e8f0]" title="Alpa">A</th>
+                                <th class="p-3 w-12 text-center text-slate-600 font-bold bg-slate-50 sticky top-0 z-10 shadow-[inset_0_-1px_0_0_#e2e8f0]" title="Libur">L</th>
                             </tr>
                         </thead>
                         <tbody id="attendance-table-body" class="divide-y divide-slate-100">
@@ -880,7 +880,7 @@ export const templates = {
                     </table>
                 </div>
 
-                <div class="p-6 border-t border-slate-200 bg-slate-50 rounded-b-xl sticky bottom-0 z-10">
+                <div class="p-6 border-t border-slate-200 bg-slate-50 rounded-b-xl shrink-0">
                     <button id="save-attendance-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
                         Simpan Absensi
