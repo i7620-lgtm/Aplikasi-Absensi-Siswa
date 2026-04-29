@@ -1482,8 +1482,20 @@ function renderStudentInputRows() {
     state.newStudents.forEach((student, index) => {
         const div = document.createElement('div');
         div.className = "flex gap-2 items-center";
+        
+        const isFirst = index === 0;
+        const isLast = index === state.newStudents.length - 1;
+        
         div.innerHTML = `
-            <span class="text-slate-400 font-mono w-6 text-right">${index + 1}.</span>
+            <div class="flex flex-col gap-1 w-6 items-center">
+                <button class="move-student-up-btn p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition disabled:opacity-30 disabled:hover:text-slate-400 disabled:hover:bg-transparent" data-index="${index}" ${isFirst ? 'disabled' : ''} title="Naikkan urutan">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                </button>
+                <span class="text-xs text-slate-400 font-mono">${index + 1}</span>
+                <button class="move-student-down-btn p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition disabled:opacity-30 disabled:hover:text-slate-400 disabled:hover:bg-transparent" data-index="${index}" ${isLast ? 'disabled' : ''} title="Turunkan urutan">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+            </div>
             <input type="text" placeholder="Nama Siswa" value="${encodeHTML(student.name)}" class="student-name-input flex-1 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition" data-index="${index}" />
             <input type="email" placeholder="Email Orang Tua (Opsional)" value="${encodeHTML(student.parentEmail || '')}" class="student-email-input flex-1 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition" data-index="${index}" />
             <button class="remove-student-btn text-red-400 hover:text-red-600 p-2" data-index="${index}" title="Hapus Baris"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
@@ -1508,6 +1520,14 @@ function renderStudentInputRows() {
     document.querySelectorAll('.remove-student-btn').forEach(btn => {
         btn.addEventListener('click', removeStudentInputRow);
     });
+
+    document.querySelectorAll('.move-student-up-btn').forEach(btn => {
+        btn.addEventListener('click', moveStudentUp);
+    });
+
+    document.querySelectorAll('.move-student-down-btn').forEach(btn => {
+        btn.addEventListener('click', moveStudentDown);
+    });
 }
 
 function addStudentInputRow() {
@@ -1522,6 +1542,26 @@ function removeStudentInputRow(e) {
         renderStudentInputRows();
     } else {
         showNotification('Minimal satu baris siswa diperlukan.', 'error');
+    }
+}
+
+function moveStudentUp(e) {
+    const idx = parseInt(e.currentTarget.dataset.index);
+    if (idx > 0) {
+        const temp = state.newStudents[idx];
+        state.newStudents[idx] = state.newStudents[idx - 1];
+        state.newStudents[idx - 1] = temp;
+        renderStudentInputRows();
+    }
+}
+
+function moveStudentDown(e) {
+    const idx = parseInt(e.currentTarget.dataset.index);
+    if (idx < state.newStudents.length - 1) {
+        const temp = state.newStudents[idx];
+        state.newStudents[idx] = state.newStudents[idx + 1];
+        state.newStudents[idx + 1] = temp;
+        renderStudentInputRows();
     }
 }
 
