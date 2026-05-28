@@ -369,6 +369,35 @@ export async function handleUpdateUsersBulk({ payload, user, sql, response }) {
     return response.status(200).json({ success: true });
 }
 
+export async function handleJoinSchool({ payload, user, sql, response }) {
+    if (user.role !== 'GURU' || user.school_id) {
+        return response.status(400).json({ error: 'You are already assigned to a school or have an incompatible role.' });
+    }
+    const { schoolId } = payload;
+    if (!schoolId) {
+        return response.status(400).json({ error: 'School ID required.' });
+    }
+
+    try {
+        await sql`UPDATE users SET school_id = ${schoolId}, assigned_classes = '{}' WHERE email = ${user.email}`;
+        
+        // Log the change
+        const logData = {
+            timestamp: new Date().toISOString(),
+            date: new Date().toISOString().split('T')[0],
+            edited_by: user.email,
+            changes: { type: 'join_school', details: 'User joined school as GURU' },
+            client_id: user.email + '-' + Date.now()
+        };
+        await sql`INSERT INTO change_log (school_id, class_name, type, payload) VALUES (${schoolId}, 'SYSTEM', 'UPDATE_USER', ${JSON.stringify(logData)}::jsonb)`;
+
+        return response.status(200).json({ success: true, schoolId });
+    } catch (e) {
+        console.error("Error joining school", e);
+        return response.status(500).json({ error: 'Internal Server Error' });
+    }
+}
+
 export async function handleRegisterAsTeacher({ user, sql, response }) {
     if (!user.isParent || user.role !== 'ORANG_TUA') {
         return response.status(400).json({ error: 'Anda sudah login sebagai tenaga pendidik.' });
