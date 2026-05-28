@@ -147,6 +147,10 @@ export const apiService = {
         return await _fetch('/api/data', 'searchSchools', { query });
     },
 
+    async joinSchool(schoolId) {
+        return await _fetch('/api/data', 'joinSchool', { schoolId });
+    },
+
     async createSchool(schoolName) {
         return await _fetch('/api/data', 'createSchool', { schoolName });
     },
