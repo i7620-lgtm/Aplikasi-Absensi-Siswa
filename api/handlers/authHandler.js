@@ -9,7 +9,7 @@ async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
     const { email, name, picture } = profile;
     
     // 1. Check for an existing user
-    const { rows: userRows } = await sql`
+    const userRows = await sql`
         SELECT u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes, j.name as jurisdiction_name 
         FROM users u
         LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
@@ -26,7 +26,7 @@ async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
     }
 
     // 2. Independently check if the user is a parent (using latest snapshot only)
-    const { rows: parentCheck } = await sql`
+    const parentCheck = await sql`
         WITH latest_logs AS (
             SELECT DISTINCT ON (school_id, payload->>'class')
                 payload->'students' as students
@@ -53,7 +53,7 @@ async function loginOrRegisterUser(profile, sql, SUPER_ADMIN_EMAILS) {
         
         // Create user in `users` table unless they are a parent-only login
         if (primaryRole !== 'ORANG_TUA') {
-             const { rows: newRows } = await sql`
+             const newRows = await sql`
                 INSERT INTO users (email, name, picture, role, last_login, assigned_classes)
                 VALUES (${email}, ${name}, ${picture}, ${primaryRole}, NOW(), '{}')
                 RETURNING email, name, picture, role, school_id, jurisdiction_id, assigned_classes;
