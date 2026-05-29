@@ -3,7 +3,7 @@ import { SUPER_ADMIN_EMAILS } from '../data.js';
 
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
-    const { rows } = await sql`
+    const rows = await sql`
         WITH RECURSIVE sub_jurisdictions AS (
             SELECT id FROM jurisdictions WHERE id = ${jurisdictionId}
             UNION
@@ -23,7 +23,7 @@ async function reconstructStateFromLogs(schoolId, sql) {
         return { initialStudents: {}, initialLogs: [], latestVersion: 0 };
     }
 
-    const { rows: changes } = await sql`
+    const changes = await sql`
         SELECT id, event_type, payload
         FROM change_log
         WHERE school_id = ${schoolId}
@@ -65,7 +65,7 @@ export async function handleGetInitialData({ user, sql, response }) {
     if (user && user.school_id) {
         schoolData = await reconstructStateFromLogs(user.school_id, sql);
         
-        const { rows: sRows } = await sql`SELECT * FROM schools WHERE id = ${user.school_id}`;
+        const sRows = await sql`SELECT * FROM schools WHERE id = ${user.school_id}`;
         
         if (sRows.length > 0) {
             if (sRows[0].settings) {
@@ -73,7 +73,7 @@ export async function handleGetInitialData({ user, sql, response }) {
             }
             
             if (sRows[0].jurisdiction_id) {
-                const { rows: jurIds } = await sql`
+                const jurIds = await sql`
                     WITH RECURSIVE parents AS (
                         SELECT id, parent_id FROM jurisdictions WHERE id = ${sRows[0].jurisdiction_id}
                         UNION ALL
@@ -86,7 +86,7 @@ export async function handleGetInitialData({ user, sql, response }) {
         }
     }
 
-    const { rows: allHolidays } = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`; 
+    const allHolidays = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`; 
     
     holidays = allHolidays.filter(h => 
         h.scope === 'NATIONAL' ||
@@ -117,9 +117,9 @@ export async function handleGetAllUsers({ payload, user, sql, response }) {
             SELECT COUNT(*) as total FROM users u
             WHERE (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
         `;
-        totalCount = parseInt(countRes.rows[0].total, 10);
+        totalCount = parseInt(countRes[0].total, 10);
 
-        const { rows } = await sql`
+        const rows = await sql`
             SELECT 
                 u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes,
                 s.name as school_name,
@@ -145,9 +145,9 @@ export async function handleGetAllUsers({ payload, user, sql, response }) {
             WHERE ((u.jurisdiction_id = ANY(${accessibleJurisdictionIds}) OR s.jurisdiction_id = ANY(${accessibleJurisdictionIds})) OR (u.school_id IS NULL AND u.jurisdiction_id IS NULL AND u.email = ${searchPattern}))
             AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
         `;
-        totalCount = parseInt(countRes.rows[0].total, 10);
+        totalCount = parseInt(countRes[0].total, 10);
 
-        const { rows } = await sql`
+        const rows = await sql`
             SELECT 
                 u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes,
                 s.name as school_name,
@@ -172,9 +172,9 @@ export async function handleGetAllUsers({ payload, user, sql, response }) {
             AND u.role IN ('GURU', 'KEPALA_SEKOLAH', 'ADMIN_SEKOLAH')
             AND (${searchPattern}::text IS NULL OR u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern})
         `;
-        totalCount = parseInt(countRes.rows[0].total, 10);
+        totalCount = parseInt(countRes[0].total, 10);
 
-        const { rows } = await sql`
+        const rows = await sql`
             SELECT 
                 u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes,
                 s.name as school_name,
@@ -209,7 +209,7 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
         if (!user.school_id) return response.status(403).json({ error: 'Admin Sekolah tidak ditugaskan ke sekolah manapun.' });
         
         // Ensure the target is actually in their school OR is unassigned
-        const { rows: targetUserRows } = await sql`SELECT school_id, role FROM users WHERE email = ${targetEmail}`;
+        const targetUserRows = await sql`SELECT school_id, role FROM users WHERE email = ${targetEmail}`;
         if (targetUserRows.length === 0 || (targetUserRows[0].school_id !== user.school_id && targetUserRows[0].school_id !== null)) {
             return response.status(403).json({ error: 'Anda hanya dapat mengelola pengguna di sekolah Anda sendiri atau pengguna yang belum mendapatkan sekolah.' });
         }
@@ -229,7 +229,7 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
     if (user.role === 'ADMIN_DINAS_PENDIDIKAN') {
          if (!user.jurisdiction_id) return response.status(403).json({ error: 'Admin Dinas tidak ditugaskan ke yurisdiksi manapun.' });
          const accessibleJurisdictionIds = await getSubJurisdictionIds(user.jurisdiction_id, sql);
-         const { rows: targetUserRows } = await sql`SELECT jurisdiction_id, school_id FROM users WHERE email = ${targetEmail}`;
+         const targetUserRows = await sql`SELECT jurisdiction_id, school_id FROM users WHERE email = ${targetEmail}`;
          if (targetUserRows.length === 0) return response.status(404).json({ error: 'User not found' });
          const targetUser = targetUserRows[0];
          
@@ -239,7 +239,7 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
          } else if (targetUser.jurisdiction_id && accessibleJurisdictionIds.includes(targetUser.jurisdiction_id)) {
             isTargetInScope = true;
          } else if (targetUser.school_id) {
-            const { rows: schoolRows } = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${targetUser.school_id}`;
+            const schoolRows = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${targetUser.school_id}`;
             if (schoolRows[0] && accessibleJurisdictionIds.includes(schoolRows[0].jurisdiction_id)) {
                 isTargetInScope = true;
             }
@@ -258,7 +258,7 @@ export async function handleUpdateUserConfiguration({ payload, user, sql, respon
          }
 
          if (newSchoolId && newSchoolId !== "") {
-             const { rows: newSchoolRows } = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${newSchoolId}`;
+             const newSchoolRows = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${newSchoolId}`;
              if (newSchoolRows.length === 0 || !accessibleJurisdictionIds.includes(newSchoolRows[0].jurisdiction_id)) {
                  return response.status(403).json({ error: 'Anda tidak dapat menetapkan sekolah di luar wilayah Anda.' });
              }
@@ -311,7 +311,7 @@ export async function handleUpdateUsersBulk({ payload, user, sql, response }) {
     if (user.role === 'ADMIN_SEKOLAH') {
         if (!user.school_id) return response.status(403).json({ error: 'Admin Sekolah tidak ditugaskan ke sekolah manapun.' });
 
-        const { rows: targetUsers } = await sql`SELECT school_id FROM users WHERE email = ANY(${targetEmails}::text[])`;
+        const targetUsers = await sql`SELECT school_id FROM users WHERE email = ANY(${targetEmails}::text[])`;
         if (targetUsers.some(u => u.school_id !== user.school_id)) {
             return response.status(403).json({ error: 'Anda hanya dapat mengelola pengguna di sekolah Anda sendiri.' });
         }
@@ -330,40 +330,32 @@ export async function handleUpdateUsersBulk({ payload, user, sql, response }) {
         }
     }
 
-    const client = await sql.connect();
+    // Fix: Using sql.begin for transactions in postgres.js
     try {
-        await client.query('BEGIN');
-
-        if (newSchoolId !== undefined) {
-            const finalSchoolId = newSchoolId === "" || newSchoolId === null ? null : newSchoolId;
-            await client.query(
-                `UPDATE users SET school_id = $1, jurisdiction_id = NULL WHERE email = ANY($2::text[])`,
-                [finalSchoolId, targetEmails]
-            );
-        } else if (newRole) {
-            let updateQuery;
-            const queryParams = [targetEmails, newRole];
-
-            if (newRole === 'GURU') {
-                updateQuery = `UPDATE users SET role = $2 WHERE email = ANY($1::text[])`;
-            } else if (newRole === 'SUPER_ADMIN') {
-                updateQuery = `UPDATE users SET role = $2, school_id = NULL, jurisdiction_id = NULL, assigned_classes = '{}' WHERE email = ANY($1::text[])`;
-            } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(newRole)) {
-                updateQuery = `UPDATE users SET role = $2, school_id = NULL, assigned_classes = '{}' WHERE email = ANY($1::text[])`;
-            } else { // KEPALA_SEKOLAH or ADMIN_SEKOLAH
-                updateQuery = `UPDATE users SET role = $2, assigned_classes = '{}' WHERE email = ANY($1::text[])`;
+        await sql.begin(async (sql) => {
+            if (newSchoolId !== undefined) {
+                const finalSchoolId = newSchoolId === "" || newSchoolId === null ? null : newSchoolId;
+                await sql`UPDATE users SET school_id = ${finalSchoolId}, jurisdiction_id = NULL WHERE email = ANY(${targetEmails}::text[])`;
+            } else if (newRole) {
+                if (newRole === 'GURU') {
+                    await sql`UPDATE users SET role = ${newRole} WHERE email = ANY(${targetEmails}::text[])`;
+                } else if (newRole === 'SUPER_ADMIN') {
+                    await sql`UPDATE users SET role = ${newRole}, school_id = NULL, jurisdiction_id = NULL, assigned_classes = '{}' WHERE email = ANY(${targetEmails}::text[])`;
+                } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(newRole)) {
+                    await sql`UPDATE users SET role = ${newRole}, school_id = NULL, assigned_classes = '{}' WHERE email = ANY(${targetEmails}::text[])`;
+                } else { // KEPALA_SEKOLAH or ADMIN_SEKOLAH
+                    await sql`UPDATE users SET role = ${newRole}, assigned_classes = '{}' WHERE email = ANY(${targetEmails}::text[])`;
+                }
+            } else {
+                throw new Error('Tidak ada tindakan massal yang valid (diperlukan newSchoolId atau newRole).');
             }
-            await client.query(updateQuery, queryParams);
-        } else {
-             return response.status(400).json({ error: 'Tidak ada tindakan massal yang valid (diperlukan newSchoolId atau newRole).' });
-        }
-        
-        await client.query('COMMIT');
+        });
     } catch (error) {
-        await client.query('ROLLBACK');
+        console.error("Bulk update transaction failed:", error);
+        if (error.message.includes('Tidak ada tindakan massal')) {
+            return response.status(400).json({ error: error.message });
+        }
         throw error;
-    } finally {
-        client.release();
     }
     
     return response.status(200).json({ success: true });
@@ -389,7 +381,7 @@ export async function handleJoinSchool({ payload, user, sql, response }) {
             changes: { type: 'join_school', details: 'User joined school as GURU' },
             client_id: user.email + '-' + Date.now()
         };
-        await sql`INSERT INTO change_log (school_id, class_name, type, payload) VALUES (${schoolId}, 'SYSTEM', 'UPDATE_USER', ${JSON.stringify(logData)}::jsonb)`;
+        await sql`INSERT INTO change_log (school_id, class_name, type, payload) VALUES (${schoolId}, 'SYSTEM', 'UPDATE_USER', ${sql.json(logData)})`;
 
         return response.status(200).json({ success: true, schoolId });
     } catch (e) {
