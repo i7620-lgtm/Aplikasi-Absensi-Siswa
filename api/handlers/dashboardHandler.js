@@ -1,8 +1,8 @@
- 
+
 
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
-    const { rows } = await sql`
+    const rows = await sql`
         WITH RECURSIVE sub_jurisdictions AS (
             SELECT id FROM jurisdictions WHERE id = ${jurisdictionId}
             UNION ALL
@@ -27,7 +27,7 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
         if (jurisdictionId) {
             const accessibleJurisdictionIds = await getSubJurisdictionIds(jurisdictionId, sql);
             if (accessibleJurisdictionIds.length > 0) {
-                const { rows: schoolRows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
+                const schoolRows = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
                 schoolIdList = schoolRows.map(r => r.id);
             }
             isRegionalView = true;
@@ -40,7 +40,7 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
         
         const accessibleJurisdictionIds = await getSubJurisdictionIds(effectiveJurisdictionId, sql);
         if (accessibleJurisdictionIds.length > 0) {
-            const { rows: schoolRows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
+            const schoolRows = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
             schoolIdList = schoolRows.map(r => r.id);
         }
         isRegionalView = true;
@@ -68,7 +68,7 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
 
     // --- REGIONAL VIEW LOGIC ---
     if (isRegionalView) {
-        const { rows } = await sql`
+        const rows = await sql`
             WITH LatestStudentLists AS (
                 SELECT DISTINCT ON (school_id, payload->>'class')
                     school_id,
@@ -126,8 +126,8 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
         const { schoolCompletionStatus = [], schoolInfo = {} } = result;
         const { totalStudents = 0, studentsPerSchool = {} } = schoolInfo || {};
 
-        const { rows: schoolDetails } = await sql`SELECT id, name FROM schools WHERE id = ANY(${schoolIds}) ORDER BY name;`;
-        const { rows: allLogsRows } = await sql`
+        const schoolDetails = await sql`SELECT id, name FROM schools WHERE id = ANY(${schoolIds}) ORDER BY name;`;
+        const allLogsRows = await sql`
             SELECT DISTINCT ON (school_id, payload->>'date', payload->>'class')
                 payload as log, school_id FROM change_log
             WHERE school_id = ANY(${schoolIds}) AND event_type = 'ATTENDANCE_UPDATED' AND (payload->>'date')::date BETWEEN ${yearStart.toISOString().split('T')[0]} AND ${yearEnd.toISOString().split('T')[0]}
@@ -150,7 +150,7 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
         return response.status(200).json({ isUnassigned: true });
     }
 
-    const { rows } = await sql`
+    const rows = await sql`
         WITH LatestStudentLists AS (
             SELECT DISTINCT ON (payload->>'class')
                 payload->>'class' as class_name,
@@ -199,7 +199,7 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
         }
     });
 
-    const { rows: allLogsRows } = await sql`
+    const allLogsRows = await sql`
         SELECT DISTINCT ON (payload->>'date', payload->>'class')
             payload as log
         FROM change_log
