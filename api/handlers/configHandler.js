@@ -7,7 +7,7 @@ export async function handleGetUpdateSignal({ payload, user, sql, response }) {
 
     try {
         const rows = await sql`SELECT MAX(id) as max_id FROM change_log WHERE school_id = ${schoolId}`;
-        const latestVersion = rows[0]?.max_id || 0;
+        const latestVersion = rows[0]?.max_id ? Number(rows[0].max_id) : 0;
         return response.status(200).json({ latestVersion });
     } catch (dbError) {
         console.error("DB fallback for update signal failed:", dbError);
