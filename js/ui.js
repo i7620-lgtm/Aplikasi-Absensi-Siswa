@@ -1877,7 +1877,7 @@ async function renderRecapScreen() {
                 endDate
             };
             
-            const { recapData, recordedDates } = await apiService.getRecapData(payload);
+            const { recapData, recordedDates, applicableHolidays } = await apiService.getRecapData(payload);
             
             if (state.recapSortOrder === 'total') {
                 recapData.sort((a, b) => b.total - a.total);
@@ -1895,7 +1895,10 @@ async function renderRecapScreen() {
             const today = new Date();
             const actualEnd = end > today ? today : end;
             
-            const holidayDates = (state.holidays || []).map(h => {
+            // Prefer contextual holidays from API over global state if provided
+            const sourceHolidays = applicableHolidays || state.holidays || [];
+            
+            const holidayDates = sourceHolidays.map(h => {
                 let d = h.date;
                 if (d instanceof Date) {
                     const y = d.getFullYear();
