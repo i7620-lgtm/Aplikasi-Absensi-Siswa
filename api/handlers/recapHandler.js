@@ -1,7 +1,7 @@
- 
+
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
-    const { rows } = await sql`
+    const rows = await sql`
         WITH RECURSIVE sub_jurisdictions AS (
             SELECT id FROM jurisdictions WHERE id = ${jurisdictionId}
             UNION
@@ -28,7 +28,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
         // Highest priority: if a jurisdictionId is provided, use it.
         const accessibleJurisdictionIds = await getSubJurisdictionIds(jurisdictionId, sql);
         if (accessibleJurisdictionIds.length > 0) {
-            const { rows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
+            const rows = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
             schoolIdsInScope = rows.map(r => r.id);
         }
     } else if (user.role === 'SUPER_ADMIN') {
@@ -36,14 +36,14 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             schoolIdsInScope.push(schoolId);
         } else {
             // Super Admin without context defaults to ALL schools (can be heavy)
-            const { rows } = await sql`SELECT id FROM schools`;
+            const rows = await sql`SELECT id FROM schools`;
             schoolIdsInScope = rows.map(r => r.id);
         }
     } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(user.role)) {
         if (user.jurisdiction_id) {
              const accessibleJurisdictionIds = await getSubJurisdictionIds(user.jurisdiction_id, sql);
              if (accessibleJurisdictionIds.length > 0) {
-                 const { rows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
+                 const rows = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
                  schoolIdsInScope = rows.map(r => r.id);
              }
         }
@@ -66,7 +66,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
     const safeStartDate = startDate || null;
     const safeEndDate = endDate || null;
 
-    const { rows: recapArray } = await sql`
+    const recapArray = await sql`
         WITH
         latest_student_lists AS (
             SELECT DISTINCT ON (school_id, TRIM(payload->>'class'))
@@ -143,7 +143,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
     const isRegionalReport = !!jurisdictionId;
     const isFullSchoolReport = !!schoolId && !classFilter;
 
-    const { rows: recordedDatesRows } = await sql`
+    const recordedDatesRows = await sql`
         SELECT DISTINCT ON (cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date')
             cl.school_id,
             s.name as school_name,
