@@ -8,7 +8,7 @@ export default async function handleGetParentData({ user, sql, response }) {
     const parentEmail = user.email;
 
     try {
-        const { rows: parentData } = await sql`
+        const parentData = await sql`
             WITH
             latest_student_lists AS (
                 -- Find the most recent student list for each class in each school (snapshot)
