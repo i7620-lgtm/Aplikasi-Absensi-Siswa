@@ -1,4 +1,4 @@
-import { db } from '@vercel/postgres';
+import { sql } from './data.js';
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') {
@@ -6,8 +6,6 @@ export default async function handler(req, res) {
     }
 
     try {
-        const client = await db.connect();
-        
         const tables = ['jurisdictions', 'schools', 'users', 'change_log', 'holidays'];
         let sqlDump = `-- ===================================================================\n`;
         sqlDump += `-- Backup SQL Dump dari Aplikasi (Migrasi Neon ke Supabase)\n`;
@@ -24,7 +22,7 @@ export default async function handler(req, res) {
 
         sqlDump += `-- 2. MEMASUKKAN DATA\n`;
         for (const table of tables) {
-            const { rows } = await client.query(`SELECT * FROM ${table} ORDER BY created_at ASC`);
+            const rows = await sql.unsafe(`SELECT * FROM ${table} ORDER BY created_at ASC`);
             if (rows.length > 0) {
                 sqlDump += `\n-- Data untuk tabel ${table}\n`;
                 for (const row of rows) {
@@ -51,8 +49,6 @@ export default async function handler(req, res) {
         sqlDump += `SELECT setval('schools_id_seq', (SELECT COALESCE(MAX(id), 1) FROM schools));\n`;
         sqlDump += `SELECT setval('change_log_id_seq', (SELECT COALESCE(MAX(id), 1) FROM change_log));\n`;
         sqlDump += `SELECT setval('holidays_id_seq', (SELECT COALESCE(MAX(id), 1) FROM holidays));\n`;
-
-        client.release();
         
         res.setHeader('Content-Type', 'application/sql');
         res.setHeader('Content-Disposition', 'attachment; filename="migrasi-neon-ke-supabase.sql"');
