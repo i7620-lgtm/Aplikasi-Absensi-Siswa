@@ -1,7 +1,7 @@
- 
+
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
-    const { rows } = await sql`
+    const rows = await sql`
         WITH RECURSIVE sub_jurisdictions AS (
             SELECT id FROM jurisdictions WHERE id = ${jurisdictionId}
             UNION ALL
@@ -84,7 +84,7 @@ async function handleSchoolAnalysis(schoolId, startDate, endDate, rangeLabel, sq
     }
 
     // 1. Fetch Raw Data
-    const { rows: logs } = await sql`
+    const logs = await sql`
         SELECT DISTINCT ON (payload->>'class', payload->>'date')
             payload->>'date' as date, 
             payload->>'class' as class_name, 
@@ -361,7 +361,7 @@ async function handleRegionalAnalysis(jurisdictionId, startDate, endDate, rangeL
     const jurisdictionIdsInScope = await getSubJurisdictionIds(jurisdictionId, sql);
     
     // 1. Fetch Aggregated Data
-    const { rows: stats } = await sql`
+    const stats = await sql`
         WITH latest_logs AS (
             SELECT DISTINCT ON (school_id, payload->>'class', payload->>'date')
                 school_id,
