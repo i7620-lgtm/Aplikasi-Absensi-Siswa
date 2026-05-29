@@ -1,7 +1,35 @@
 
-import { sql, db } from '@vercel/postgres';
+import postgres from 'postgres';
 import { GoogleGenAI } from "@google/genai";
-import { Redis } from '@upstash/redis';
+
+// Initialize postgres client explicitly using the connection string
+let connectionString = process.env.POSTGRES_URL_SUPABASE || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL;
+if (!connectionString) {
+    console.error("DATABASE_CONFIGURATION_ERROR: No database connection string found in environment variables.");
+} else {
+    // Attempt to fix common copy-paste errors with Supabase [YOUR-PASSWORD] placeholder
+    let match = connectionString.match(/^(postgresql?:\/\/)([^:]+):(.*)@([^@]+)$/);
+    if (match) {
+        const user = match[2];
+        let password = match[3];
+        
+        // If password is still wrapped in brackets like [mypassword], strip them
+        if (password.startsWith('[') && password.endsWith(']')) {
+            password = password.slice(1, -1);
+        }
+        
+        connectionString = `${match[1]}${encodeURIComponent(decodeURIComponent(user))}:${encodeURIComponent(decodeURIComponent(password))}@${match[4]}`;
+    }
+}
+
+// Create the sql template tag using postgres.js
+export const sql = postgres(connectionString, {
+    ssl: 'require',
+    connect_timeout: 30,
+});
+
+// For compatibility with any code using .db (though mostly we use sql)
+export const db = { query: sql };
 
 // Import Handlers
 import handleLoginOrRegister, { handleInitializeDatabase } from './handlers/authHandler.js';
@@ -25,19 +53,6 @@ import {
 
 // --- KONFIGURASI ---
 export const SUPER_ADMIN_EMAILS = ['i7620@guru.sd.belajar.id', 'admin@sekolah.com', 'mc4diaz@gmail.com'];
-
-// --- SETUP KLIEN EKSTERNAL ---
-let redis = null;
-if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    redis = new Redis({
-        url: process.env.KV_REST_API_URL,
-        token: process.env.KV_REST_API_TOKEN,
-    });
-    console.log("Klien Upstash Redis (via Vercel KV) berhasil diinisialisasi.");
-} else {
-    console.warn("Variabel lingkungan Vercel KV tidak diatur. Fitur sinyal pembaruan cepat akan dinonaktifkan.");
-}
-
 
 // --- LOGIKA UTAMA HANDLER ---
 export default async function handler(request, response) {
@@ -69,7 +84,6 @@ export default async function handler(request, response) {
         userEmail,
         SUPER_ADMIN_EMAILS, 
         GoogleGenAI, 
-        redis, 
         sql,
         db
     };
@@ -93,14 +107,14 @@ export default async function handler(request, response) {
             return response.status(401).json({ error: 'Unauthorized: userEmail is required' });
         }
         
-        const { rows: userRows } = await context.sql`
+        const userRows = await context.sql`
             SELECT u.email, u.name, u.picture, u.role, u.school_id, u.jurisdiction_id, u.assigned_classes, j.name as jurisdiction_name 
             FROM users u
             LEFT JOIN jurisdictions j ON u.jurisdiction_id = j.id
             WHERE u.email = ${userEmail}`;
 
         // NEW: Independently check if the user is a parent, regardless of their primary role.
-        const { rows: parentCheck } = await context.sql`
+        const parentCheck = await context.sql`
             SELECT 1 FROM change_log
             WHERE event_type = 'STUDENT_LIST_UPDATED'
             AND EXISTS (

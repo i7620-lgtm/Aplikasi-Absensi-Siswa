@@ -1,6 +1,6 @@
 // --- Utility Functions ---
 async function getSubJurisdictionIds(jurisdictionId, sql) {
-    const { rows } = await sql`
+    const rows = await sql`
         WITH RECURSIVE sub_jurisdictions AS (
             SELECT id FROM jurisdictions WHERE id = ${jurisdictionId}
             UNION
@@ -25,7 +25,7 @@ export async function handleGetJurisdictionTree({ user, sql, response }) {
     if (user.role !== 'SUPER_ADMIN') {
         return response.status(403).json({ error: 'Forbidden' });
     }
-    const { rows } = await sql`SELECT id, name, type, parent_id FROM jurisdictions ORDER BY name`;
+    const rows = await sql`SELECT id, name, type, parent_id FROM jurisdictions ORDER BY name`;
     
     const nodes = {};
     const tree = [];
@@ -50,10 +50,10 @@ export async function handleGetSchoolsForJurisdiction({ payload, user, sql, resp
         return response.status(403).json({ error: 'Forbidden' });
     }
     const { jurisdictionId } = payload;
-    const { rows: assignedSchools } = await sql`
+    const assignedSchools = await sql`
         SELECT id, name FROM schools WHERE jurisdiction_id = ${jurisdictionId} ORDER BY name;
     `;
-    const { rows: unassignedSchools } = await sql`
+    const unassignedSchools = await sql`
         SELECT id, name FROM schools WHERE jurisdiction_id IS NULL ORDER BY name;
     `;
     return response.status(200).json({ assignedSchools, unassignedSchools });
@@ -69,7 +69,7 @@ export async function handleCreateJurisdiction({ payload, user, sql, response })
     if (!sanitizedName || !type) {
         return response.status(400).json({ error: 'Name and type are required' });
     }
-    const { rows } = await sql`
+    const rows = await sql`
         INSERT INTO jurisdictions (name, type, parent_id) VALUES (${sanitizedName}, ${type}, ${parentId || null}) RETURNING *;
     `;
     return response.status(201).json({ jurisdiction: rows[0] });
@@ -110,17 +110,17 @@ export async function handleDeleteJurisdiction({ payload, user, sql, response })
     }
     const { id } = payload;
     // Check for child jurisdictions
-    const { rows: children } = await sql`SELECT id FROM jurisdictions WHERE parent_id = ${id} LIMIT 1`;
+    const children = await sql`SELECT id FROM jurisdictions WHERE parent_id = ${id} LIMIT 1`;
     if (children.length > 0) {
         return response.status(400).json({ error: 'Hapus semua sub-yurisdiksi terlebih dahulu.' });
     }
     // Check for assigned schools
-    const { rows: schools } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ${id} LIMIT 1`;
+    const schools = await sql`SELECT id FROM schools WHERE jurisdiction_id = ${id} LIMIT 1`;
     if (schools.length > 0) {
         return response.status(400).json({ error: 'Pindahkan semua sekolah dari yurisdiksi ini terlebih dahulu.' });
     }
     // Check for assigned users
-    const { rows: users } = await sql`SELECT email FROM users WHERE jurisdiction_id = ${id} LIMIT 1`;
+    const users = await sql`SELECT email FROM users WHERE jurisdiction_id = ${id} LIMIT 1`;
     if (users.length > 0) {
         return response.status(400).json({ error: 'Masih ada pengguna yang ditugaskan ke yurisdiksi ini. Pindahkan pengguna terlebih dahulu.' });
     }

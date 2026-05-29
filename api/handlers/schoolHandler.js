@@ -1,4 +1,4 @@
- 
+
 // Simple sanitizer to prevent basic XSS by removing HTML tags.
 function sanitize(text) {
     if (!text) return '';
@@ -7,7 +7,7 @@ function sanitize(text) {
 
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
-    const { rows } = await sql`
+    const rows = await sql`
         WITH RECURSIVE sub_jurisdictions AS (
             SELECT id FROM jurisdictions WHERE id = ${jurisdictionId}
             UNION
@@ -23,7 +23,7 @@ export async function handleGetAllSchools({ user, sql, response }) {
     if (user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN_SEKOLAH') {
          return response.status(403).json({ error: 'Forbidden: Access denied' });
     }
-    const { rows: allSchools } = await sql`SELECT id, name FROM schools ORDER BY name;`;
+    const allSchools = await sql`SELECT id, name FROM schools ORDER BY name;`;
     return response.status(200).json({ allSchools });
 }
 
@@ -38,7 +38,7 @@ export async function handleSearchSchools({ payload, user, sql, response }) {
 
     // Find schools matching the name AND find the associated Admin/Principal name & email
     // Using LEFT JOIN LATERAL to efficiently fetch the top-ranking admin for each school found
-    const { rows: results } = await sql`
+    const results = await sql`
         SELECT 
             s.id, 
             s.name, 
@@ -75,31 +75,24 @@ export async function handleCreateSchool({ payload, user, sql, response }) {
         return response.status(400).json({ error: 'Nama sekolah wajib diisi.' });
     }
 
-    const client = await sql.connect();
     try {
-        await client.query('BEGIN');
-        
-        // 1. Create School
-        const { rows: newSchool } = await client.query(`INSERT INTO schools (name) VALUES ($1) RETURNING id, name`, [sanitizedName]);
-        const schoolId = newSchool[0].id;
+        const newSchool = await sql.begin(async (sql) => {
+             // 1. Create School
+            const rows = await sql`INSERT INTO schools (name) VALUES (${sanitizedName}) RETURNING id, name`;
+            const schoolId = rows[0].id;
 
-        // 2. If this is a self-service creation (user has no role/school yet), promote them
-        if (user.role !== 'SUPER_ADMIN') {
-            await client.query(
-                `UPDATE users SET school_id = $1, role = 'ADMIN_SEKOLAH' WHERE email = $2`,
-                [schoolId, user.email]
-            );
-        }
+            // 2. If this is a self-service creation (user has no role/school yet), promote them
+            if (user.role !== 'SUPER_ADMIN') {
+                await sql`UPDATE users SET school_id = ${schoolId}, role = 'ADMIN_SEKOLAH' WHERE email = ${user.email}`;
+            }
+            return rows[0];
+        });
 
-        await client.query('COMMIT');
-        return response.status(201).json({ success: true, school: newSchool[0] });
+        return response.status(201).json({ success: true, school: newSchool });
 
     } catch (error) {
-        await client.query('ROLLBACK');
         console.error("Failed to create school:", error);
         return response.status(500).json({ error: 'Gagal membuat sekolah.' });
-    } finally {
-        client.release();
     }
 }
 
@@ -116,7 +109,7 @@ export async function handleManageHoliday({ payload, user, sql, response }) {
 
     if (operation === 'DELETE') {
         // Need to check ownership before deleting
-        const { rows: existing } = await sql`SELECT scope, reference_id FROM holidays WHERE id = ${holidayId}`;
+        const existing = await sql`SELECT scope, reference_id FROM holidays WHERE id = ${holidayId}`;
         if (existing.length === 0) return response.status(404).json({ error: 'Holiday not found' });
         
         const h = existing[0];
@@ -169,7 +162,7 @@ export async function handleManageHoliday({ payload, user, sql, response }) {
 
         let insertedHolidays = [];
         for (const d of datesToInsert) {
-            const { rows } = await sql`
+            const rows = await sql`
                 INSERT INTO holidays (date, description, scope, reference_id, created_by_email)
                 VALUES (${d}, ${sanitize(description)}, ${scope}, ${referenceId}, ${user.email})
                 RETURNING id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email
@@ -184,18 +177,12 @@ export async function handleManageHoliday({ payload, user, sql, response }) {
 }
 
 export async function handleGetHolidays({ user, sql, response }) {
-    // Determine the scope of holidays to fetch for this user
-    const conditions = [];
-    conditions.push(sql`scope = 'NATIONAL'`);
-
     let myJurisdictionIds = [];
 
     if (user.school_id) {
-        conditions.push(sql`(scope = 'SCHOOL' AND reference_id = ${user.school_id})`);
-        
-        const { rows: schoolData } = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${user.school_id}`;
+        const schoolData = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${user.school_id}`;
         if (schoolData[0] && schoolData[0].jurisdiction_id) {
-            const { rows: ids } = await sql`
+            const ids = await sql`
                 WITH RECURSIVE parents AS (
                     SELECT id, parent_id FROM jurisdictions WHERE id = ${schoolData[0].jurisdiction_id}
                     UNION ALL
@@ -206,7 +193,7 @@ export async function handleGetHolidays({ user, sql, response }) {
             myJurisdictionIds = ids.map(i => i.id);
         }
     } else if (user.jurisdiction_id) {
-        const { rows: ids } = await sql`
+        const ids = await sql`
             WITH RECURSIVE parents AS (
                 SELECT id, parent_id FROM jurisdictions WHERE id = ${user.jurisdiction_id}
                 UNION ALL
@@ -216,22 +203,28 @@ export async function handleGetHolidays({ user, sql, response }) {
         `;
         myJurisdictionIds = ids.map(i => i.id);
     }
-
-    if (myJurisdictionIds.length > 0) {
-         conditions.push(sql`(scope = 'REGIONAL' AND reference_id = ANY(${myJurisdictionIds}))`);
+    
+    // Default to an empty array that won't match anything if not populated
+    if (myJurisdictionIds.length === 0) {
+        myJurisdictionIds = [-1]; 
     }
 
-    const { rows: holidays } = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`;
-    
-    const filteredHolidays = holidays.filter(h => {
-        if (h.scope === 'NATIONAL') return true;
-        if (h.scope === 'SCHOOL' && h.reference_id === user.school_id) return true;
-        if (h.scope === 'REGIONAL' && myJurisdictionIds.includes(h.reference_id)) return true;
-        if (h.created_by_email === user.email) return true; // Creator access
-        return false;
-    });
+    let holidays;
+    if (user.role === 'SUPER_ADMIN') {
+        holidays = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`;
+    } else {
+        holidays = await sql`
+            SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email 
+            FROM holidays 
+            WHERE scope = 'NATIONAL'
+               OR (scope = 'SCHOOL' AND reference_id = ${user.school_id ? Number(user.school_id) : -1})
+               OR (scope = 'REGIONAL' AND reference_id = ANY(${myJurisdictionIds}))
+               OR created_by_email = ${user.email}
+            ORDER BY date DESC
+        `;
+    }
 
-    return response.status(200).json({ holidays: filteredHolidays });
+    return response.status(200).json({ holidays });
 }
 
 export async function handleUpdateSchoolSettings({ payload, user, sql, response }) {
@@ -249,8 +242,8 @@ export async function handleUpdateSchoolSettings({ payload, user, sql, response 
 
     const newSettings = { workDays: workDays.map(Number) }; 
     
-    // Use JSON.stringify + cast to jsonb to ensure correct type handling in postgres
-    await sql`UPDATE schools SET settings = ${JSON.stringify(newSettings)}::jsonb WHERE id = ${schoolId}`;
+    // Use sql.json() to ensure correct type handling in postgres.js
+    await sql`UPDATE schools SET settings = ${sql.json(newSettings)} WHERE id = ${schoolId}`;
     
     return response.status(200).json({ success: true, settings: newSettings });
 }
