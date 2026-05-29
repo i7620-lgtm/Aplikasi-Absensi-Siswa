@@ -176,6 +176,24 @@ export default async function handleGetRecapData({ payload, user, sql, response 
         ORDER BY cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date', cl.id DESC
     `;
 
+    // Fetch applicable holidays for accurate UI calculation
+    let applicableRegionalIdsForHolidays = [];
+    if (jurisdictionId) {
+        applicableRegionalIdsForHolidays = await getSubJurisdictionIds(jurisdictionId, sql);
+    } else if (schoolId) {
+        const sRows = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${schoolId}`;
+        if (sRows.length > 0 && sRows[0].jurisdiction_id) {
+            applicableRegionalIdsForHolidays = await getSubJurisdictionIds(sRows[0].jurisdiction_id, sql);
+        }
+    }
+    
+    const allHolidays = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`;
+    const applicableHolidays = allHolidays.filter(h => 
+        h.scope === 'NATIONAL' ||
+        (schoolId && h.scope === 'SCHOOL' && h.reference_id === parseInt(schoolId)) ||
+        (h.scope === 'REGIONAL' && applicableRegionalIdsForHolidays.includes(h.reference_id))
+    );
+
     if (isRegionalReport) {
         const dataBySchool = recapArray.reduce((acc, row) => {
             const { school_name, ...studentData } = row;
@@ -183,7 +201,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             acc[school_name].push(studentData);
             return acc;
         }, {});
-        return response.status(200).json({ recapData: dataBySchool, reportType: 'regional', recordedDates: recordedDatesRows });
+        return response.status(200).json({ recapData: dataBySchool, reportType: 'regional', recordedDates: recordedDatesRows, applicableHolidays });
 
     } else if (isFullSchoolReport) {
         const dataByClass = recapArray.reduce((acc, row) => {
@@ -192,9 +210,9 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             acc[className].push(studentData);
             return acc;
         }, {});
-        return response.status(200).json({ recapData: dataByClass, reportType: 'school', recordedDates: recordedDatesRows });
+        return response.status(200).json({ recapData: dataByClass, reportType: 'school', recordedDates: recordedDatesRows, applicableHolidays });
     }
     
     // Fallback for single class report
-    return response.status(200).json({ recapData: recapArray, reportType: 'class', recordedDates: recordedDatesRows });
+    return response.status(200).json({ recapData: recapArray, reportType: 'class', recordedDates: recordedDatesRows, applicableHolidays });
 }
