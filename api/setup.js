@@ -1,16 +1,14 @@
 
-import { db } from '@vercel/postgres';
+import { sql } from './data.js';
 
 // --- SETUP DATABASE YANG EFISIEN & ROBUST ---
 export async function setupDatabase() {
-    // Gunakan db.connect() untuk mendapatkan client koneksi
-    const client = await db.connect();
     try {
         console.log("Menjalankan setup skema database...");
         
         // 1. Buat Tabel (Aman untuk dijalankan berulang kali)
         // Kita jalankan ini dulu untuk memastikan tabel dasar ada.
-        await client.query(`
+        await sql.unsafe(`
             CREATE TABLE IF NOT EXISTS jurisdictions (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, type VARCHAR(50) NOT NULL, parent_id INTEGER REFERENCES jurisdictions(id) ON DELETE SET NULL, created_at TIMESTAMPTZ DEFAULT NOW());
             CREATE TABLE IF NOT EXISTS schools (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW());
             CREATE TABLE IF NOT EXISTS users (email VARCHAR(255) PRIMARY KEY, name VARCHAR(255), picture TEXT, role VARCHAR(50) DEFAULT 'GURU', school_id INTEGER REFERENCES schools(id) ON DELETE SET NULL, assigned_classes TEXT[] DEFAULT '{}', created_at TIMESTAMPTZ DEFAULT NOW());
@@ -45,7 +43,7 @@ export async function setupDatabase() {
 
         for (const query of migrationQueries) {
             try {
-                await client.query(query);
+                await sql.unsafe(query);
             } catch (err) {
                 // Log error tapi jangan hentikan proses setup lainnya
                 console.warn(`Peringatan migrasi (mungkin sudah ada atau konflik): ${err.message}`);
@@ -59,15 +57,29 @@ export async function setupDatabase() {
             `CREATE INDEX IF NOT EXISTS idx_jurisdictions_parent_id ON jurisdictions (parent_id);`,
             `CREATE INDEX IF NOT EXISTS idx_users_school_id ON users (school_id);`,
             `CREATE INDEX IF NOT EXISTS idx_users_jurisdiction_id ON users (jurisdiction_id);`,
-            `CREATE INDEX IF NOT EXISTS idx_changelog_main_query ON change_log (school_id, event_type, ((payload->>'date')::date));`,
+            
+            // Indeks untuk pencarian event absensi secara umum berdasarkan tanggal
+            `CREATE INDEX IF NOT EXISTS idx_changelog_event_date ON change_log (school_id, event_type, ((payload->>'date')::date));`,
+            
+            // Indeks untuk optimasi query DISTINCT ON (STUDENT_LIST_UPDATED)
             `CREATE INDEX IF NOT EXISTS idx_changelog_latest_student_list ON change_log (school_id, (payload->>'class'), id DESC) WHERE event_type = 'STUDENT_LIST_UPDATED';`,
+            `CREATE INDEX IF NOT EXISTS idx_changelog_latest_student_list_trim ON change_log (school_id, TRIM(payload->>'class'), id DESC) WHERE event_type = 'STUDENT_LIST_UPDATED';`,
+
+            // Indeks untuk optimasi query DISTINCT ON (ATTENDANCE_UPDATED)
+            `CREATE INDEX IF NOT EXISTS idx_changelog_attendance_trim_date ON change_log (school_id, TRIM(payload->>'class'), (payload->>'date') DESC, id DESC) WHERE event_type = 'ATTENDANCE_UPDATED';`,
+            `CREATE INDEX IF NOT EXISTS idx_changelog_attendance_date ON change_log (school_id, (payload->>'class'), (payload->>'date') DESC, id DESC) WHERE event_type = 'ATTENDANCE_UPDATED';`,
+            `CREATE INDEX IF NOT EXISTS idx_changelog_attendance_date_asc ON change_log (school_id, (payload->>'date') DESC, (payload->>'class')) WHERE event_type = 'ATTENDANCE_UPDATED';`,
+
+            // Indeks untuk optimasi getUpdateSignal (MAX ID)
+            `CREATE INDEX IF NOT EXISTS idx_changelog_school_id_desc ON change_log (school_id, id DESC);`,
+
             `CREATE INDEX IF NOT EXISTS idx_holidays_date ON holidays (date);`,
             `CREATE INDEX IF NOT EXISTS idx_holidays_scope_ref ON holidays (scope, reference_id);`
         ];
 
         for (const query of indexQueries) {
             try {
-                await client.query(query);
+                await sql.unsafe(query);
             } catch (err) {
                 console.warn(`Gagal membuat indeks (non-kritis): ${err.message}`);
             }
@@ -77,8 +89,6 @@ export async function setupDatabase() {
     } catch (error) {
         console.error("Gagal melakukan setup database utama:", error);
         throw error;
-    } finally {
-        client.release();
     }
 }
 
