@@ -1,4 +1,4 @@
-const CACHE_NAME = 'absensi-cache-v13'; // Updated version for CDN caching
+const CACHE_NAME = 'absensi-cache-v14'; // Updated version for CDN caching
 const localUrlsToCache = [
   '/',
   '/index.html',
