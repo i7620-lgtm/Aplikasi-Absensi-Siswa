@@ -177,15 +177,9 @@ export async function handleManageHoliday({ payload, user, sql, response }) {
 }
 
 export async function handleGetHolidays({ user, sql, response }) {
-    // Determine the scope of holidays to fetch for this user
-    const conditions = [];
-    conditions.push(sql`scope = 'NATIONAL'`);
-
     let myJurisdictionIds = [];
 
     if (user.school_id) {
-        conditions.push(sql`(scope = 'SCHOOL' AND reference_id = ${user.school_id})`);
-        
         const schoolData = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${user.school_id}`;
         if (schoolData[0] && schoolData[0].jurisdiction_id) {
             const ids = await sql`
@@ -209,22 +203,28 @@ export async function handleGetHolidays({ user, sql, response }) {
         `;
         myJurisdictionIds = ids.map(i => i.id);
     }
-
-    if (myJurisdictionIds.length > 0) {
-         conditions.push(sql`(scope = 'REGIONAL' AND reference_id = ANY(${myJurisdictionIds}))`);
+    
+    // Default to an empty array that won't match anything if not populated
+    if (myJurisdictionIds.length === 0) {
+        myJurisdictionIds = [-1]; 
     }
 
-    const holidays = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`;
-    
-    const filteredHolidays = holidays.filter(h => {
-        if (h.scope === 'NATIONAL') return true;
-        if (h.scope === 'SCHOOL' && h.reference_id === user.school_id) return true;
-        if (h.scope === 'REGIONAL' && myJurisdictionIds.includes(h.reference_id)) return true;
-        if (h.created_by_email === user.email) return true; // Creator access
-        return false;
-    });
+    let holidays;
+    if (user.role === 'SUPER_ADMIN') {
+        holidays = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`;
+    } else {
+        holidays = await sql`
+            SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email 
+            FROM holidays 
+            WHERE scope = 'NATIONAL'
+               OR (scope = 'SCHOOL' AND reference_id = ${user.school_id ? Number(user.school_id) : -1})
+               OR (scope = 'REGIONAL' AND reference_id = ANY(${myJurisdictionIds}))
+               OR created_by_email = ${user.email}
+            ORDER BY date DESC
+        `;
+    }
 
-    return response.status(200).json({ holidays: filteredHolidays });
+    return response.status(200).json({ holidays });
 }
 
 export async function handleUpdateSchoolSettings({ payload, user, sql, response }) {
