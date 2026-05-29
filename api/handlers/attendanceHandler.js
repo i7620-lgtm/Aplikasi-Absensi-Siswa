@@ -7,7 +7,7 @@ function sanitize(text) {
 
 async function getSubJurisdictionIds(jurisdictionId, sql) {
     if (!jurisdictionId) return [];
-    const { rows } = await sql`
+    const rows = await sql`
         WITH RECURSIVE sub_jurisdictions AS (
             SELECT id FROM jurisdictions WHERE id = ${jurisdictionId}
             UNION
@@ -19,7 +19,7 @@ async function getSubJurisdictionIds(jurisdictionId, sql) {
     return rows.map(r => r.id);
 }
 
-export async function handleSaveData({ payload, user, sql, response, redis }) {
+export async function handleSaveData({ payload, user, sql, response }) {
     const allowedWriteRoles = ['GURU', 'ADMIN_SEKOLAH', 'SUPER_ADMIN'];
     if (!allowedWriteRoles.includes(user.role)) {
         return response.status(403).json({ error: 'Anda tidak memiliki izin untuk menyimpan data absensi.' });
@@ -54,24 +54,12 @@ export async function handleSaveData({ payload, user, sql, response, redis }) {
         return response.status(400).json({ error: 'Tidak dapat menentukan sekolah untuk menyimpan data. Pastikan akun Anda atau konteks admin Anda tertaut ke sekolah.' });
     }
     
-    const { rows } = await sql`
+    const rows = await sql`
         INSERT INTO change_log (school_id, user_email, event_type, payload)
-        VALUES (${finalSchoolId}, ${actorEmail}, ${type}, ${JSON.stringify(eventPayload)})
+        VALUES (${finalSchoolId}, ${actorEmail}, ${type}, ${sql.json(eventPayload)})
         RETURNING id;
     `;
     const newVersion = rows[0].id;
-    
-    if (redis) {
-        try {
-            const key = `school_version:${finalSchoolId}`;
-            // Set with expiration (e.g., 25 hours) to handle potential stale signals
-            await redis.set(key, newVersion, { ex: 90000 }); // ex: 90000 detik = 25 jam
-            console.log(`Update signal (v${newVersion}) sent to Redis for school ${finalSchoolId}`);
-        } catch (e) {
-             console.error("Failed to update Redis signal:", e);
-             // Do not fail the request, just log the error.
-        }
-    }
     
     return response.status(200).json({ success: true, savedBy: actorName, newVersion });
 }
@@ -83,7 +71,7 @@ export async function handleGetChangesSince({ payload, user, sql, response }) {
         return response.status(400).json({ error: 'School ID is required' });
     }
     
-    const { rows: changes } = await sql`
+    const changes = await sql`
         SELECT id, event_type, payload
         FROM change_log
         WHERE school_id = ${effectiveSchoolId} AND id > ${lastVersion}
@@ -96,7 +84,7 @@ export async function handleGetChangesSince({ payload, user, sql, response }) {
 async function reconstructAttendanceState(schoolId, sql) {
     if (!schoolId) return { logs: [], students: {} };
     
-    const { rows: changes } = await sql`
+    const changes = await sql`
         SELECT event_type, payload FROM change_log WHERE school_id = ${schoolId} ORDER BY id ASC
     `;
 
@@ -122,13 +110,13 @@ export async function handleGetHistoryData({ payload, user, sql, response }) {
     if (user.role === 'GURU') {
         if (user.school_id) schoolIds.push(user.school_id);
     } else if (isGlobalView && user.role === 'SUPER_ADMIN') {
-        const { rows } = await sql`SELECT id FROM schools`;
+        const rows = await sql`SELECT id FROM schools`;
         schoolIds = rows.map(r => r.id);
     } else if (['DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(user.role)) {
         if (user.jurisdiction_id) {
             const accessibleJurisdictionIds = await getSubJurisdictionIds(user.jurisdiction_id, sql);
             if (accessibleJurisdictionIds.length > 0) {
-                const { rows } = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
+                const rows = await sql`SELECT id FROM schools WHERE jurisdiction_id = ANY(${accessibleJurisdictionIds})`;
                 schoolIds = rows.map(r => r.id);
             }
         }
@@ -147,7 +135,7 @@ export async function handleGetHistoryData({ payload, user, sql, response }) {
     // --- FIX: SQL 'DISTINCT ON' requires exact match with 'ORDER BY' prefix.
     // Removed '::date' cast in ORDER BY to ensure compatibility with 'DISTINCT ON' expression.
     // Both act on the string representation (YYYY-MM-DD) so sorting is preserved correctly.
-    const { rows } = await sql`
+    const rows = await sql`
         SELECT DISTINCT ON (cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date')
             cl.payload, COALESCE(u.name, 'Admin/Sistem') as "teacherName"
         FROM change_log cl
@@ -178,7 +166,7 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
     }
 
     // Fetch Student Lists
-    const { rows } = await sql`
+    const rows = await sql`
         SELECT DISTINCT ON (payload->>'class') payload
         FROM change_log
         WHERE school_id = ${schoolId} AND event_type = 'STUDENT_LIST_UPDATED'
@@ -192,7 +180,7 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
 
     // --- Fetch School Settings & Holidays ---
     // Fetch Settings
-    const { rows: settingsRows } = await sql`
+    const settingsRows = await sql`
         SELECT * FROM schools WHERE id = ${schoolId}
     `;
     
@@ -204,7 +192,7 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
     // Fetch Applicable Holidays (National + Regional + School)
     let applicableRegionalIds = [];
     if (settingsRows[0] && settingsRows[0].jurisdiction_id) {
-        const { rows: jurIds } = await sql`
+        const jurIds = await sql`
             WITH RECURSIVE parents AS (
                 SELECT id, parent_id FROM jurisdictions WHERE id = ${settingsRows[0].jurisdiction_id}
                 UNION ALL
@@ -215,7 +203,7 @@ export async function handleGetSchoolStudentData({ payload, user, sql, response 
         applicableRegionalIds = jurIds.map(j => j.id);
     }
 
-    const { rows: allHolidays } = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`;
+    const allHolidays = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`;
     const holidays = allHolidays.filter(h => 
         h.scope === 'NATIONAL' ||
         (h.scope === 'SCHOOL' && h.reference_id === parseInt(schoolId)) ||
