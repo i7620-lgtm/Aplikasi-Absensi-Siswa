@@ -386,29 +386,26 @@ function renderSetupScreen() {
                                     <span class="text-xs bg-slate-100 px-2 py-1 rounded text-slate-500">Pilih</span>
                                 </div>
                             `;
-                            btn.onclick = () => {
-                                document.getElementById('found-school-name').textContent = school.name;
-                                document.getElementById('found-admin-name').textContent = school.admin_name || "Belum ada Admin";
-                                
-                                const emailEl = document.getElementById('found-admin-email');
-                                const contactBtn = document.getElementById('contact-admin-btn');
-                                
-                                if (school.admin_email) {
-                                    emailEl.textContent = school.admin_email;
-                                    emailEl.parentElement.classList.remove('hidden');
-                                    
-                                    const subject = encodeURIComponent(`Permintaan Akses Aplikasi Absensi - ${state.userProfile.name}`);
-                                    const body = encodeURIComponent(`Halo Admin ${school.name},\n\nSaya ${state.userProfile.name} (${state.userProfile.email}) ingin meminta akses masuk dan penugasan kelas di aplikasi absensi sekolah.\n\nMohon bantuannya.\n\nTerima kasih.`);
-                                    
-                                    contactBtn.href = `mailto:${school.admin_email}?subject=${subject}&body=${body}`;
-                                    contactBtn.classList.remove('hidden');
-                                } else {
-                                    emailEl.textContent = "Email tidak tersedia";
-                                    contactBtn.classList.add('hidden');
+                            btn.onclick = async () => {
+                                const confirm = await showConfirmation(`Bergabung dengan ${school.name}? Anda akan terdaftar sebagai guru aktif dan menanti penugasan kelas dari Admin.`);
+                                if (confirm) {
+                                    try {
+                                        showLoader("Bergabung dengan sekolah...");
+                                        const res = await apiService.joinSchool(school.id);
+                                        if (res.success) {
+                                            showNotification("Berhasil bergabung! Harap tunggu admin menugaskan kelas kepada Anda.", 'success');
+                                            // Refresh user profile and go to multiRoleHome
+                                            const ures = await apiService.getUserProfile();
+                                            await setState({ userProfile: ures.userProfile });
+                                            renderScreen('multiRoleHome');
+                                        }
+                                    } catch (e) {
+                                        console.error(e);
+                                        showNotification("Gagal bergabung ke sekolah.", 'error');
+                                    } finally {
+                                        hideLoader();
+                                    }
                                 }
-                                
-                                document.getElementById('school-found-msg').classList.remove('hidden');
-                                resultsContainer.innerHTML = ''; 
                             };
                             resultsContainer.appendChild(btn);
                         });

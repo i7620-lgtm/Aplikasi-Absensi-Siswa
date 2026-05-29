@@ -296,23 +296,6 @@ export const templates = {
                     <div id="school-search-results" class="space-y-2 max-h-60 overflow-y-auto">
                         <!-- Results injected here -->
                     </div>
-                    
-                    <div id="school-found-msg" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <h4 class="font-bold text-blue-800 mb-1">Sekolah Terdaftar!</h4>
-                        <p class="text-sm text-blue-700 mb-3">Sekolah <span id="found-school-name" class="font-bold"></span> sudah ada di sistem.</p>
-                        
-                        <div class="bg-white p-3 rounded-lg border border-blue-100 mb-3 shadow-sm">
-                            <p class="text-xs text-slate-500 uppercase tracking-wide font-bold mb-1">Admin Sekolah</p>
-                            <p id="found-admin-name" class="font-bold text-slate-800"></p>
-                            <p id="found-admin-email" class="text-sm text-slate-600 font-mono break-all"></p>
-                        </div>
-
-                        <a id="contact-admin-btn" href="#" class="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-sm flex items-center justify-center gap-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                            Kirim Permintaan Akses
-                        </a>
-                        <p class="text-xs text-blue-600 mt-2 text-center opacity-80">Klik tombol di atas untuk mengirim email ke admin.</p>
-                    </div>
 
                     <div id="school-not-found-msg" class="hidden text-center py-4">
                         <p class="text-slate-500 mb-2">Sekolah tidak ditemukan?</p>
@@ -456,12 +439,31 @@ export const templates = {
                             <input type="date" id="date-input" value="${state.selectedDate}" class="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"/>
                         </div>
                     </div>
-                    <div class="mt-6 space-y-3">
-                         <button id="startBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Mulai Absensi</button>
-                         <button id="historyBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Lihat Riwayat Kelas Ini</button>
-                         <button id="recapBtn" class="bg-slate-600 hover:bg-slate-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Rekap Absensi Siswa</button>
-                         <button id="manageStudentsBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Tambah/Kurangi Data Siswa</button>
-                         <button id="downloadDataBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg w-full transition duration-300" ${needsAssignment ? 'disabled' : ''}>Unduh Rekap Kelas (Excel)</button>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 pt-6 border-t border-slate-200">
+                         <button id="startBtn" class="col-span-1 md:col-span-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl transition flex items-center justify-center gap-3 shadow-md" ${needsAssignment ? 'disabled' : ''}>
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                            Mulai Absensi Kelas
+                         </button>
+                         
+                         <button id="manageStudentsBtn" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-4 px-6 rounded-xl transition flex items-center gap-3 shadow-sm" ${needsAssignment ? 'disabled' : ''}>
+                             <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                             <div class="text-left"><p>Kelola Data Siswa</p><p class="text-xs font-normal opacity-90">Tambah, Edit, Hapus</p></div>
+                         </button>
+
+                         <button id="historyBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-4 px-6 rounded-xl transition flex items-center gap-3 shadow-sm" ${needsAssignment ? 'disabled' : ''}>
+                            <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <div class="text-left"><p>Riwayat Harian</p><p class="text-xs font-normal opacity-90">Cek absen tanggal ini</p></div>
+                         </button>
+                         
+                         <button id="recapBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-6 rounded-xl transition flex items-center gap-3 shadow-sm" ${needsAssignment ? 'disabled' : ''}>
+                            <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            <div class="text-left"><p>Rekap Absensi</p><p class="text-xs font-normal opacity-90">Berdasarkan rentang</p></div>
+                         </button>
+
+                         <button id="downloadDataBtn" class="bg-slate-700 hover:bg-slate-800 text-white font-bold py-4 px-6 rounded-xl transition flex items-center gap-3 shadow-sm" ${needsAssignment ? 'disabled' : ''}>
+                            <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            <div class="text-left"><p>Unduh Excel</p><p class="text-xs font-normal opacity-90">Laporan semester</p></div>
+                         </button>
                     </div>
                 `}
                 <p id="setup-status" class="text-center text-sm text-slate-500 mt-4 h-5">Data disimpan secara otomatis di cloud.</p>
@@ -515,7 +517,13 @@ export const templates = {
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     
                     ${['GURU', 'ADMIN_SEKOLAH', 'KEPALA_SEKOLAH', 'SUPER_ADMIN'].includes(primaryRole) ? `
-                    <button id="go-to-attendance-btn" class="w-full h-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><div><p class="font-bold">Lakukan & Kelola Absensi</p><p class="text-sm font-normal opacity-90">Catat kehadiran, kelola siswa, dan lihat rekap.</p></div></button>
+                    <button id="go-to-attendance-btn" class="w-full h-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl transition flex items-center gap-4 text-left shadow-sm">
+                        <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                        <div>
+                            <p class="font-bold">Modul Manajemen Kelas</p>
+                            <p class="text-sm font-normal opacity-90">Pilih kelas, lakukan absensi, kelola siswa, dan pantau riwayat.</p>
+                        </div>
+                    </button>
                     ` : ''}
 
                      ${['KEPALA_SEKOLAH', 'ADMIN_SEKOLAH', 'DINAS_PENDIDIKAN', 'ADMIN_DINAS_PENDIDIKAN'].includes(primaryRole) ? `
@@ -581,6 +589,10 @@ export const templates = {
                     ${primaryRole === 'SUPER_ADMIN' ? `
                     <button id="view-jurisdiction-panel-btn" class="w-full h-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" /></svg><div><p class="font-bold">Panel Manajemen Yurisdiksi</p><p class="text-sm font-normal opacity-90">Kelola hierarki wilayah dan sekolah.</p></div></button>
                     <button id="go-to-migration-tool-btn" class="w-full h-full bg-gray-700 hover:bg-gray-800 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left"><svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10m16-10v10M4 17h16M4 7h16M9 4v3m6-3v3m-3 14v-3"></path></svg><div><p class="font-bold">Alat Migrasi Data Lama</p><p class="text-sm font-normal opacity-90">Unggah data dari sistem lama ke format baru.</p></div></button>
+                    <a href="/api/export-db" target="_blank" class="w-full h-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 px-6 rounded-lg transition flex items-center gap-4 text-left">
+                        <svg class="w-8 h-8 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                        <div><p class="font-bold">Migrasi Data ke Supabase</p><p class="text-sm font-normal opacity-90">Unduh script SQL untuk pindah database.</p></div>
+                    </a>
                     ` : ''}
 
                     </div>

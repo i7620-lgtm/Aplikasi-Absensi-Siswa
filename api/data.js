@@ -6,7 +6,7 @@ import { Redis } from '@upstash/redis';
 // Import Handlers
 import handleLoginOrRegister, { handleInitializeDatabase } from './handlers/authHandler.js';
 import { handleGetUpdateSignal } from './handlers/configHandler.js';
-import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetInitialData, handleRegisterAsTeacher } from './handlers/userHandler.js';
+import { handleGetAllUsers, handleUpdateUserConfiguration, handleUpdateUsersBulk, handleGetInitialData, handleRegisterAsTeacher, handleJoinSchool } from './handlers/userHandler.js';
 import { handleGetAllSchools, handleCreateSchool, handleSearchSchools, handleManageHoliday, handleUpdateSchoolSettings, handleGetHolidays } from './handlers/schoolHandler.js';
 import { handleSaveData, handleGetHistoryData, handleGetSchoolStudentData, handleGetChangesSince } from './handlers/attendanceHandler.js';
 import handleGetDashboardData from './handlers/dashboardHandler.js';
@@ -155,6 +155,7 @@ export default async function handler(request, response) {
             'updateSchoolSettings': () => handleUpdateSchoolSettings(context),
             'getHolidays': () => handleGetHolidays(context),
             'registerAsTeacher': () => handleRegisterAsTeacher(context),
+            'joinSchool': () => handleJoinSchool(context),
         };
 
         if (authenticatedActions[action]) {
