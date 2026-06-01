@@ -397,7 +397,10 @@ export const templates = {
                     <div>
                         <p class="font-semibold text-slate-800">${encodeHTML(state.userProfile.name)}</p>
                         <p class="text-sm text-slate-500">${encodeHTML(state.userProfile.email)}</p>
-                        <span class="px-2 py-0.5 mt-1 inline-block rounded-full text-xs font-semibold ${isAdmin ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}">${getRoleDisplayName(state.userProfile.primaryRole)}</span>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <span class="px-2 py-0.5 inline-block rounded-full text-xs font-semibold ${isAdmin ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}">${getRoleDisplayName(state.userProfile.primaryRole)}</span>
+                            ${state.userProfile.isParent && state.userProfile.primaryRole !== 'ORANG_TUA' ? `<span class="px-2 py-0.5 inline-block rounded-full text-xs font-semibold bg-teal-100 text-teal-800">Orang Tua</span>` : ''}
+                        </div>
                     </div>
                 </div>
                 ${
