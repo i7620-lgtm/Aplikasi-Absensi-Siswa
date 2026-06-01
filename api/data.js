@@ -128,7 +128,7 @@ export default async function handler(request, response) {
         if (userRows.length === 0) {
             if (isParent) {
                 // User is ONLY a parent, not in the users table.
-                context.user = { email: userEmail, role: 'ORANG_TUA', isParent: true };
+                context.user = { email: userEmail, role: 'ORANG_TUA', isParent: true, primaryRole: 'ORANG_TUA' };
             } else {
                 return response.status(403).json({ error: 'Forbidden: User not found' });
             }
@@ -136,6 +136,7 @@ export default async function handler(request, response) {
             // User exists in the users table. Add the `isParent` flag.
             context.user = userRows[0];
             context.user.isParent = isParent;
+            context.user.primaryRole = context.user.role;
         }
 
 
