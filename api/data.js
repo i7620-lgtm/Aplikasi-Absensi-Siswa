@@ -115,12 +115,16 @@ export default async function handler(request, response) {
 
         // NEW: Independently check if the user is a parent, regardless of their primary role.
         const parentCheck = await context.sql`
-            SELECT 1 FROM change_log
-            WHERE event_type = 'STUDENT_LIST_UPDATED'
-            AND EXISTS (
-                SELECT 1 FROM jsonb_array_elements(payload->'students') as s
-                WHERE LOWER(TRIM(s->>'parentEmail')) = LOWER(TRIM(${userEmail}))
+            WITH latest_logs AS (
+                SELECT DISTINCT ON (school_id, payload->>'class')
+                    payload->'students' as students
+                FROM change_log
+                WHERE event_type = 'STUDENT_LIST_UPDATED'
+                ORDER BY school_id, payload->>'class', id DESC
             )
+            SELECT 1 
+            FROM latest_logs, jsonb_array_elements(students) as student
+            WHERE LOWER(TRIM(student->>'parentEmail')) = LOWER(TRIM(${userEmail}))
             LIMIT 1;
         `;
         const isParent = parentCheck.length > 0;
