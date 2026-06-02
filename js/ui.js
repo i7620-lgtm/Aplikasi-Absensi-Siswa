@@ -266,12 +266,14 @@ async function teacherProfilePoller() {
 
     try {
         const { userProfile: latestProfile } = await apiService.getUserProfile();
-        if (JSON.stringify(latestProfile.assigned_classes) !== JSON.stringify(state.userProfile.assigned_classes)) {
+        if (JSON.stringify(latestProfile.assigned_classes) !== JSON.stringify(state.userProfile.assigned_classes) || latestProfile.isParent !== state.userProfile.isParent) {
             await setState({ 
                 userProfile: latestProfile,
                 setup: { ...state.setup, polling: { ...state.setup.polling, interval: INITIAL_POLLING_INTERVAL } }
             });
-            showNotification('Hak akses kelas Anda telah diperbarui oleh admin.', 'info');
+            if (JSON.stringify(latestProfile.assigned_classes) !== JSON.stringify(state.userProfile.assigned_classes)) {
+                showNotification('Hak akses kelas Anda telah diperbarui oleh admin.', 'info');
+            }
             renderScreen('setup'); 
             return; 
         }
