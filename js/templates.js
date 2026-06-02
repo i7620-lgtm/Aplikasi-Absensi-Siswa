@@ -1194,8 +1194,8 @@ export const templates = {
                                                     ${child.attendance_history.map(log => `
                                                         <li class="flex items-center justify-between bg-white p-3 rounded border border-slate-100 shadow-sm">
                                                             <span class="text-slate-700 text-sm font-medium">${new Date(log.date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                                                            <span class="px-3 py-1 rounded-full text-xs font-bold ${log.status === 'S' ? 'bg-yellow-100 text-yellow-800' : log.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">
-                                                                ${log.status === 'S' ? 'Sakit' : log.status === 'I' ? 'Izin' : 'Alpa'}
+                                                                <span class="px-3 py-1 rounded-full text-xs font-bold ${log.status === 'S' ? 'bg-yellow-100 text-yellow-800' : log.status === 'I' ? 'bg-blue-100 text-blue-800' : log.status === 'L' ? 'bg-orange-100 text-orange-800' : 'bg-red-100 text-red-800'}">
+                                                                ${log.status === 'S' ? 'Sakit' : log.status === 'I' ? 'Izin' : log.status === 'L' ? 'Libur' : 'Alpa'}
                                                             </span>
                                                         </li>
                                                     `).join('')}
