@@ -115,12 +115,16 @@ export default async function handler(request, response) {
 
         // NEW: Independently check if the user is a parent, regardless of their primary role.
         const parentCheck = await context.sql`
-            SELECT 1 FROM change_log
-            WHERE event_type = 'STUDENT_LIST_UPDATED'
-            AND EXISTS (
-                SELECT 1 FROM jsonb_array_elements(payload->'students') as s
-                WHERE LOWER(TRIM(s->>'parentEmail')) = LOWER(TRIM(${userEmail}))
+            WITH latest_logs AS (
+                SELECT DISTINCT ON (school_id, payload->>'class')
+                    payload->'students' as students
+                FROM change_log
+                WHERE event_type = 'STUDENT_LIST_UPDATED'
+                ORDER BY school_id, payload->>'class', id DESC
             )
+            SELECT 1 
+            FROM latest_logs, jsonb_array_elements(students) as student
+            WHERE LOWER(TRIM(student->>'parentEmail')) = LOWER(TRIM(${userEmail}))
             LIMIT 1;
         `;
         const isParent = parentCheck.length > 0;
@@ -128,7 +132,7 @@ export default async function handler(request, response) {
         if (userRows.length === 0) {
             if (isParent) {
                 // User is ONLY a parent, not in the users table.
-                context.user = { email: userEmail, role: 'ORANG_TUA', isParent: true };
+                context.user = { email: userEmail, role: 'ORANG_TUA', isParent: true, primaryRole: 'ORANG_TUA' };
             } else {
                 return response.status(403).json({ error: 'Forbidden: User not found' });
             }
@@ -136,6 +140,7 @@ export default async function handler(request, response) {
             // User exists in the users table. Add the `isParent` flag.
             context.user = userRows[0];
             context.user.isParent = isParent;
+            context.user.primaryRole = context.user.role;
         }
 
 

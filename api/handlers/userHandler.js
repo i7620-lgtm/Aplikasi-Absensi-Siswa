@@ -84,11 +84,22 @@ export async function handleGetInitialData({ user, sql, response }) {
                 applicableRegionalIds = jurIds.map(j => j.id);
             }
         }
+    } else if (user && user.jurisdiction_id) {
+        const jurIds = await sql`
+            WITH RECURSIVE parents AS (
+                SELECT id, parent_id FROM jurisdictions WHERE id = ${user.jurisdiction_id}
+                UNION ALL
+                SELECT j.id, j.parent_id FROM jurisdictions j JOIN parents p ON j.id = p.parent_id
+            )
+            SELECT id FROM parents
+        `;
+        applicableRegionalIds = jurIds.map(j => j.id);
     }
 
     const allHolidays = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`; 
     
     holidays = allHolidays.filter(h => 
+        user.role === 'SUPER_ADMIN' ||
         h.scope === 'NATIONAL' ||
         (user.school_id && h.scope === 'SCHOOL' && h.reference_id === user.school_id) ||
         (h.scope === 'REGIONAL' && applicableRegionalIds.includes(h.reference_id))

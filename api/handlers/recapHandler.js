@@ -83,10 +83,10 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             SELECT
                 lsl.school_id,
                 lsl.class_name as class,
-                TRIM(COALESCE(elem->>'name', elem#>>'{}')) as name,
-                row_number() over (partition by lsl.class_name order by TRIM(COALESCE(elem->>'name', elem#>>'{}'))) as "originalIndex"
-            FROM latest_student_lists lsl,
-            jsonb_array_elements(lsl.students) as elem
+                TRIM(COALESCE(t.elem->>'name', t.elem#>>'{}')) as name,
+                t.idx::int as "originalIndex"
+            FROM latest_student_lists lsl
+            CROSS JOIN jsonb_array_elements(lsl.students) WITH ORDINALITY as t(elem, idx)
             WHERE ${classFilter}::text IS NULL OR lsl.class_name = ${classFilter}::text
         ),
         attendance_events AS (
@@ -137,7 +137,8 @@ export default async function handleGetRecapData({ payload, user, sql, response 
                 name,
                 COUNT(*) FILTER (WHERE status = 'S') as "S",
                 COUNT(*) FILTER (WHERE status = 'I') as "I",
-                COUNT(*) FILTER (WHERE status = 'A') as "A"
+                COUNT(*) FILTER (WHERE status = 'A') as "A",
+                COUNT(*) FILTER (WHERE status = 'L') as "L"
             FROM absences
             GROUP BY school_id, class_name, name
         )
@@ -149,6 +150,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             COALESCE(ac."S", 0)::int as "S",
             COALESCE(ac."I", 0)::int as "I",
             COALESCE(ac."A", 0)::int as "A",
+            COALESCE(ac."L", 0)::int as "L",
             (COALESCE(ac."S", 0) + COALESCE(ac."I", 0) + COALESCE(ac."A", 0))::int as total
         FROM all_students ast
         LEFT JOIN absence_counts ac 
@@ -176,6 +178,37 @@ export default async function handleGetRecapData({ payload, user, sql, response 
         ORDER BY cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date', cl.id DESC
     `;
 
+    const dailyDetailsRows = await sql`
+        SELECT DISTINCT ON (cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date')
+            cl.school_id,
+            TRIM(cl.payload->>'class') as class_name,
+            cl.payload->>'date' as date,
+            cl.payload->'attendance' as attendance
+        FROM change_log cl
+        WHERE cl.school_id = ANY(${schoolIdsInScope}) AND cl.event_type = 'ATTENDANCE_UPDATED'
+        AND (${classFilter}::text IS NULL OR TRIM(cl.payload->>'class') = ${classFilter}::text)
+        AND (${!hasDateFilter} OR (cl.payload->>'date')::date BETWEEN ${safeStartDate}::date AND ${safeEndDate}::date)
+        ORDER BY cl.school_id, TRIM(cl.payload->>'class'), cl.payload->>'date', cl.id DESC
+    `;
+
+    // Fetch applicable holidays for accurate UI calculation
+    let applicableRegionalIdsForHolidays = [];
+    if (jurisdictionId) {
+        applicableRegionalIdsForHolidays = await getSubJurisdictionIds(jurisdictionId, sql);
+    } else if (schoolId) {
+        const sRows = await sql`SELECT jurisdiction_id FROM schools WHERE id = ${schoolId}`;
+        if (sRows.length > 0 && sRows[0].jurisdiction_id) {
+            applicableRegionalIdsForHolidays = await getSubJurisdictionIds(sRows[0].jurisdiction_id, sql);
+        }
+    }
+    
+    const allHolidays = await sql`SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, description, scope, reference_id, created_by_email FROM holidays ORDER BY date DESC`;
+    const applicableHolidays = allHolidays.filter(h => 
+        h.scope === 'NATIONAL' ||
+        (schoolId && h.scope === 'SCHOOL' && h.reference_id === parseInt(schoolId)) ||
+        (h.scope === 'REGIONAL' && applicableRegionalIdsForHolidays.includes(h.reference_id))
+    );
+
     if (isRegionalReport) {
         const dataBySchool = recapArray.reduce((acc, row) => {
             const { school_name, ...studentData } = row;
@@ -183,7 +216,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             acc[school_name].push(studentData);
             return acc;
         }, {});
-        return response.status(200).json({ recapData: dataBySchool, reportType: 'regional', recordedDates: recordedDatesRows });
+        return response.status(200).json({ recapData: dataBySchool, reportType: 'regional', recordedDates: recordedDatesRows, applicableHolidays, dailyDetails: dailyDetailsRows });
 
     } else if (isFullSchoolReport) {
         const dataByClass = recapArray.reduce((acc, row) => {
@@ -192,9 +225,9 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             acc[className].push(studentData);
             return acc;
         }, {});
-        return response.status(200).json({ recapData: dataByClass, reportType: 'school', recordedDates: recordedDatesRows });
+        return response.status(200).json({ recapData: dataByClass, reportType: 'school', recordedDates: recordedDatesRows, applicableHolidays, dailyDetails: dailyDetailsRows });
     }
     
     // Fallback for single class report
-    return response.status(200).json({ recapData: recapArray, reportType: 'class', recordedDates: recordedDatesRows });
+    return response.status(200).json({ recapData: recapArray, reportType: 'class', recordedDates: recordedDatesRows, applicableHolidays, dailyDetails: dailyDetailsRows });
 }

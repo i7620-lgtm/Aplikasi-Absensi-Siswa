@@ -397,7 +397,10 @@ export const templates = {
                     <div>
                         <p class="font-semibold text-slate-800">${encodeHTML(state.userProfile.name)}</p>
                         <p class="text-sm text-slate-500">${encodeHTML(state.userProfile.email)}</p>
-                        <span class="px-2 py-0.5 mt-1 inline-block rounded-full text-xs font-semibold ${isAdmin ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}">${getRoleDisplayName(state.userProfile.primaryRole)}</span>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <span class="px-2 py-0.5 inline-block rounded-full text-xs font-semibold ${isAdmin ? 'bg-indigo-100 text-indigo-800' : 'bg-green-100 text-green-800'}">${getRoleDisplayName(state.userProfile.primaryRole)}</span>
+                            ${state.userProfile.isParent && state.userProfile.primaryRole !== 'ORANG_TUA' ? `<span class="px-2 py-0.5 inline-block rounded-full text-xs font-semibold bg-teal-100 text-teal-800">Orang Tua</span>` : ''}
+                        </div>
                     </div>
                 </div>
                 ${
@@ -1191,8 +1194,8 @@ export const templates = {
                                                     ${child.attendance_history.map(log => `
                                                         <li class="flex items-center justify-between bg-white p-3 rounded border border-slate-100 shadow-sm">
                                                             <span class="text-slate-700 text-sm font-medium">${new Date(log.date + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                                                            <span class="px-3 py-1 rounded-full text-xs font-bold ${log.status === 'S' ? 'bg-yellow-100 text-yellow-800' : log.status === 'I' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}">
-                                                                ${log.status === 'S' ? 'Sakit' : log.status === 'I' ? 'Izin' : 'Alpa'}
+                                                                <span class="px-3 py-1 rounded-full text-xs font-bold ${log.status === 'S' ? 'bg-yellow-100 text-yellow-800' : log.status === 'I' ? 'bg-blue-100 text-blue-800' : log.status === 'L' ? 'bg-orange-100 text-orange-800' : 'bg-red-100 text-red-800'}">
+                                                                ${log.status === 'S' ? 'Sakit' : log.status === 'I' ? 'Izin' : log.status === 'L' ? 'Libur' : 'Alpa'}
                                                             </span>
                                                         </li>
                                                     `).join('')}

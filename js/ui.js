@@ -266,12 +266,14 @@ async function teacherProfilePoller() {
 
     try {
         const { userProfile: latestProfile } = await apiService.getUserProfile();
-        if (JSON.stringify(latestProfile.assigned_classes) !== JSON.stringify(state.userProfile.assigned_classes)) {
+        if (JSON.stringify(latestProfile.assigned_classes) !== JSON.stringify(state.userProfile.assigned_classes) || latestProfile.isParent !== state.userProfile.isParent) {
             await setState({ 
                 userProfile: latestProfile,
                 setup: { ...state.setup, polling: { ...state.setup.polling, interval: INITIAL_POLLING_INTERVAL } }
             });
-            showNotification('Hak akses kelas Anda telah diperbarui oleh admin.', 'info');
+            if (JSON.stringify(latestProfile.assigned_classes) !== JSON.stringify(state.userProfile.assigned_classes)) {
+                showNotification('Hak akses kelas Anda telah diperbarui oleh admin.', 'info');
+            }
             renderScreen('setup'); 
             return; 
         }
@@ -855,7 +857,7 @@ function calculatePercentageData(logs, viewMode, filterValue, schoolInfo, select
         return isInDateRange && isInFilter;
     });
 
-    const finalCounts = { H: 0, S: 0, I: 0, A: 0 };
+    const finalCounts = { H: 0, S: 0, I: 0, A: 0, L: 0 };
     relevantLogs.forEach(log => {
         Object.values(log.attendance).forEach(status => {
             if (finalCounts[status] !== undefined) {
@@ -883,7 +885,7 @@ function calculatePercentageData(logs, viewMode, filterValue, schoolInfo, select
         percentageDenominator = uniqueSchoolDays * numStudentsInScope;
     }
     
-    const totalReported = finalCounts.H + finalCounts.S + finalCounts.I + finalCounts.A;
+    const totalReported = finalCounts.H + finalCounts.S + finalCounts.I + finalCounts.A + finalCounts.L;
     const unreported = Math.max(0, percentageDenominator - totalReported);
     finalCounts.Unreported = unreported;
 
@@ -992,9 +994,10 @@ function updateDashboardContent(data) {
             S: dailyStats.finalCounts.S,
             I: dailyStats.finalCounts.I,
             A: dailyStats.finalCounts.A,
+            L: dailyStats.finalCounts.L || 0,
         };
 
-        const summaryStatsHtml = `<div id="dashboard-summary-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">${Object.entries({'Total Siswa':{count:summaryStats.totalStudents,color:'slate'},Hadir:{count:summaryStats.totalPresent,color:'green'},Sakit:{count:summaryStats.S,color:'yellow'},Izin:{count:summaryStats.I,color:'blue'},Alpa:{count:summaryStats.A,color:'red'}}).map(([label,{count,color}])=>`<div class="bg-${color}-100 p-4 rounded-xl text-center"><p class="text-sm font-semibold text-${color}-700">${label}</p><p class="text-3xl font-bold text-${color}-800">${count}</p></div>`).join('')}</div>`;
+        const summaryStatsHtml = `<div id="dashboard-summary-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">${Object.entries({'Total Siswa':{count:summaryStats.totalStudents,color:'slate'},Hadir:{count:summaryStats.totalPresent,color:'green'},Sakit:{count:summaryStats.S,color:'yellow'},Izin:{count:summaryStats.I,color:'blue'},Alpa:{count:summaryStats.A,color:'red'},Libur:{count:summaryStats.L,color:'orange'}}).map(([label,{count,color}])=>`<div class="bg-${color}-100 p-4 rounded-xl text-center"><p class="text-sm font-semibold text-${color}-700">${label}</p><p class="text-3xl font-bold text-${color}-800">${count}</p></div>`).join('')}</div>`;
         
         let detailedReportHtml = '';
         if (isRegionalView) {
@@ -1023,7 +1026,7 @@ function updateDashboardContent(data) {
                     return a.isSubmitted ? 1 : -1;
                 });
 
-                detailedReportHtml = `<h2 class="text-lg font-bold text-slate-700 mb-4">Laporan Kehadiran Harian</h2><div class="space-y-4">${sortedClassStatus.map(item=>item.isSubmitted?item.allPresent?`<div class="bg-green-50 p-4 rounded-lg border border-green-200"><div class="flex justify-between items-center"><h3 class="font-bold text-green-700">Kelas ${encodeHTML(item.className)}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(item.teacherName)}</p></div><p class="text-sm text-green-600 mt-2 flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg> Semua siswa hadir.</p></div>`:`<div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm"><div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${encodeHTML(item.className)}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(item.teacherName)}</p></div><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead><tbody>${item.absentStudents.map(s=>`<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${encodeHTML(s.name)}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status==='S'?'bg-yellow-100 text-yellow-800':s.status==='I'?'bg-blue-100 text-blue-800':'bg-red-100 text-red-800'}">${s.status}</span></td></tr>`).join('')}</tbody></table></div></div>`:`<div class="bg-slate-100 p-4 rounded-lg border border-slate-200"><div class="flex justify-between items-center"><h3 class="font-bold text-slate-600">Kelas ${encodeHTML(item.className)}</h3><span class="px-2 py-1 text-xs font-semibold bg-slate-200 text-slate-600 rounded-full">Belum Diisi</span></div><p class="text-sm text-slate-500 mt-2">Guru belum melakukan absensi.</p></div>`).join('')}</div>`;
+                detailedReportHtml = `<h2 class="text-lg font-bold text-slate-700 mb-4">Laporan Kehadiran Harian</h2><div class="space-y-4">${sortedClassStatus.map(item=>item.isSubmitted?item.allPresent?`<div class="bg-green-50 p-4 rounded-lg border border-green-200"><div class="flex justify-between items-center"><h3 class="font-bold text-green-700">Kelas ${encodeHTML(item.className)}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(item.teacherName)}</p></div><p class="text-sm text-green-600 mt-2 flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg> Semua siswa hadir.</p></div>`:`<div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm"><div class="flex justify-between items-center mb-2"><h3 class="font-bold text-blue-600">Kelas ${encodeHTML(item.className)}</h3><p class="text-xs text-slate-400 font-medium">Oleh: ${encodeHTML(item.teacherName)}</p></div><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-500"><th class="py-1 pr-4 font-medium">Nama Siswa</th><th class="py-1 px-2 font-medium">Status</th></tr></thead><tbody>${item.absentStudents.map(s=>`<tr class="border-t border-slate-200"><td class="py-2 pr-4 text-slate-700">${encodeHTML(s.name)}</td><td class="py-2 px-2"><span class="px-2 py-1 rounded-full text-xs font-semibold ${s.status==='S'?'bg-yellow-100 text-yellow-800':s.status==='I'?'bg-blue-100 text-blue-800':s.status==='L'?'bg-orange-100 text-orange-800':'bg-red-100 text-red-800'}">${s.status==='L'?'Libur':s.status}</span></td></tr>`).join('')}</tbody></table></div></div>`:`<div class="bg-slate-100 p-4 rounded-lg border border-slate-200"><div class="flex justify-between items-center"><h3 class="font-bold text-slate-600">Kelas ${encodeHTML(item.className)}</h3><span class="px-2 py-1 text-xs font-semibold bg-slate-200 text-slate-600 rounded-full">Belum Diisi</span></div><p class="text-sm text-slate-500 mt-2">Guru belum melakukan absensi.</p></div>`).join('')}</div>`;
             }
         }
         reportContent.innerHTML = summaryStatsHtml + detailedReportHtml;
@@ -1059,6 +1062,7 @@ function updateDashboardContent(data) {
             { label: 'Sakit', value: finalCounts.S, color: '#fbbf24' },
             { label: 'Izin', value: finalCounts.I, color: '#3b82f6' },
             { label: 'Alpa', value: finalCounts.A, color: '#ef4444' },
+            { label: 'Libur', value: finalCounts.L, color: '#f97316' },
             { label: 'Belum Diisi', value: finalCounts.Unreported, color: '#94a3b8' } 
         ];
         const chartCanvas = document.getElementById('dashboard-pie-chart');
@@ -1877,7 +1881,7 @@ async function renderRecapScreen() {
                 endDate
             };
             
-            const { recapData, recordedDates } = await apiService.getRecapData(payload);
+            const { recapData, recordedDates, applicableHolidays } = await apiService.getRecapData(payload);
             
             if (state.recapSortOrder === 'total') {
                 recapData.sort((a, b) => b.total - a.total);
@@ -1895,7 +1899,10 @@ async function renderRecapScreen() {
             const today = new Date();
             const actualEnd = end > today ? today : end;
             
-            const holidayDates = (state.holidays || []).map(h => {
+            // Prefer contextual holidays from API over global state if provided
+            const sourceHolidays = applicableHolidays || state.holidays || [];
+            
+            const holidayDates = sourceHolidays.map(h => {
                 let d = h.date;
                 if (d instanceof Date) {
                     const y = d.getFullYear();
@@ -1967,6 +1974,7 @@ async function renderRecapScreen() {
                                 <th class="py-3 px-4 text-center font-semibold text-yellow-600">Sakit</th>
                                 <th class="py-3 px-4 text-center font-semibold text-blue-600">Izin</th>
                                 <th class="py-3 px-4 text-center font-semibold text-red-600">Alpa</th>
+                                <th class="py-3 px-4 text-center font-semibold text-orange-600">Libur</th>
                                 <th class="py-3 px-4 text-center font-semibold text-slate-800">Total Absen</th>
                             </tr>
                         </thead>
@@ -1979,6 +1987,7 @@ async function renderRecapScreen() {
                         <td class="py-2 px-4 text-center">${s.S > 0 ? `<span class="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded font-bold">${s.S}</span>` : '-'}</td>
                         <td class="py-2 px-4 text-center">${s.I > 0 ? `<span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold">${s.I}</span>` : '-'}</td>
                         <td class="py-2 px-4 text-center">${s.A > 0 ? `<span class="bg-red-100 text-red-800 px-2 py-0.5 rounded font-bold">${s.A}</span>` : '-'}</td>
+                        <td class="py-2 px-4 text-center">${s.L > 0 ? `<span class="bg-orange-100 text-orange-800 px-2 py-0.5 rounded font-bold">${s.L}</span>` : '-'}</td>
                         <td class="py-2 px-4 text-center font-bold text-slate-700">${s.total}</td>
                     </tr>
                 `).join('');
