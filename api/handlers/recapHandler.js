@@ -137,7 +137,8 @@ export default async function handleGetRecapData({ payload, user, sql, response 
                 name,
                 COUNT(*) FILTER (WHERE status = 'S') as "S",
                 COUNT(*) FILTER (WHERE status = 'I') as "I",
-                COUNT(*) FILTER (WHERE status = 'A') as "A"
+                COUNT(*) FILTER (WHERE status = 'A') as "A",
+                COUNT(*) FILTER (WHERE status = 'L') as "L"
             FROM absences
             GROUP BY school_id, class_name, name
         )
@@ -149,6 +150,7 @@ export default async function handleGetRecapData({ payload, user, sql, response 
             COALESCE(ac."S", 0)::int as "S",
             COALESCE(ac."I", 0)::int as "I",
             COALESCE(ac."A", 0)::int as "A",
+            COALESCE(ac."L", 0)::int as "L",
             (COALESCE(ac."S", 0) + COALESCE(ac."I", 0) + COALESCE(ac."A", 0))::int as total
         FROM all_students ast
         LEFT JOIN absence_counts ac 
