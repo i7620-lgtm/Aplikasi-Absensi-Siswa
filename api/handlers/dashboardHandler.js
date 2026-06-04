@@ -70,13 +70,13 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
     if (isRegionalView) {
         const rows = await sql`
             WITH LatestStudentLists AS (
-                SELECT DISTINCT ON (school_id, payload->>'class')
+                SELECT DISTINCT ON (school_id, TRIM(payload->>'class'))
                     school_id,
-                    payload->>'class' as class_name,
+                    TRIM(payload->>'class') as class_name,
                     jsonb_array_length(payload->'students') as student_count
                 FROM change_log
                 WHERE school_id = ANY(${schoolIds}) AND event_type = 'STUDENT_LIST_UPDATED'
-                ORDER BY school_id, payload->>'class', id DESC
+                ORDER BY school_id, TRIM(payload->>'class'), id DESC
             ),
             SchoolClassCounts AS (
                 SELECT school_id, COUNT(class_name)::int as total_classes FROM LatestStudentLists GROUP BY school_id
@@ -109,10 +109,10 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
                         school_id,
                         SUM(jsonb_array_length(payload->'students'))::int AS total_students_per_school
                     FROM (
-                        SELECT DISTINCT ON (school_id, payload->>'class') school_id, payload
+                        SELECT DISTINCT ON (school_id, TRIM(payload->>'class')) school_id, payload
                         FROM change_log
                         WHERE school_id = ANY(${schoolIds}) AND event_type = 'STUDENT_LIST_UPDATED'
-                        ORDER BY school_id, payload->>'class', id DESC
+                        ORDER BY school_id, TRIM(payload->>'class'), id DESC
                     ) as latest_lists
                     GROUP BY school_id
                 ) as school_counts
@@ -128,10 +128,10 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
 
         const schoolDetails = await sql`SELECT id, name FROM schools WHERE id = ANY(${schoolIds}) ORDER BY name;`;
         const allLogsRows = await sql`
-            SELECT DISTINCT ON (school_id, payload->>'date', payload->>'class')
+            SELECT DISTINCT ON (school_id, payload->>'date', TRIM(payload->>'class'))
                 payload as log, school_id FROM change_log
             WHERE school_id = ANY(${schoolIds}) AND event_type = 'ATTENDANCE_UPDATED' AND (payload->>'date')::date BETWEEN ${yearStart.toISOString().split('T')[0]} AND ${yearEnd.toISOString().split('T')[0]}
-            ORDER BY school_id, payload->>'date', payload->>'class', id DESC;
+            ORDER BY school_id, payload->>'date', TRIM(payload->>'class'), id DESC;
         `;
 
         return response.status(200).json({
@@ -152,12 +152,12 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
 
     const rows = await sql`
         WITH LatestStudentLists AS (
-            SELECT DISTINCT ON (payload->>'class')
-                payload->>'class' as class_name,
+            SELECT DISTINCT ON (TRIM(payload->>'class'))
+                TRIM(payload->>'class') as class_name,
                 jsonb_array_length(payload->'students') as student_count
             FROM change_log
             WHERE school_id = ${schoolIds[0]} AND event_type = 'STUDENT_LIST_UPDATED'
-            ORDER BY payload->>'class', id DESC
+            ORDER BY TRIM(payload->>'class'), id DESC
         ),
         SchoolInfo AS (
             SELECT COALESCE(SUM(student_count), 0)::int as "totalStudents",
@@ -166,15 +166,15 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
             FROM LatestStudentLists
         ),
         DailyAttendanceEvents AS (
-            SELECT DISTINCT ON (cl.payload->>'class')
+            SELECT DISTINCT ON (TRIM(cl.payload->>'class'))
                 cl.payload, u.name as "teacherName"
             FROM change_log cl JOIN users u ON cl.user_email = u.email
             WHERE cl.school_id = ${schoolIds[0]} AND cl.event_type = 'ATTENDANCE_UPDATED' AND cl.payload->>'date' = ${selectedDate}
-            ORDER BY cl.payload->>'class', cl.id DESC
+            ORDER BY TRIM(cl.payload->>'class'), cl.id DESC
         ),
-        SubmittedClasses AS (SELECT DISTINCT payload->>'class' as class_name, "teacherName" FROM DailyAttendanceEvents),
+        SubmittedClasses AS (SELECT DISTINCT TRIM(payload->>'class') as class_name, "teacherName" FROM DailyAttendanceEvents),
         DailyAbsences AS (
-            SELECT payload->>'class' as class, "teacherName", att.key as student_name, att.value as status
+            SELECT TRIM(payload->>'class') as class, "teacherName", att.key as student_name, att.value as status
             FROM DailyAttendanceEvents CROSS JOIN jsonb_each_text(payload->'attendance') as att WHERE att.value <> 'H'
         )
         SELECT
@@ -200,12 +200,12 @@ export default async function handleGetDashboardData({ payload, user, sql, respo
     });
 
     const allLogsRows = await sql`
-        SELECT DISTINCT ON (payload->>'date', payload->>'class')
+        SELECT DISTINCT ON (payload->>'date', TRIM(payload->>'class'))
             payload as log
         FROM change_log
         WHERE school_id = ${schoolIds[0]} AND event_type = 'ATTENDANCE_UPDATED'
           AND (payload->>'date')::date BETWEEN ${yearStart.toISOString().split('T')[0]} AND ${yearEnd.toISOString().split('T')[0]}
-        ORDER BY payload->>'date', payload->>'class', id DESC;
+        ORDER BY payload->>'date', TRIM(payload->>'class'), id DESC;
     `;
     
     return response.status(200).json({
