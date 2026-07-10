@@ -6,9 +6,9 @@ import { apiService } from './api.js';
 import { templates, getRoleDisplayName, encodeHTML } from './templates.js';
 import { handleSignOut, renderSignInButton } from './auth.js';
 
-const appContainer = document.getElementById('app-container');
-const notificationEl = document.getElementById('notification');
-const offlineIndicator = document.getElementById('offline-indicator');
+
+
+
 
 // --- POLLING & PAGINATION CONFIGURATION ---
 const POLLING_BACKOFF_SEQUENCE = [60000, 120000, 300000, 600000]; // 1m, 2m, 5m, 10m
@@ -56,20 +56,20 @@ export function hideLoader() {
 }
 
 export function showNotification(message, type = 'success') {
-    notificationEl.textContent = message;
-    notificationEl.className = '';
-    notificationEl.classList.add(type);
-    notificationEl.classList.add('show');
+    document.getElementById("notification").textContent = message;
+    document.getElementById("notification").className = '';
+    document.getElementById("notification").classList.add(type);
+    document.getElementById("notification").classList.add('show');
     setTimeout(() => {
-        notificationEl.classList.remove('show');
+        document.getElementById("notification").classList.remove('show');
     }, 5000);
 }
 
 export function updateOnlineStatus(isOnline) {
     if (isOnline) {
-        offlineIndicator.classList.remove('show');
+        document.getElementById("offline-indicator").classList.remove('show');
     } else {
-        offlineIndicator.classList.add('show');
+        document.getElementById("offline-indicator").classList.add('show');
     }
 }
 
@@ -287,7 +287,7 @@ async function teacherProfilePoller() {
 }
 
 function renderLandingPageScreen() {
-    appContainer.innerHTML = templates.landingPage();
+    document.getElementById("app-container").innerHTML = templates.landingPage();
     renderSignInButton();
 
     const faqTriggers = document.querySelectorAll('.faq-trigger');
@@ -337,7 +337,7 @@ function renderLandingPageScreen() {
 
 function renderSetupScreen() {
     if (state.userProfile && !state.userProfile.school_id && !state.userProfile.jurisdiction_id && !state.userProfile.isParent && state.userProfile.primaryRole !== 'SUPER_ADMIN') {
-        appContainer.innerHTML = templates.onboarding();
+        document.getElementById("app-container").innerHTML = templates.onboarding();
         document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
         
         const choiceView = document.getElementById('onboarding-choice-view');
@@ -364,8 +364,8 @@ function renderSetupScreen() {
             const query = e.target.value.trim();
             clearTimeout(searchTimeout);
             
-            document.getElementById('school-found-msg').classList.add('hidden');
-            document.getElementById('school-not-found-msg').classList.add('hidden');
+            document.getElementById('school-found-msg')?.classList.add('hidden');
+            document.getElementById('school-not-found-msg')?.classList.add('hidden');
             resultsContainer.innerHTML = '';
 
             if (query.length < 3) return;
@@ -377,7 +377,7 @@ function renderSetupScreen() {
                     resultsContainer.innerHTML = '';
                     
                     if (results.length === 0) {
-                        document.getElementById('school-not-found-msg').classList.remove('hidden');
+                        document.getElementById('school-not-found-msg')?.classList.remove('hidden');
                     } else {
                         results.forEach(school => {
                             const btn = document.createElement('button');
@@ -445,7 +445,7 @@ function renderSetupScreen() {
         return; 
     }
 
-    appContainer.innerHTML = templates.setup();
+    document.getElementById("app-container").innerHTML = templates.setup();
     if (!state.userProfile) {
         return;
     }
@@ -502,7 +502,7 @@ function renderSetupScreen() {
 }
 
 async function renderMultiRoleHomeScreen() {
-    appContainer.innerHTML = templates.multiRoleHome();
+    document.getElementById("app-container").innerHTML = templates.multiRoleHome();
     document.getElementById('logoutBtn').addEventListener('click', handleSignOut);
 
     const { primaryRole } = state.userProfile;
@@ -1157,7 +1157,7 @@ async function dashboardPoller() {
 }
 
 function renderDashboardScreen() {
-    appContainer.innerHTML = templates.dashboard();
+    document.getElementById("app-container").innerHTML = templates.dashboard();
     updateDashboardDateDisplay();
     attachDatePickerListeners();
     document.getElementById('dashboard-back-btn')?.addEventListener('click', () => navigateTo('multiRoleHome'));
@@ -1370,7 +1370,7 @@ async function adminPanelPoller() {
 }
 
 function renderAdminPanelScreen() {
-    appContainer.innerHTML = templates.adminPanel();
+    document.getElementById("app-container").innerHTML = templates.adminPanel();
     document.getElementById('admin-panel-back-btn')?.addEventListener('click', () => navigateTo('multiRoleHome'));
     document.getElementById('group-by-school-toggle')?.addEventListener('change', (e) => {
         state.adminPanel.groupBySchool = e.target.checked;
@@ -1465,7 +1465,7 @@ async function showManageUserModal(user) {
 }
 
 function renderAddStudentsScreen() {
-    appContainer.innerHTML = templates.addStudents(state.selectedClass);
+    document.getElementById("app-container").innerHTML = templates.addStudents(state.selectedClass);
     renderStudentInputRows();
     document.getElementById('add-student-row-btn').addEventListener('click', addStudentInputRow);
     document.getElementById('cancel-add-students-btn').addEventListener('click', () => navigateTo('setup'));
@@ -1736,7 +1736,7 @@ async function filterAndRenderHistory() {
 }
 
 function renderDataScreen() {
-    appContainer.innerHTML = templates.data();
+    document.getElementById("app-container").innerHTML = templates.data();
     if (state.historyClassFilter) {
         document.getElementById('data-title').textContent = `Riwayat Absensi Kelas ${state.historyClassFilter}`;
     } else {
@@ -1830,7 +1830,7 @@ async function generateSemesterOptions() {
 }
 
 async function renderRecapScreen() {
-    appContainer.innerHTML = templates.recap();
+    document.getElementById("app-container").innerHTML = templates.recap();
     const container = document.getElementById('recap-container');
     const headerEl = document.querySelector('h1'); // Find the H1
     
@@ -2009,7 +2009,7 @@ async function renderRecapScreen() {
 }
 
 function renderJurisdictionPanelScreen() {
-    appContainer.innerHTML = templates.jurisdictionPanel();
+    document.getElementById("app-container").innerHTML = templates.jurisdictionPanel();
     document.getElementById('jurisdiction-panel-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
     
     const treeContainer = document.getElementById('jurisdiction-tree-container');
@@ -2150,7 +2150,7 @@ function renderJurisdictionPanelScreen() {
 }
 
 function renderParentDashboardScreen() {
-    appContainer.innerHTML = templates.parentDashboard();
+    document.getElementById("app-container").innerHTML = templates.parentDashboard();
     document.getElementById('parent-dashboard-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
     
     const loadParentData = async () => {
@@ -2159,7 +2159,7 @@ function renderParentDashboardScreen() {
             await setState({ parentDashboard: { isLoading: false, data: parentData } });
             // Re-render only content part to avoid flicker? Or full screen.
             // Simplified: Re-render screen content logic is inside template via state check, so re-call render.
-            appContainer.innerHTML = templates.parentDashboard();
+            document.getElementById("app-container").innerHTML = templates.parentDashboard();
             document.getElementById('parent-dashboard-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
         } catch (e) {
             console.error(e);
@@ -2173,7 +2173,7 @@ function renderParentDashboardScreen() {
 }
 
 function renderMigrationToolScreen() {
-    appContainer.innerHTML = templates.migrationTool();
+    document.getElementById("app-container").innerHTML = templates.migrationTool();
     document.getElementById('migration-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
     document.getElementById('migrate-data-btn').addEventListener('click', handleMigrateLegacyData);
 }
@@ -2181,7 +2181,7 @@ function renderMigrationToolScreen() {
 // --- MODIFIED RENDER FUNCTIONS ---
 
 function renderAttendanceScreen() {
-    appContainer.innerHTML = templates.attendance(state.selectedClass, state.selectedDate);
+    document.getElementById("app-container").innerHTML = templates.attendance(state.selectedClass, state.selectedDate);
     const tbody = document.getElementById('attendance-table-body');
     tbody.innerHTML = state.students.map((student, index) => {
         const status = state.attendance[student.name] || 'H';
@@ -2208,7 +2208,7 @@ function renderAttendanceScreen() {
 }
 
 function renderHolidaySettingsScreen() {
-    appContainer.innerHTML = templates.holidaySettings();
+    document.getElementById("app-container").innerHTML = templates.holidaySettings();
     document.getElementById('settings-back-btn').addEventListener('click', () => navigateTo('multiRoleHome'));
     
     // --- Logic for Super Admin Context Selector ---
@@ -2287,8 +2287,8 @@ function renderHolidaySettingsScreen() {
 
 // --- MAIN RENDERER (Updated Switch) ---
 
-export function renderScreen(screen) {
-    appContainer.innerHTML = '';
+export function renderScreen(screen) { const container = document.getElementById("app-container"); if (!container) return;
+    container.innerHTML = '';
     
     const screenRenderers = {
         'landingPage': renderLandingPageScreen,
@@ -2303,7 +2303,7 @@ export function renderScreen(screen) {
         'attendance': renderAttendanceScreen,
         'holidaySettings': renderHolidaySettingsScreen, // New Screen
         'success': () => {
-             appContainer.innerHTML = templates.success();
+             document.getElementById("app-container").innerHTML = templates.success();
              document.getElementById('success-back-to-start-btn').addEventListener('click', () => {
                  setState({ lastSaveContext: null }); 
                  navigateTo('setup');
