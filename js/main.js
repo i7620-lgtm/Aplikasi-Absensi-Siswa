@@ -619,8 +619,8 @@ export async function handleMigrateLegacyData() {
         resultEl.classList.add('text-green-600');
         legacyDataEl.value = ''; 
     } catch (error) {
-        showNotification(`Migrasi gagal: ${error.message}`, 'error');
-        resultEl.textContent = `Error: ${error.message}`;
+        showNotification(`Migrasi gagal: ${error.stack || error.message}`, 'error');
+        resultEl.textContent = `Error: ${error.stack || error.message}`;
         resultEl.classList.add('text-red-500');
     } finally {
         hideLoader();
@@ -690,7 +690,7 @@ export function handleExcelImport(event) {
 async function downloadRecapData(params) {
     showLoader('Menyiapkan data untuk diunduh...');
     try {
-        const { recapData, reportType, monthlySummary, recordedDates } = await apiService.getRecapData(params);
+        const { recapData, reportType, monthlySummary, recordedDates, dailyDetails, applicableHolidays } = await apiService.getRecapData(params);
         const hasRecapData = recapData && ((reportType === 'class' && recapData.length > 0) || (reportType !== 'class' && Object.keys(recapData).length > 0));
         const hasSummaryData = monthlySummary && monthlySummary.length > 0;
 
@@ -835,6 +835,75 @@ async function downloadRecapData(params) {
             
             const sanitizeSheetName = (name) => name.replace(/[*?:/\\\[\]]/g, '').substring(0, 31);
 
+            const createDailyDetailSheet = (dataArray, className) => {
+                if (!params.startDate || !params.endDate) return null;
+                
+                let current = new Date(params.startDate + 'T00:00:00');
+                const end = new Date(params.endDate + 'T23:59:59');
+                const dates = [];
+                const workDaysArray = state.schoolSettings?.workDays || [1,2,3,4,5,6];
+                const holidayDates = (applicableHolidays || state.holidays || []).map(h => {
+                    let d = h.date;
+                    if (d instanceof Date) {
+                        const y = d.getFullYear();
+                        const m = String(d.getMonth() + 1).padStart(2, '0');
+                        const day = String(d.getDate()).padStart(2, '0');
+                        return `${y}-${m}-${day}`;
+                    }
+                    if (typeof d === 'string') return d.substring(0, 10);
+                    return null;
+                }).filter(Boolean);
+
+                const actualEnd = end > new Date() ? new Date() : end;
+
+                while (current <= actualEnd) {
+                    const year = current.getFullYear();
+                    const month = String(current.getMonth() + 1).padStart(2, '0');
+                    const day = String(current.getDate()).padStart(2, '0');
+                    const dateStr = `${year}-${month}-${day}`;
+                    
+                    if (workDaysArray.includes(current.getDay()) && !holidayDates.includes(dateStr)) {
+                        dates.push(dateStr);
+                    }
+                    current.setDate(current.getDate() + 1);
+                }
+
+                if (dates.length === 0) return null;
+
+                const classDailyDetails = (dailyDetails || []).filter(d => d.class_name === className);
+                const header = ['Nama Lengkap', ...dates.map(d => d.substring(5)), 'H', 'S', 'I', 'A'];
+                const dataForSheet = [header];
+                const sortedStudents = [...dataArray].sort((a, b) => (a.originalIndex || 0) - (b.originalIndex || 0));
+
+                sortedStudents.forEach(student => {
+                    const row = [student.name];
+                    let hCount = 0, sCount = 0, iCount = 0, aCount = 0;
+                    
+                    dates.forEach(dateStr => {
+                        const record = classDailyDetails.find(d => d.date === dateStr);
+                        if (record) {
+                            const status = (record.attendance && record.attendance[student.name]) || 'H';
+                            row.push(status);
+                            if (status === 'H') hCount++;
+                            else if (status === 'S') sCount++;
+                            else if (status === 'I') iCount++;
+                            else if (status === 'A') aCount++;
+                        } else {
+                            row.push('-');
+                        }
+                    });
+                    
+                    row.push(hCount, sCount, iCount, aCount);
+                    dataForSheet.push(row);
+                });
+
+                const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
+                worksheet['!cols'] = header.map((_, colIndex) => ({
+                    wch: colIndex === 0 ? 30 : 6
+                }));
+                return worksheet;
+            };
+
             if (reportType === 'regional') {
                 for (const schoolName in recapData) {
                     if (Object.hasOwnProperty.call(recapData, schoolName)) {
@@ -847,10 +916,21 @@ async function downloadRecapData(params) {
                 for (const className of sortedClasses) {
                     const worksheet = createSheetFromData(recapData[className], false, className);
                     XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(`Kelas ${className}`));
+                    
+                    const detailWorksheet = createDailyDetailSheet(recapData[className], className);
+                    if (detailWorksheet) {
+                        XLSX.utils.book_append_sheet(workbook, detailWorksheet, sanitizeSheetName(`Detail ${className}`));
+                    }
                 }
             } else { 
-                const worksheet = createSheetFromData(recapData, true, params.classFilter);
-                XLSX.utils.book_append_sheet(workbook, worksheet, 'Rekap Absensi');
+                const className = params.classFilter;
+                const worksheet = createSheetFromData(recapData, true, className);
+                XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(`Rekap ${className || 'Absensi'}`));
+                
+                const detailWorksheet = createDailyDetailSheet(recapData, className);
+                if (detailWorksheet) {
+                    XLSX.utils.book_append_sheet(workbook, detailWorksheet, sanitizeSheetName(`Detail Hari ${className || ''}`));
+                }
             }
         }
 
@@ -1063,10 +1143,14 @@ async function initApp() {
             navigator.serviceWorker.addEventListener('controllerchange', () => {
                 if (!refreshing) {
                     refreshing = true;
-                    showNotification('Memperbarui aplikasi ke versi terbaru...', 'info');
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1500);
+                    // Do not force reload immediately as it breaks popups (like GSI) and forms.
+                    // Instead, show a persistent notification that they can click to reload.
+                    const notif = document.getElementById('notification');
+                    if (notif) {
+                        notif.innerHTML = 'Versi baru tersedia! <button onclick="window.location.reload()" style="text-decoration:underline; font-weight:bold; margin-left:8px;">Muat Ulang</button>';
+                        notif.className = 'info show';
+                        // keep it showing
+                    }
                 }
             });
         });
@@ -1118,15 +1202,15 @@ initApp().catch(error => {
     const loader = document.getElementById('loader-wrapper');
     if (loader) loader.style.display = 'none';
     
-    document.body.innerHTML = `
+    if (document.body) { document.body.innerHTML = `
         <div style="min-h-screen flex items-center justify-center bg-slate-50 p-4">
             <div class="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
                 <svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                 <h1 class="text-xl font-bold text-slate-800 mb-2">Gagal Memuat Aplikasi</h1>
                 <p class="text-slate-600 mb-6">Terjadi kesalahan saat menyiapkan aplikasi. Mohon periksa koneksi internet Anda dan muat ulang halaman.</p>
-                <pre class="bg-slate-100 p-3 rounded text-xs text-left overflow-auto mb-6 text-slate-700 max-h-32">${error.message}</pre>
+                <pre class="bg-slate-100 p-3 rounded text-xs text-left overflow-auto mb-6 text-slate-700 max-h-32">${error.stack || error.message}</pre>
                 <button onclick="window.location.reload()" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition">Muat Ulang Halaman</button>
             </div>
         </div>
-    `;
+    `; }
 });
