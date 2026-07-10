@@ -392,7 +392,7 @@ export async function handleJoinSchool({ payload, user, sql, response }) {
             changes: { type: 'join_school', details: 'User joined school as GURU' },
             client_id: user.email + '-' + Date.now()
         };
-        await sql`INSERT INTO change_log (school_id, class_name, type, payload) VALUES (${schoolId}, 'SYSTEM', 'UPDATE_USER', ${sql.json(logData)})`;
+        await sql`INSERT INTO change_log (school_id, user_email, event_type, payload) VALUES (${schoolId}, ${user.email}, 'UPDATE_USER', ${sql.json(logData)})`;
 
         return response.status(200).json({ success: true, schoolId });
     } catch (e) {
