@@ -183,10 +183,17 @@
     <!-- Global Error Handler -->
     <script>
         window.onerror = function(message, source, lineno, colno, error) {
-            console.error("Global Error:", error);
+            console.error("Global Error:", message, error);
             const loader = document.getElementById('loader-wrapper');
             if (loader) loader.style.display = 'none';
-            document.body.innerHTML = '<div style="padding:20px; text-align:center; color:#ef4444; font-family:sans-serif;"><h1>Gagal Memuat Aplikasi</h1><p>Terjadi kesalahan teknis. Silakan muat ulang halaman.</p><pre style="background:#f1f5f9; padding:10px; border-radius:8px; overflow:auto; text-align:left; margin-top:20px; font-size:12px;">' + message + '</pre></div>';
+            
+            // Do not wipe the body, just show a notification if possible
+            const notif = document.getElementById('notification');
+            if (notif) {
+                notif.textContent = "Terjadi kesalahan: " + message;
+                notif.className = "error show";
+                setTimeout(() => notif.className = "", 5000);
+            }
         };
     </script>
 
