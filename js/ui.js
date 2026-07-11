@@ -403,7 +403,7 @@ function renderSetupScreen() {
                                         }
                                     } catch (e) {
                                         console.error(e);
-                                        showNotification("Gagal bergabung ke sekolah.", 'error');
+                                        showNotification("Gagal bergabung ke sekolah: " + (e.message || JSON.stringify(e)), 'error');
                                     } finally {
                                         hideLoader();
                                     }
@@ -1444,8 +1444,10 @@ async function showManageUserModal(user) {
 
     document.getElementById('manage-user-save-btn').onclick = async () => {
         const newRole = roleSelect.value;
-        const newSchoolId = document.getElementById('school-select-modal').value;
-        const newJurId = document.getElementById('jurisdiction-select-modal').value;
+        const schoolSelect = document.getElementById('school-select-modal');
+        const newSchoolId = schoolSelect ? schoolSelect.value : (user.school_id || '');
+        const jurSelect = document.getElementById('jurisdiction-select-modal');
+        const newJurId = jurSelect ? jurSelect.value : (user.jurisdiction_id || '');
         
         const newClasses = [];
         document.querySelectorAll('.class-checkbox:checked').forEach(cb => newClasses.push(cb.value));
