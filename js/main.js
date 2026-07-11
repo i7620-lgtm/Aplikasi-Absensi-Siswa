@@ -1122,9 +1122,13 @@ async function loadInitialData() {
 }
 
 async function initApp() {
-    if (localStorage.getItem('attendanceApp')) {
-        localStorage.removeItem('attendanceApp');
-        console.log('Data lama dari localStorage telah dihapus.');
+    try {
+        if (localStorage.getItem('attendanceApp')) {
+            localStorage.removeItem('attendanceApp');
+            console.log('Data lama dari localStorage telah dihapus.');
+        }
+    } catch (e) {
+        console.warn('localStorage is not available:', e);
     }
 
     if ('serviceWorker' in navigator) {
@@ -1202,15 +1206,21 @@ initApp().catch(error => {
     const loader = document.getElementById('loader-wrapper');
     if (loader) loader.style.display = 'none';
     
-    if (document.body) { document.body.innerHTML = `
-        <div style="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-            <div class="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
-                <svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                <h1 class="text-xl font-bold text-slate-800 mb-2">Gagal Memuat Aplikasi</h1>
-                <p class="text-slate-600 mb-6">Terjadi kesalahan saat menyiapkan aplikasi. Mohon periksa koneksi internet Anda dan muat ulang halaman.</p>
-                <pre class="bg-slate-100 p-3 rounded text-xs text-left overflow-auto mb-6 text-slate-700 max-h-32">${error.stack || error.message}</pre>
-                <button onclick="window.location.reload()" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-blue-700 transition">Muat Ulang Halaman</button>
+    // Show error in a less destructive way so we don't wipe the body
+    const notif = document.getElementById('notification');
+    if (notif) {
+        notif.innerHTML = `Gagal Memuat Aplikasi: ${error.message}. <button onclick="window.location.reload()" style="text-decoration:underline; font-weight:bold;">Muat Ulang</button>`;
+        notif.className = 'error show';
+    } else if (document.body) {
+        document.body.innerHTML += `
+        <div style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:9999; display:flex; align-items:center; justify-content:center; background:rgba(248,fafc,ff,0.9); padding:1rem;">
+            <div style="background:white; padding:2rem; border-radius:1rem; box-shadow:0 10px 25px rgba(0,0,0,0.1); max-width:28rem; width:100%; text-align:center; border: 1px solid #e2e8f0;">
+                <h1 style="font-size:1.25rem; font-weight:bold; color:#1e293b; margin-bottom:0.5rem;">Gagal Memuat Aplikasi</h1>
+                <p style="color:#475569; margin-bottom:1.5rem;">Terjadi kesalahan saat menyiapkan aplikasi. Mohon periksa koneksi internet Anda dan muat ulang halaman.</p>
+                <pre style="background:#f1f5f9; padding:0.75rem; border-radius:0.25rem; font-size:0.75rem; text-align:left; overflow:auto; margin-bottom:1.5rem; color:#334155; max-height:8rem;">${error.stack || error.message}</pre>
+                <button onclick="window.location.reload()" style="background:#2563eb; color:white; font-weight:bold; padding:0.5rem 1.5rem; border-radius:0.5rem; border:none; cursor:pointer;">Muat Ulang Halaman</button>
             </div>
         </div>
-    `; }
+        `;
+    }
 });
